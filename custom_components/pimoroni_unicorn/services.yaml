@@ -1,0 +1,50 @@
+generate_secrets:
+  name: Generate firmware secrets
+  description: >
+    Generates a secrets.py file for each configured Pimoroni Unicorn device,
+    pre-filled with the MQTT broker address, port, and username from your HA
+    MQTT config. WiFi credentials and MQTT password must be filled in manually.
+    Output is written to {config_dir}/pimoroni_unicorn/secrets_{device_id}.py
+    and a persistent notification is created with next steps.
+  fields: {}
+
+push_firmware:
+  name: Push firmware to device
+  description: >
+    Stages firmware files and sends an OTA update command to the device over
+    MQTT. The device validates syntax, writes files, and reboots automatically.
+    If file_content is provided for a key, that content is used instead of
+    reading from disk. Source files must exist in
+    {config_dir}/pimoroni_unicorn/firmware/ when not using inline content.
+  fields:
+    files:
+      name: Files to push
+      description: >
+        Which firmware files to push. Defaults to main only. Common values:
+        main, bitfonts, monospace_digits, monospace_big_digits.
+        Any filename (with or without .py extension) is accepted — bare names
+        get .py appended automatically and are placed in the device root.
+      required: false
+      default:
+        - main
+      selector:
+        select:
+          multiple: true
+          custom_value: true
+          options:
+            - main
+            - drawing
+            - notify_animations
+            - sounds
+            - weather_fx
+            - bitfonts
+            - monospace_digits
+            - monospace_big_digits
+    file_content:
+      name: Inline file content
+      description: >
+        Optional map of file key to content string. Overrides disk files.
+        Example: {main: "# my main.py content"}
+      required: false
+      selector:
+        object: {}

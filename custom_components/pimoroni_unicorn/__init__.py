@@ -1,0 +1,393 @@
+"""Pimoroni Unicorn Home Assistant integration."""
+
+import ast
+from collections.abc import Callable, Coroutine
+from datetime import timedelta
+import json
+import logging
+from pathlib import Path
+from typing import Any
+
+from homeassistant.components.mqtt import async_publish
+from homeassistant.components.persistent_notification import (
+    async_create as notify_create,
+)
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.helpers import discovery
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    async_track_time_interval,
+)
+
+from .const import (
+    CONF_BATTERY_CHARGING_ENTITY,
+    CONF_BATTERY_SOC_ENTITY,
+    CONF_CONSUMPTION_ENTITY,
+    CONF_DEVICE_ID,
+    CONF_EXTRA_SENSORS,
+    CONF_MODEL,
+    CONF_SOLAR_ENTITY,
+    CONF_SUN_ENTITY,
+    CONF_WEATHER_CODE_ENTITY,
+    DOMAIN,
+    OTA_SOURCE_FILES,
+    UNICORN_MODEL_KEYS,
+)
+
+_LOGGER = logging.getLogger(__name__)
+
+SOLAR_INTERVAL        = timedelta(seconds=10)
+SERVICE_GENERATE_SECRETS = "generate_secrets"
+SERVICE_PUSH_FIRMWARE    = "push_firmware"
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Pimoroni Unicorn from a config entry."""
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": []}
+
+    hass.async_create_task(
+        discovery.async_load_platform(
+            hass, "notify", DOMAIN, {"entry_id": entry.entry_id}, {}
+        )
+    )
+
+    _setup_publishers(hass, entry)
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+    await hass.config_entries.async_forward_entry_setups(entry, ["button"])
+
+    if not hass.services.has_service(DOMAIN, SERVICE_GENERATE_SECRETS):
+        hass.services.async_register(
+            DOMAIN, SERVICE_GENERATE_SECRETS, _make_generate_secrets_handler(hass)
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_PUSH_FIRMWARE):
+        hass.services.async_register(
+            DOMAIN, SERVICE_PUSH_FIRMWARE, _make_push_firmware_handler(hass)
+        )
+
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    await hass.config_entries.async_unload_platforms(entry, ["button"])
+    store = hass.data[DOMAIN].pop(entry.entry_id, {})
+    for unsub in store.get("unsub", []):
+        unsub()
+
+    if not hass.data.get(DOMAIN):
+        hass.services.async_remove(DOMAIN, SERVICE_GENERATE_SECRETS)
+        hass.services.async_remove(DOMAIN, SERVICE_PUSH_FIRMWARE)
+
+    return True
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    _setup_publishers(hass, entry)
+
+
+def _merged_opts(entry: ConfigEntry) -> dict[str, Any]:
+    return {**entry.data, **entry.options}
+
+
+def _setup_publishers(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    opts        = _merged_opts(entry)
+    device_id   = opts[CONF_DEVICE_ID]
+    store       = hass.data[DOMAIN][entry.entry_id]
+
+    for unsub in store["unsub"]:
+        unsub()
+    store["unsub"].clear()
+
+    solar_entity            = opts.get(CONF_SOLAR_ENTITY, "").strip()
+    consumption_entity      = opts.get(CONF_CONSUMPTION_ENTITY, "").strip()
+    battery_soc_entity      = opts.get(CONF_BATTERY_SOC_ENTITY, "").strip()
+    battery_charging_entity = opts.get(CONF_BATTERY_CHARGING_ENTITY, "").strip()
+    sun_entity              = opts.get(CONF_SUN_ENTITY, "sun.sun").strip() or "sun.sun"
+    weather_code_entity     = opts.get(CONF_WEATHER_CODE_ENTITY, "").strip()
+    extra_sensors_raw       = opts.get(CONF_EXTRA_SENSORS, "").strip()
+
+    extra_sensors = _parse_extra_sensors(extra_sensors_raw)
+    has_solar     = any([solar_entity, consumption_entity, battery_soc_entity, battery_charging_entity])
+
+    if has_solar or extra_sensors:
+        solar_topic = f"{device_id}/solar"
+
+        @callback
+        def _publish_solar(_now: Any = None) -> None:
+            sun_state = hass.states.get(sun_entity)
+            sun_below = sun_state is not None and sun_state.state == "below_horizon"
+
+            payload = json.dumps({
+                "solar":             _float_state(hass, solar_entity),
+                "consumption":       _float_state(hass, consumption_entity),
+                "battery_soc":       int(_float_state(hass, battery_soc_entity)),
+                "battery_charging":  _bool_state(hass, battery_charging_entity),
+                "sun_below_horizon": sun_below,
+            })
+            hass.async_create_task(async_publish(hass, solar_topic, payload, retain=True))
+
+            for entity_id, topic_suffix in extra_sensors:
+                state = hass.states.get(entity_id)
+                if state is None or state.state in ("unknown", "unavailable", ""):
+                    continue
+                extra_payload = json.dumps({"state": state.state})
+                topic = f"{device_id}/{topic_suffix}"
+                hass.async_create_task(async_publish(hass, topic, extra_payload, retain=True))
+
+        store["unsub"].append(
+            async_track_time_interval(hass, _publish_solar, SOLAR_INTERVAL)
+        )
+
+    if weather_code_entity:
+        weather_topic  = f"{device_id}/weather"
+        watch_entities: list[str] = [weather_code_entity, sun_entity]
+
+        @callback
+        def _publish_weather(_event: Any = None) -> None:
+            state = hass.states.get(weather_code_entity)
+            if state is None or state.state in ("unknown", "unavailable", ""):
+                return
+            payload = json.dumps({"condition": state.state})
+            hass.async_create_task(async_publish(hass, weather_topic, payload, retain=True))
+
+        store["unsub"].append(
+            async_track_state_change_event(hass, watch_entities, _publish_weather)
+        )
+
+
+def _make_generate_secrets_handler(
+    hass: HomeAssistant,
+) -> Callable[[ServiceCall], Coroutine[Any, Any, None]]:
+    async def _handle_generate_secrets(call: ServiceCall) -> None:
+        entries = hass.config_entries.async_entries(DOMAIN)
+        if not entries:
+            _LOGGER.error("Pimoroni Unicorn: no configured entries found")
+            return
+
+        mqtt_broker   = ""
+        mqtt_port     = 1883
+        mqtt_username = ""
+        mqtt_entries  = hass.config_entries.async_entries("mqtt")
+        if mqtt_entries:
+            mqtt_data     = mqtt_entries[0].data
+            mqtt_broker   = mqtt_data.get("broker", "")
+            mqtt_port     = int(mqtt_data.get("port", 1883))
+            mqtt_username = mqtt_data.get("username", "")
+
+        out_dir = Path(hass.config.config_dir) / "pimoroni_unicorn"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        generated: list[str] = []
+        for entry in entries:
+            opts      = _merged_opts(entry)
+            device_id = opts[CONF_DEVICE_ID]
+            file_path = out_dir / f"secrets_{device_id}.py"
+            model_key = UNICORN_MODEL_KEYS.get(opts.get(CONF_MODEL, ""), "galactic")
+            content   = _render_secrets(device_id, mqtt_broker, mqtt_port, mqtt_username, model_key)
+
+            await hass.async_add_executor_job(file_path.write_text, content)
+
+            generated.append(f"`{file_path}`")
+            _LOGGER.info("Pimoroni Unicorn: wrote %s", file_path)
+
+        files_list = "\n".join(f"- {p}" for p in generated)
+        notify_create(
+            hass,
+            title="Pimoroni Unicorn firmware config generated",
+            message=(
+                f"Generated secrets file(s):\n\n{files_list}\n\n"
+                "**Next steps:**\n"
+                "1. Open the file and fill in `SSID`, `PASSWORD`, and `MQTT_PASSWORD`\n"
+                "2. Rename to `secrets.py`\n"
+                "3. Copy `secrets.py`, `main.py`, and `hardware.py` to the root of your Pimoroni Unicorn"
+            ),
+            notification_id="pimoroni_unicorn_secrets_generated",
+        )
+
+    return _handle_generate_secrets
+
+
+def _make_push_firmware_handler(
+    hass: HomeAssistant,
+) -> Callable[[ServiceCall], Coroutine[Any, Any, None]]:
+    async def _handle_push_firmware(call: ServiceCall) -> None:
+        entries = hass.config_entries.async_entries(DOMAIN)
+        if not entries:
+            _LOGGER.error("Pimoroni Unicorn: no configured entries found")
+            return
+
+        base_url = hass.config.internal_url or hass.config.external_url
+        if not base_url:
+            notify_create(
+                hass,
+                title="Pimoroni Unicorn OTA failed",
+                message=(
+                    "Could not determine HA URL. Set an internal or external URL in "
+                    "Settings → System → Network → Home Assistant URL."
+                ),
+                notification_id="pimoroni_unicorn_ota_error",
+            )
+            return
+
+        requested    = call.data.get("files", ["main"])
+        file_content = call.data.get("file_content", {})
+        source_dir   = Path(hass.config.config_dir) / "pimoroni_unicorn" / "firmware"
+
+        all_errors: list[str] = []
+        for entry in entries:
+            opts      = _merged_opts(entry)
+            device_id = opts[CONF_DEVICE_ID]
+            www_dir   = Path(hass.config.config_dir) / "www" / "pimoroni_unicorn" / device_id
+
+            def _stage_files(www_dir: Path = www_dir) -> tuple[list[tuple[str, str]], list[str]]:
+                www_dir.mkdir(parents=True, exist_ok=True)
+                staged: list[tuple[str, str]] = []
+                errors: list[str]             = []
+                for key in requested:
+                    src_name, device_path = _resolve_ota_key(key)
+
+                    if key in file_content:
+                        content = str(file_content[key])
+                    else:
+                        src = source_dir / src_name
+                        if not src.is_file():
+                            _LOGGER.warning("Pimoroni Unicorn OTA: source not found: %s", src)
+                            errors.append(src_name)
+                            continue
+                        with src.open(encoding="utf-8") as f:
+                            content = f.read()
+
+                    if src_name.endswith(".py"):
+                        try:
+                            ast.parse(content)
+                        except SyntaxError as e:
+                            _LOGGER.error("Pimoroni Unicorn OTA: syntax error in %s: %s", src_name, e)
+                            errors.append(src_name)
+                            continue
+                        except MemoryError:
+                            _LOGGER.warning(
+                                "Pimoroni Unicorn OTA: low memory validating %s, skipping check",
+                                src_name,
+                            )
+
+                    if key in file_content:
+                        src = source_dir / src_name
+                        if src.is_file():
+                            try:
+                                src.replace(src.with_name(src.name + ".old"))
+                            except OSError as e:
+                                _LOGGER.warning("Pimoroni Unicorn OTA: could not back up %s: %s", src_name, e)
+                        try:
+                            with src.open("w", encoding="utf-8") as f:
+                                f.write(content)
+                        except OSError as e:
+                            _LOGGER.warning("Pimoroni Unicorn OTA: could not update source %s: %s", src_name, e)
+
+                    with (www_dir / src_name).open("w", encoding="utf-8") as f:
+                        f.write(content)
+                    staged.append((src_name, device_path))
+                return staged, errors
+
+            staged, errors = await hass.async_add_executor_job(_stage_files)
+            all_errors.extend(errors)
+
+            if not staged:
+                _LOGGER.warning("Pimoroni Unicorn OTA: no files staged for %s", device_id)
+                continue
+
+            ota_payload = {
+                "files": [
+                    {
+                        "url": f"{base_url.rstrip('/')}/local/pimoroni_unicorn/{device_id}/{src_name}",
+                        "path": device_path,
+                    }
+                    for src_name, device_path in staged
+                ]
+            }
+            await async_publish(
+                hass,
+                f"{device_id}/ota",
+                json.dumps(ota_payload),
+                retain=False,
+            )
+
+            _LOGGER.info(
+                "Pimoroni Unicorn OTA: sent %s to %s",
+                ", ".join(n for n, _ in staged),
+                device_id,
+            )
+
+        error_note = f"\n\nSkipped (syntax/missing): {', '.join(all_errors)}" if all_errors else ""
+        notify_create(
+            hass,
+            title="Pimoroni Unicorn OTA sent",
+            message=(
+                f"OTA command sent for: {', '.join(requested)}.\n"
+                f"Device will download files and reboot automatically.{error_note}\n\n"
+                f"Source directory: `{source_dir}`"
+            ),
+            notification_id="pimoroni_unicorn_ota_sent",
+        )
+
+    return _handle_push_firmware
+
+
+def _render_secrets(
+    device_id: str,
+    mqtt_broker: str,
+    mqtt_port: int,
+    mqtt_username: str,
+    model_key: str,
+) -> str:
+    return (
+        f'SSID          = ""\n'
+        f'PASSWORD      = ""\n'
+        f'MQTT_SERVER   = "{mqtt_broker or ""}"\n'
+        f'MQTT_PORT     = {mqtt_port}\n'
+        f'MQTT_USER     = "{mqtt_username or ""}"\n'
+        f'MQTT_PASSWORD = ""\n'
+        f'DEVICE_ID     = "{device_id}"\n'
+        f'NTP_HOST      = "{mqtt_broker or ""}"  # defaults to MQTT_SERVER if omitted\n'
+        f'MODEL         = "{model_key}"\n'
+    )
+
+
+def _resolve_ota_key(key: str) -> tuple[str, str]:
+    if key in OTA_SOURCE_FILES:
+        return OTA_SOURCE_FILES[key]
+    fn = key if "." in key else f"{key}.py"
+    return (fn, f"/{fn}")
+
+
+def _parse_extra_sensors(raw: str) -> list[tuple[str, str]]:
+    result: list[tuple[str, str]] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split(None, 1)
+        if len(parts) == 2:
+            result.append((parts[0], parts[1]))
+        else:
+            _LOGGER.warning("Pimoroni Unicorn: ignoring malformed extra sensor line: %r", line)
+    return result
+
+
+def _float_state(hass: HomeAssistant, entity_id: str) -> float:
+    if not entity_id:
+        return 0.0
+    state = hass.states.get(entity_id)
+    if state is None or state.state in ("unknown", "unavailable", ""):
+        return 0.0
+    try:
+        return float(state.state)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _bool_state(hass: HomeAssistant, entity_id: str) -> bool:
+    if not entity_id:
+        return False
+    state = hass.states.get(entity_id)
+    return state is not None and state.state == "on"
