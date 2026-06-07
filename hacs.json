@@ -1,7 +1,7 @@
 {
-  "name": "Unicorn",
+  "name": "Pimoroni Unicorn",
   "render_readme": true,
   "content_in_root": false,
   "zip_release": true,
-  "filename": "unicorn.zip"
+  "filename": "pimoroni_unicorn.zip"
 }
