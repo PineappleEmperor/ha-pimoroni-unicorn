@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Pimoroni Unicorn",
+        "description": "Enter the Device ID configured in the firmware. Ensure the device is connected to the same MQTT broker as Home Assistant.",
+        "data": {
+          "device_id": "Device ID",
+          "model": "Model"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Device already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Pimoroni Unicorn Options",
+        "data": {
+          "device_id": "Device ID",
+          "model": "Model",
+          "solar_entity": "Solar power entity (W)",
+          "consumption_entity": "Consumption power entity (W)",
+          "battery_soc_entity": "Battery state of charge entity (%)",
+          "battery_charging_entity": "Battery charging binary sensor",
+          "sun_entity": "Sun entity (default: sun.sun)",
+          "weather_code_entity": "OWM weather code entity",
+          "extra_sensors": "Extra sensors (one per line: entity_id topic_suffix)"
+        },
+        "data_description": {
+          "extra_sensors": "Each line: entity_id followed by a topic suffix. Published to {device_id}/{topic_suffix} every 10 seconds.\nExample:\nsensor.indoor_temperature indoor_temp\nsensor.co2 co2"
+        }
+      }
+    }
+  }
+}

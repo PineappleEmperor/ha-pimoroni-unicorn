@@ -1,0 +1,131 @@
+[![release][release-badge]][release-url]
+[![commits-since-latest][commits-badge]][commits-url]
+![stars][stars-badge]
+![HACS][hacs-badge]
+\
+![python][python-badge]
+![hassfest][hassfest-badge]
+![hacs valid][hacs-valid-badge]
+
+# Pimoroni Unicorn Integration for Home Assistant
+
+Unofficial Home Assistant integration for [Pimoroni Unicorn](https://shop.pimoroni.com/collections/unicorn) LED matrix displays running on a Raspberry Pi Pico W. Communicates over local MQTT — no cloud required.
+
+Includes MicroPython firmware for the Pico W and a HA config flow for device setup, live data publishing, and over-the-air firmware updates.
+
+## Supported hardware
+
+| Model | Resolution |
+|-------|-----------|
+| Galactic Unicorn | 53 × 11 |
+| Cosmic Unicorn | 32 × 32 |
+| Stellar Unicorn | 16 × 16 |
+| Unicorn Pack | 16 × 7 |
+| Unicorn Mini Pack | 11 × 7 |
+| Custom | configurable |
+
+## Prerequisites
+
+- Raspberry Pi Pico W flashed with [Pimoroni MicroPython](https://github.com/pimoroni/pimoroni-pico/releases)
+- Home Assistant with the MQTT integration configured
+
+## Installation
+
+### HACS (recommended)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=pineappleemperor&repository=ha-pimoroni-unicorn&category=Integration)
+
+### Manual
+Copy `custom_components/pimoroni_unicorn` into your Home Assistant `custom_components` folder and restart.
+
+## Configuration
+
+**Settings → Devices & Services → Add Integration → Pimoroni Unicorn**
+
+Enter a device ID (must match `DEVICE_ID` in `secrets.py`) and select your Unicorn model.
+
+After setup, open **Configure** to set optional data sources, currently these consist of:
+
+| Option | Description |
+|--------|-------------|
+| Solar entity | Sensor reporting solar generation (W) |
+| Consumption entity | Sensor reporting home consumption (W) |
+| Battery SoC entity | Sensor reporting battery state of charge (%) |
+| Battery charging entity | Binary sensor for charging state |
+| Sun entity | Sun entity for day/night (default: `sun.sun`) |
+| Weather condition entity | Sensor reporting OWM condition code |
+| Extra sensors | One `entity_id topic_suffix` pair per line |
+
+## Firmware setup
+
+### 1. Generate secrets
+
+Call **Developer Tools → Services → `pimoroni_unicorn.generate_secrets`**.
+
+A `secrets_<device_id>.py` file is written to `<config>/pimoroni_unicorn/`. Open it and fill in `SSID`, `PASSWORD`, and `MQTT_PASSWORD`, then rename to `secrets.py`.
+
+### 2. Copy firmware to the Pico W
+
+Copy to the root of your Pico W using Thonny or similar:
+- `secrets.py`
+- `main.py`
+- `hardware.py`
+- all other `.py` files from `firmware/`
+
+After the first version of the firmware is deployed you can use **`pimoroni_unicorn.push_firmware`** to push files over-the-air once the device is already running.
+
+### 3. Boot
+
+The Pico W connects to Wi-Fi, syncs NTP, connects to MQTT, and starts displaying.
+
+## Features
+
+### Display
+- Clock and calendar (large digit rendering)
+- Solar generation, consumption, net, and battery SoC indicator
+- Weather overlay (rain, snow, sun, moon, cloud — driven by OWM condition code)
+- Brightness up/down buttons (hardware buttons or HA button entities)
+- Sleep/wake toggle
+
+### Notifications
+
+Trigger via `notify.pimoroni_unicorn_<device_id>` or MQTT topic `<device_id>/notify`.
+
+**Animations:** `rainbow`, `fire`, `matrix`, `scanner`, `comet`, `snow`, `confetti`, `flash`, `pulse`, `bounce`, `supercomputer`, `retroprompt`
+
+**Sounds** (Galactic/Cosmic only — models with audio): `beep`, `chime`, `alert`
+
+Message text scrolls alongside the animation. Supports `color`, `bg_color`, `animation`, `sound`, and `duration` data fields.
+
+### Energy mode
+
+Cycle display between **Solar**, **Consumption**, and **Net** via the `<device_id>/energy_mode/set` MQTT topic or HA select entity.
+
+## Services
+
+### `pimoroni_unicorn.generate_secrets`
+
+Writes pre-filled `secrets_<device_id>.py` files to `<config>/pimoroni_unicorn/` for each configured device. Pulls broker address and credentials from the HA MQTT integration automatically.
+
+### `pimoroni_unicorn.push_firmware`
+
+Stages firmware files in `www/pimoroni_unicorn/<device_id>/` and publishes an OTA command to `<device_id>/ota`. The device downloads the files and reboots.
+
+| Field | Description |
+|-------|-------------|
+| `files` | List of file keys to push (e.g. `["main", "hardware"]`) |
+| `file_content` | Optional map of key → content to push inline without reading from disk, however it will replace the file on disk to keep parity |
+
+<!-- Badges -->
+
+[commits-badge]: https://img.shields.io/github/commits-since/PineappleEmperor/ha-pimoroni-unicorn/latest?style=flat-square
+[hacs-badge]: https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Fhacs%2Fdefault%2Frefs%2Fheads%2Fmaster%2Fintegration&search=(%22PineappleEmperor%2Fha-pimoroni-unicorn%22)&replace=default&style=flat-square&label=hacs&link=https%3A%2F%2Fgithub.com%2Fhacs%2Fintegration
+[hacs-valid-badge]: https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-pimoroni-unicorn/hacs_validate.yml?style=flat-square&label=hacs%20valid
+[hassfest-badge]: https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-pimoroni-unicorn/hassfest_validate.yml?style=flat-square&label=hassfest
+[python-badge]: https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-pimoroni-unicorn/python_validate.yml?style=flat-square&label=python
+[release-badge]: https://img.shields.io/github/v/release/PineappleEmperor/ha-pimoroni-unicorn?style=flat-square
+[stars-badge]: https://img.shields.io/github/stars/PineappleEmperor/ha-pimoroni-unicorn?style=flat-square
+
+<!-- References -->
+
+[commits-url]: https://github.com/PineappleEmperor/ha-pimoroni-unicorn/commits/main/
+[release-url]: https://github.com/PineappleEmperor/ha-pimoroni-unicorn/releases
