@@ -38,7 +38,7 @@ import notify_animations
 import sounds
 import weather_fx
 from drawing import (
-    draw_big_weekdays, draw_calendar, draw_cat_sensors, draw_clock,
+    draw_big_weekdays, draw_calendar, draw_display_sensors, draw_clock,
     draw_icon, draw_solar_quadrant,
 )
 from notify_animations import (
@@ -105,28 +105,8 @@ _notify_active   = None
 _notify_start_ms = 0
 _ota_pending     = None
 
-_PHL_HUB = "REDACTED"
-
-cat_sensors = [
-    {
-        "id": "lola", "name": "Lola",
-        "topic": f"PetHubLocal/ha/pet/REDACTED/hub/{_PHL_HUB}",
-        "location_key": "REDACTED",
-        "on_rgb": (140, 192,  80), "off_rgb": ( 35,  48, 20), "state": False,
-    },
-    {
-        "id": "merlin", "name": "Merlin",
-        "topic": f"PetHubLocal/ha/pet/REDACTED/hub/{_PHL_HUB}",
-        "location_key": "REDACTED",
-        "on_rgb": (247, 190,  18), "off_rgb": ( 62,  48,  5), "state": False,
-    },
-    {
-        "id": "yeren", "name": "Yeren",
-        "topic": f"PetHubLocal/ha/pet/REDACTED/hub/{_PHL_HUB}",
-        "location_key": "REDACTED",
-        "on_rgb": (247, 152,  12), "off_rgb": ( 62,  38,  3), "state": False,
-    },
-]
+display_sensors: dict = {}  # populated via MQTT {device_id}/display/{id}/config and state
+TOPIC_DISPLAY_PREFIX = f"{DEVICE_ID}/display/"
 
 # Colour pens used directly in main.py (OTA screen + main_loop draw calls)
 BLACK       = graphics.create_pen(0,   0,   0)
@@ -247,15 +227,30 @@ def on_message(topic, message):
     try:
         topic_str = topic.decode()
 
-        for cat in cat_sensors:
-            if topic_str == cat["topic"]:
-                try:
-                    data = json.loads(message)
-                    locations = data.get("device_locations", {})
-                    cat["state"] = locations.get(cat["location_key"], "") == "Inside"
-                except Exception:
-                    pass
-                return
+        if topic_str.startswith(TOPIC_DISPLAY_PREFIX):
+            suffix = topic_str[len(TOPIC_DISPLAY_PREFIX):]
+            parts  = suffix.split("/", 1)
+            if len(parts) == 2:
+                sensor_id, msg_type = parts
+                if msg_type == "config":
+                    try:
+                        data = json.loads(message)
+                        if data:
+                            if sensor_id not in display_sensors:
+                                display_sensors[sensor_id] = {"state": False}
+                            display_sensors[sensor_id].update({
+                                "name":    data.get("name", sensor_id),
+                                "on_rgb":  tuple(data.get("on_rgb",  [0, 255, 0])),
+                                "off_rgb": tuple(data.get("off_rgb", [20, 20, 20])),
+                            })
+                        else:
+                            display_sensors.pop(sensor_id, None)
+                    except Exception:
+                        pass
+                elif msg_type == "state":
+                    if sensor_id in display_sensors:
+                        display_sensors[sensor_id]["state"] = message.decode().upper() == "ON"
+            return
 
         if topic_str == TOPIC_ANIM_CMD:
             battery_animation = message != b"OFF"
@@ -397,8 +392,7 @@ async def mqtt_task():
                 }),
             )
 
-            for cat in cat_sensors:
-                mqtt_client.subscribe(cat["topic"].encode())
+            mqtt_client.subscribe(f"{DEVICE_ID}/display/#".encode())
             for topic in (
                 TOPIC_COMMAND, TOPIC_SOLAR, TOPIC_WEATHER,
                 TOPIC_ANIM_CMD, TOPIC_ENERGY_MODE_CMD, TOPIC_NOTIFY, TOPIC_OTA,
@@ -502,7 +496,7 @@ async def main_loop():
                 mode=energy_mode, consumption=consumption_power,
                 battery_animation=battery_animation,
             )
-            draw_cat_sensors(cat_sensors)
+            draw_display_sensors(display_sensors)
             weather_overlay(weather_condition)
 
             if icon_type != "none":
