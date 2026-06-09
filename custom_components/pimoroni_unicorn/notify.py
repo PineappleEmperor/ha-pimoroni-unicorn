@@ -9,7 +9,7 @@ from homeassistant.components.notify.legacy import BaseNotificationService
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-from .const import CONF_DEVICE_ID, DOMAIN, NOTIFY_ANIMATIONS, NOTIFY_SOUNDS
+from .const import CONF_DEVICE_ID, NOTIFY_ANIMATIONS, NOTIFY_SOUNDS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,8 +22,7 @@ async def async_get_service(
     """Return the notify service."""
     if discovery_info is None:
         return None
-    entry_data = hass.data[DOMAIN].get(discovery_info["entry_id"], {})
-    return PimoroniUnicornNotify(hass, entry_data.get(CONF_DEVICE_ID, ""))
+    return PimoroniUnicornNotify(hass, discovery_info.get(CONF_DEVICE_ID, ""))
 
 
 class PimoroniUnicornNotify(BaseNotificationService):

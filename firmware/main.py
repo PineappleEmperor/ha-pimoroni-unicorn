@@ -8,6 +8,16 @@ try:
 except ImportError:
     NTP_HOST = MQTT_SERVER
 
+try:
+    from secrets import (
+        HA_SOLAR_ENTITY, HA_CONSUMPTION_ENTITY, HA_BATTERY_SOC_ENTITY,
+        HA_BATTERY_CHARGING_ENTITY, HA_SUN_ENTITY, HA_WEATHER_CODE_ENTITY,
+    )
+except ImportError:
+    HA_SOLAR_ENTITY = HA_CONSUMPTION_ENTITY = HA_BATTERY_SOC_ENTITY = ""
+    HA_BATTERY_CHARGING_ENTITY = HA_WEATHER_CODE_ENTITY = ""
+    HA_SUN_ENTITY = "sun.sun"
+
 import machine
 import network
 import ntptime
@@ -400,6 +410,18 @@ async def mqtt_task():
             mqtt_client.publish(
                 f"{DEVICE_ID}/notify/capabilities", json.dumps(NOTIFY_CAPABILITIES), retain=True
             )
+            _ha_config = {
+                k: v for k, v in (
+                    ("solar_entity",            HA_SOLAR_ENTITY),
+                    ("consumption_entity",      HA_CONSUMPTION_ENTITY),
+                    ("battery_soc_entity",      HA_BATTERY_SOC_ENTITY),
+                    ("battery_charging_entity", HA_BATTERY_CHARGING_ENTITY),
+                    ("sun_entity",              HA_SUN_ENTITY),
+                    ("weather_code_entity",     HA_WEATHER_CODE_ENTITY),
+                ) if v
+            }
+            if _ha_config:
+                mqtt_client.publish(f"{DEVICE_ID}/ha_config", json.dumps(_ha_config), retain=True)
             send_ha_state()
             print("MQTT Connected & Discovery Published")
 

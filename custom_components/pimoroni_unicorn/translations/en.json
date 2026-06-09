@@ -30,7 +30,7 @@
           "extra_sensors": "Extra sensors (one per line: entity_id topic_suffix)"
         },
         "data_description": {
-          "extra_sensors": "Each line: entity_id followed by a topic suffix. Published to {device_id}/{topic_suffix} every 10 seconds.\nExample:\nsensor.indoor_temperature indoor_temp\nsensor.co2 co2"
+          "extra_sensors": "Each line: entity_id followed by a topic suffix. Published to [device_id]/[topic_suffix] every 10 seconds.\nExample:\nsensor.indoor_temperature indoor_temp\nsensor.co2 co2"
         }
       }
     }

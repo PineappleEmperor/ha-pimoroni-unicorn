@@ -159,28 +159,17 @@ jobs:
           NEW_VERSION="${{ steps.bump.outputs.SUGGESTED_VERSION }}"
           PR_VERSION="${{ steps.compare.outputs.PR_VERSION }}"
           MSG="<!-- version-check -->"
-          MSG+="
-          ⚠️ **Version in \`custom_components/pimoroni_unicorn/manifest.json\` seems incorrect.**
+          MSG+="⚠️ **Version in \`custom_components/pimoroni_unicorn/manifest.json\` seems incorrect.**
 
-          Please update the \`version\` field according to [Semantic Versioning](https://semver.org/)."
+          Please update the \`version\` field according to [Semantic Versioning](https://semver.org/).
 
-          if [ "$BUMP_TYPE" != "none" ]; then
-            MSG+="
-            
-            🔍 Based on the PR labels, a **$BUMP_TYPE** version bump is recommended."
-            MSG+="
-            
-            💡 Suggested new version: \`$NEW_VERSION\`"
-          else
-            MSG+="
-            
-            💡 No \`breaking feature\`, \`feature\`, or \`fix\` label was found — please add one to indicate the type of change."
-          fi
+          🔍 Based on the PR labels, a **$BUMP_TYPE** version bump is recommended.
 
-          # Find comment by this bot with the version-check marker
+          💡 Suggested new version: \`$NEW_VERSION\`"
+
           COMMENT_ID=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
             --jq '.[] | select(.body | contains("<!-- version-check -->")) | select(.user.type == "Bot") | .id')
-      
+
           if [ -n "$COMMENT_ID" ]; then
             echo "📝 Updating existing comment ID $COMMENT_ID"
             gh api \
@@ -192,8 +181,7 @@ jobs:
             echo "💬 Creating new comment"
             gh pr comment ${{ github.event.pull_request.number }} --body "$MSG"
           fi
-          
-          # Fail the job
+
           echo "❌ Version mismatch - failing the workflow"
           echo "pr_version=v$PR_VERSION"
           echo "suggested_version=$NEW_VERSION"
