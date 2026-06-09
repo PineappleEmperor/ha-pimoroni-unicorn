@@ -33,6 +33,7 @@ class PimoroniUnicornNotifyEntity(NotifyEntity):
     _attr_name            = "Notify"
 
     def __init__(self, hass: HomeAssistant, device_id: str) -> None:
+        """Initialise notify entity."""
         self.hass            = hass
         self._device_id      = device_id
         self._attr_unique_id = f"{device_id}_notify"

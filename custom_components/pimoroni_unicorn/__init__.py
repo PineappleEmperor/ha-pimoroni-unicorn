@@ -46,9 +46,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Pimoroni Unicorn from a config entry."""
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": [], "ha_config": {}, "display_sensor_ids": set()}
 
-    opts      = _merged_opts(entry)
-    device_id = opts[CONF_DEVICE_ID]
-
     _setup_publishers(hass, entry)
     await _async_subscribe_ha_config(hass, entry)
     await _async_setup_display_sensors(hass, entry)
