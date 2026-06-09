@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from homeassistant.components.mqtt import async_publish
+from homeassistant.components.mqtt import async_publish, async_subscribe
 from homeassistant.components.persistent_notification import (
     async_create as notify_create,
 )
@@ -44,15 +44,19 @@ SERVICE_PUSH_FIRMWARE    = "push_firmware"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Pimoroni Unicorn from a config entry."""
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": []}
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": [], "ha_config": {}}
+
+    opts      = _merged_opts(entry)
+    device_id = opts[CONF_DEVICE_ID]
 
     hass.async_create_task(
         discovery.async_load_platform(
-            hass, "notify", DOMAIN, {"entry_id": entry.entry_id}, {}
+            hass, "notify", DOMAIN, {"entry_id": entry.entry_id, CONF_DEVICE_ID: device_id}, {}
         )
     )
 
     _setup_publishers(hass, entry)
+    await _async_subscribe_ha_config(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     await hass.config_entries.async_forward_entry_setups(entry, ["button"])
 
@@ -84,6 +88,38 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
     _setup_publishers(hass, entry)
+    await _async_subscribe_ha_config(hass, entry)
+    await _async_publish_ha_config(hass, entry)
+
+
+async def _async_subscribe_ha_config(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Subscribe to retained ha_config topic and cache payload in hass.data."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+
+    @callback
+    def _on_ha_config(msg: Any) -> None:
+        try:
+            data = json.loads(msg.payload)
+            if isinstance(data, dict) and entry.entry_id in hass.data.get(DOMAIN, {}):
+                hass.data[DOMAIN][entry.entry_id]["ha_config"] = data
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    unsub = await async_subscribe(hass, f"{device_id}/ha_config", _on_ha_config)
+    hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
+
+
+async def _async_publish_ha_config(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Publish current entity config to retained MQTT topic."""
+    opts      = _merged_opts(entry)
+    device_id = opts[CONF_DEVICE_ID]
+    entity_keys = (
+        CONF_SOLAR_ENTITY, CONF_CONSUMPTION_ENTITY, CONF_BATTERY_SOC_ENTITY,
+        CONF_BATTERY_CHARGING_ENTITY, CONF_SUN_ENTITY, CONF_WEATHER_CODE_ENTITY,
+        CONF_EXTRA_SENSORS,
+    )
+    payload = {k: opts[k] for k in entity_keys if opts.get(k)}
+    await async_publish(hass, f"{device_id}/ha_config", json.dumps(payload), retain=True)
 
 
 def _merged_opts(entry: ConfigEntry) -> dict[str, Any]:
@@ -99,13 +135,13 @@ def _setup_publishers(hass: HomeAssistant, entry: ConfigEntry) -> None:
         unsub()
     store["unsub"].clear()
 
-    solar_entity            = opts.get(CONF_SOLAR_ENTITY, "").strip()
-    consumption_entity      = opts.get(CONF_CONSUMPTION_ENTITY, "").strip()
-    battery_soc_entity      = opts.get(CONF_BATTERY_SOC_ENTITY, "").strip()
-    battery_charging_entity = opts.get(CONF_BATTERY_CHARGING_ENTITY, "").strip()
-    sun_entity              = opts.get(CONF_SUN_ENTITY, "sun.sun").strip() or "sun.sun"
-    weather_code_entity     = opts.get(CONF_WEATHER_CODE_ENTITY, "").strip()
-    extra_sensors_raw       = opts.get(CONF_EXTRA_SENSORS, "").strip()
+    solar_entity            = (opts.get(CONF_SOLAR_ENTITY) or "").strip()
+    consumption_entity      = (opts.get(CONF_CONSUMPTION_ENTITY) or "").strip()
+    battery_soc_entity      = (opts.get(CONF_BATTERY_SOC_ENTITY) or "").strip()
+    battery_charging_entity = (opts.get(CONF_BATTERY_CHARGING_ENTITY) or "").strip()
+    sun_entity              = (opts.get(CONF_SUN_ENTITY) or "sun.sun").strip() or "sun.sun"
+    weather_code_entity     = (opts.get(CONF_WEATHER_CODE_ENTITY) or "").strip()
+    extra_sensors_raw       = (opts.get(CONF_EXTRA_SENSORS) or "").strip()
 
     extra_sensors = _parse_extra_sensors(extra_sensors_raw)
     has_solar     = any([solar_entity, consumption_entity, battery_soc_entity, battery_charging_entity])
@@ -183,8 +219,12 @@ def _make_generate_secrets_handler(
             opts      = _merged_opts(entry)
             device_id = opts[CONF_DEVICE_ID]
             file_path = out_dir / f"secrets_{device_id}.py"
-            model_key = UNICORN_MODEL_KEYS.get(opts.get(CONF_MODEL, ""), "galactic")
-            content   = _render_secrets(device_id, mqtt_broker, mqtt_port, mqtt_username, model_key)
+            model_key    = UNICORN_MODEL_KEYS.get(opts.get(CONF_MODEL, ""), "galactic")
+            entity_opts  = {k: (opts.get(k) or "") for k in (
+                CONF_SOLAR_ENTITY, CONF_CONSUMPTION_ENTITY, CONF_BATTERY_SOC_ENTITY,
+                CONF_BATTERY_CHARGING_ENTITY, CONF_SUN_ENTITY, CONF_WEATHER_CODE_ENTITY,
+            )}
+            content = _render_secrets(device_id, mqtt_broker, mqtt_port, mqtt_username, model_key, entity_opts)
 
             await hass.async_add_executor_job(file_path.write_text, content)
 
@@ -339,7 +379,9 @@ def _render_secrets(
     mqtt_port: int,
     mqtt_username: str,
     model_key: str,
+    entity_opts: dict[str, str],
 ) -> str:
+    sun = entity_opts.get(CONF_SUN_ENTITY) or "sun.sun"
     return (
         f'SSID          = ""\n'
         f'PASSWORD      = ""\n'
@@ -350,6 +392,14 @@ def _render_secrets(
         f'DEVICE_ID     = "{device_id}"\n'
         f'NTP_HOST      = "{mqtt_broker or ""}"  # defaults to MQTT_SERVER if omitted\n'
         f'MODEL         = "{model_key}"\n'
+        f'\n'
+        f'# Optional: pre-configure HA entity IDs so the integration auto-fills on first setup\n'
+        f'HA_SOLAR_ENTITY            = "{entity_opts.get(CONF_SOLAR_ENTITY, "")}"\n'
+        f'HA_CONSUMPTION_ENTITY      = "{entity_opts.get(CONF_CONSUMPTION_ENTITY, "")}"\n'
+        f'HA_BATTERY_SOC_ENTITY      = "{entity_opts.get(CONF_BATTERY_SOC_ENTITY, "")}"\n'
+        f'HA_BATTERY_CHARGING_ENTITY = "{entity_opts.get(CONF_BATTERY_CHARGING_ENTITY, "")}"\n'
+        f'HA_SUN_ENTITY              = "{sun}"\n'
+        f'HA_WEATHER_CODE_ENTITY     = "{entity_opts.get(CONF_WEATHER_CODE_ENTITY, "")}"\n'
     )
 
 
