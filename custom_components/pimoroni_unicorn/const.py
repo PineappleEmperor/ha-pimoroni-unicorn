@@ -29,6 +29,7 @@ CONF_BATTERY_CHARGING_ENTITY    = "battery_charging_entity"
 CONF_SUN_ENTITY                 = "sun_entity"
 CONF_WEATHER_CODE_ENTITY        = "weather_code_entity"
 CONF_EXTRA_SENSORS              = "extra_sensors"
+CONF_DISPLAY_SENSORS            = "display_sensors"
 
 OTA_SOURCE_FILES = {
     "main":                ("main.py",                 "/main.py"),

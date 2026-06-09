@@ -25,6 +25,7 @@ from .const import (
     CONF_BATTERY_SOC_ENTITY,
     CONF_CONSUMPTION_ENTITY,
     CONF_DEVICE_ID,
+    CONF_DISPLAY_SENSORS,
     CONF_EXTRA_SENSORS,
     CONF_MODEL,
     CONF_SOLAR_ENTITY,
@@ -44,7 +45,7 @@ SERVICE_PUSH_FIRMWARE    = "push_firmware"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Pimoroni Unicorn from a config entry."""
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": [], "ha_config": {}}
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": [], "ha_config": {}, "display_sensor_ids": set()}
 
     opts      = _merged_opts(entry)
     device_id = opts[CONF_DEVICE_ID]
@@ -57,6 +58,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _setup_publishers(hass, entry)
     await _async_subscribe_ha_config(hass, entry)
+    await _async_setup_display_sensors(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     await hass.config_entries.async_forward_entry_setups(entry, ["button"])
 
@@ -90,6 +92,7 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     _setup_publishers(hass, entry)
     await _async_subscribe_ha_config(hass, entry)
     await _async_publish_ha_config(hass, entry)
+    await _async_setup_display_sensors(hass, entry)
 
 
 async def _async_subscribe_ha_config(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -120,6 +123,70 @@ async def _async_publish_ha_config(hass: HomeAssistant, entry: ConfigEntry) -> N
     )
     payload = {k: opts[k] for k in entity_keys if opts.get(k)}
     await async_publish(hass, f"{device_id}/ha_config", json.dumps(payload), retain=True)
+
+
+async def _async_setup_display_sensors(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Publish display sensor configs and subscribe to entity state changes."""
+    opts      = _merged_opts(entry)
+    device_id = opts[CONF_DEVICE_ID]
+    store     = hass.data[DOMAIN][entry.entry_id]
+    sensors   = opts.get(CONF_DISPLAY_SENSORS, [])
+    new_ids   = {s["id"] for s in sensors}
+
+    for removed_id in store.get("display_sensor_ids", set()) - new_ids:
+        await async_publish(hass, f"{device_id}/display/{removed_id}/config", "", retain=True)
+        await async_publish(hass, f"{device_id}/display/{removed_id}/state", "", retain=True)
+    store["display_sensor_ids"] = new_ids
+
+    for sensor in sensors:
+        entity_id = sensor.get("entity_id", "")
+        sensor_id = sensor.get("id", "")
+        if not entity_id or not sensor_id:
+            continue
+
+        config_payload = json.dumps({
+            "name":    sensor.get("name", sensor_id),
+            "on_rgb":  _hex_to_rgb(sensor.get("on_color", "00FF00")),
+            "off_rgb": _hex_to_rgb(sensor.get("off_color", "1A1A1A")),
+            "x":       sensor.get("x_pos",  37),
+            "y":       sensor.get("y_pos",   1),
+            "spacing": sensor.get("spacing", 4),
+        })
+        await async_publish(hass, f"{device_id}/display/{sensor_id}/config", config_payload, retain=True)
+
+        state = hass.states.get(entity_id)
+        await async_publish(
+            hass,
+            f"{device_id}/display/{sensor_id}/state",
+            "ON" if state and state.state == "on" else "OFF",
+            retain=True,
+        )
+
+        @callback
+        def _on_display_state(event: Any, _sid: str = sensor_id, _did: str = device_id) -> None:
+            new_state = event.data.get("new_state")
+            if new_state is not None:
+                hass.async_create_task(async_publish(
+                    hass,
+                    f"{_did}/display/{_sid}/state",
+                    "ON" if new_state.state == "on" else "OFF",
+                    retain=True,
+                ))
+
+        store["unsub"].append(
+            async_track_state_change_event(hass, [entity_id], _on_display_state)
+        )
+
+
+def _hex_to_rgb(hex_str: str) -> list[int]:
+    """Convert hex colour string to [r, g, b] list."""
+    h = hex_str.lstrip("#").upper()
+    if len(h) != 6:
+        return [0, 255, 0]
+    try:
+        return [int(h[i:i + 2], 16) for i in (0, 2, 4)]
+    except ValueError:
+        return [0, 255, 0]
 
 
 def _merged_opts(entry: ConfigEntry) -> dict[str, Any]:

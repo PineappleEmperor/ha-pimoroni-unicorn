@@ -18,6 +18,17 @@
     "step": {
       "init": {
         "title": "Pimoroni Unicorn Options",
+        "description": "Display sensors:\n{sensors}",
+        "menu_options": {
+          "settings": "Configure settings",
+          "add_display_sensor": "Add display sensor",
+          "edit_display_sensor": "Edit display sensor",
+          "remove_display_sensor": "Remove display sensor",
+          "save": "Save & close"
+        }
+      },
+      "settings": {
+        "title": "Settings",
         "data": {
           "device_id": "Device ID",
           "model": "Model",
@@ -31,6 +42,37 @@
         },
         "data_description": {
           "extra_sensors": "Each line: entity_id followed by a topic suffix. Published to [device_id]/[topic_suffix] every 10 seconds.\nExample:\nsensor.indoor_temperature indoor_temp\nsensor.co2 co2"
+        }
+      },
+      "add_display_sensor": {
+        "title": "Add display sensor",
+        "data": {
+          "entity_id": "Entity",
+          "name": "Display name",
+          "on_color": "On colour (hex, e.g. 00FF00)",
+          "off_color": "Off colour (hex, e.g. 1A1A1A)",
+          "x_pos": "X position",
+          "y_pos": "Y position",
+          "spacing": "Spacing (px to next sensor)"
+        }
+      },
+      "edit_display_sensor": {
+        "title": "Edit display sensor",
+        "data": {
+          "sensor_id": "Select sensor to edit",
+          "entity_id": "Entity",
+          "name": "Display name",
+          "on_color": "On colour (hex, e.g. 00FF00)",
+          "off_color": "Off colour (hex, e.g. 1A1A1A)",
+          "x_pos": "X position",
+          "y_pos": "Y position",
+          "spacing": "Spacing (px to next sensor)"
+        }
+      },
+      "remove_display_sensor": {
+        "title": "Remove display sensor",
+        "data": {
+          "sensor_id": "Select sensor to remove"
         }
       }
     }
