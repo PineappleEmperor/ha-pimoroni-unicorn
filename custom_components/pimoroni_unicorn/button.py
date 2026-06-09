@@ -32,7 +32,7 @@ class PimoroniUnicornUpdateButton(ButtonEntity):
         self._attr_unique_id  = f"{device_id}_ota_main"
         self._attr_name       = "Update Firmware"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, device_id)},
+            identifiers={("mqtt", device_id)},
             name="Pimoroni Unicorn",
             manufacturer="Pimoroni",
             model=model,

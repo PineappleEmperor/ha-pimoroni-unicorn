@@ -4,6 +4,15 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.helpers.selector import (
+    EntitySelector,
+    EntitySelectorConfig,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+)
 
 from .const import (
     CONF_BATTERY_CHARGING_ENTITY,
@@ -24,21 +33,25 @@ DATA_SCHEMA = vol.Schema({
     vol.Required(CONF_MODEL,     default=UNICORN_MODELS[0]):          vol.In(UNICORN_MODELS),
 })
 
+_MODEL_SELECTOR = SelectSelector(
+    SelectSelectorConfig(options=UNICORN_MODELS, mode=SelectSelectorMode.DROPDOWN)
+)
+
 
 def _options_schema(current: dict) -> vol.Schema:
     def _d(key, default=""):
-        return current.get(key, default)
+        return current.get(key) or default
 
     return vol.Schema({
-        vol.Required(CONF_DEVICE_ID,                default=_d(CONF_DEVICE_ID)):                str,
-        vol.Required(CONF_MODEL,                    default=_d(CONF_MODEL, UNICORN_MODELS[0])): vol.In(UNICORN_MODELS),
-        vol.Optional(CONF_SOLAR_ENTITY,             default=_d(CONF_SOLAR_ENTITY)):             str,
-        vol.Optional(CONF_CONSUMPTION_ENTITY,       default=_d(CONF_CONSUMPTION_ENTITY)):       str,
-        vol.Optional(CONF_BATTERY_SOC_ENTITY,       default=_d(CONF_BATTERY_SOC_ENTITY)):       str,
-        vol.Optional(CONF_BATTERY_CHARGING_ENTITY,  default=_d(CONF_BATTERY_CHARGING_ENTITY)):  str,
-        vol.Optional(CONF_SUN_ENTITY,               default=_d(CONF_SUN_ENTITY, "sun.sun")):    str,
-        vol.Optional(CONF_WEATHER_CODE_ENTITY,      default=_d(CONF_WEATHER_CODE_ENTITY)):      str,
-        vol.Optional(CONF_EXTRA_SENSORS,            default=_d(CONF_EXTRA_SENSORS)):            str,
+        vol.Required(CONF_DEVICE_ID,               default=_d(CONF_DEVICE_ID)):               str,
+        vol.Required(CONF_MODEL,                   default=_d(CONF_MODEL, UNICORN_MODELS[0])): _MODEL_SELECTOR,
+        vol.Optional(CONF_SOLAR_ENTITY,            default=_d(CONF_SOLAR_ENTITY)):            EntitySelector(EntitySelectorConfig(device_class="power")),
+        vol.Optional(CONF_CONSUMPTION_ENTITY,      default=_d(CONF_CONSUMPTION_ENTITY)):      EntitySelector(EntitySelectorConfig(device_class="power")),
+        vol.Optional(CONF_BATTERY_SOC_ENTITY,      default=_d(CONF_BATTERY_SOC_ENTITY)):      EntitySelector(EntitySelectorConfig(device_class="battery")),
+        vol.Optional(CONF_BATTERY_CHARGING_ENTITY, default=_d(CONF_BATTERY_CHARGING_ENTITY)): EntitySelector(EntitySelectorConfig(domain="binary_sensor", device_class="battery_charging")),
+        vol.Optional(CONF_SUN_ENTITY,              default=_d(CONF_SUN_ENTITY, "sun.sun")):   EntitySelector(EntitySelectorConfig(domain="sun")),
+        vol.Optional(CONF_WEATHER_CODE_ENTITY,     default=_d(CONF_WEATHER_CODE_ENTITY)):     EntitySelector(EntitySelectorConfig(domain="sensor")),
+        vol.Optional(CONF_EXTRA_SENSORS,           default=_d(CONF_EXTRA_SENSORS)):           TextSelector(TextSelectorConfig(multiline=True)),
     })
 
 
@@ -84,7 +97,10 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        current = {**self._config_entry.data, **self._config_entry.options}
+        store      = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
+        ha_config  = store.get("ha_config", {})
+        current    = {**ha_config, **self._config_entry.data, **self._config_entry.options}
+
         return self.async_show_form(
             step_id="init",
             data_schema=_options_schema(current),
