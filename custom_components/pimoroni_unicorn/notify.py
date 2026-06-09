@@ -2,40 +2,44 @@
 
 import json
 import logging
+from typing import Any
 
 from homeassistant.components.mqtt import async_publish
-from homeassistant.components.notify.const import ATTR_DATA
-from homeassistant.components.notify.legacy import BaseNotificationService
+from homeassistant.components.notify import NotifyEntity
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_DEVICE_ID, NOTIFY_ANIMATIONS, NOTIFY_SOUNDS
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_get_service(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
-    discovery_info: DiscoveryInfoType | None = None,
-) -> "PimoroniUnicornNotify | None":
-    """Return the notify service."""
-    if discovery_info is None:
-        return None
-    return PimoroniUnicornNotify(hass, discovery_info.get(CONF_DEVICE_ID, ""))
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up Pimoroni Unicorn notify entity."""
+    opts      = {**entry.data, **entry.options}
+    device_id = opts.get(CONF_DEVICE_ID, "")
+    async_add_entities([PimoroniUnicornNotifyEntity(hass, device_id)])
 
 
-class PimoroniUnicornNotify(BaseNotificationService):
+class PimoroniUnicornNotifyEntity(NotifyEntity):
     """Send notifications to a Pimoroni Unicorn display via MQTT."""
 
-    def __init__(self, hass: HomeAssistant, device_id: str) -> None:
-        """Initialise notify service."""
-        self.hass = hass
-        self._device_id = device_id
+    _attr_has_entity_name = True
+    _attr_name            = "Notify"
 
-    async def async_send_message(self, message: str = "", **kwargs) -> None:
+    def __init__(self, hass: HomeAssistant, device_id: str) -> None:
+        self.hass            = hass
+        self._device_id      = device_id
+        self._attr_unique_id = f"{device_id}_notify"
+
+    async def async_send_message(self, message: str, title: str | None = None, **kwargs: Any) -> None:
         """Send notification to device via MQTT."""
-        data    = kwargs.get(ATTR_DATA) or {}
+        data: dict    = kwargs.get("data") or {}
         payload: dict = {}
 
         if message:

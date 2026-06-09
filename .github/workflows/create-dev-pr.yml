@@ -39,6 +39,7 @@ jobs:
           if [ -z "$TITLE" ]; then
             TITLE=$(echo "$SUBJECTS" | tail -1)
           fi
+          TITLE=$(echo "$TITLE" | xargs)
           echo "title=$TITLE" >> $GITHUB_OUTPUT
 
       - name: Create or update draft PR
