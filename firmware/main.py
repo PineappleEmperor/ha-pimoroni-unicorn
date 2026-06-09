@@ -239,9 +239,12 @@ def on_message(topic, message):
                             if sensor_id not in display_sensors:
                                 display_sensors[sensor_id] = {"state": False}
                             display_sensors[sensor_id].update({
-                                "name":    data.get("name", sensor_id),
+                                "name":    data.get("name",    sensor_id),
                                 "on_rgb":  tuple(data.get("on_rgb",  [0, 255, 0])),
                                 "off_rgb": tuple(data.get("off_rgb", [20, 20, 20])),
+                                "x":       data.get("x",        37),
+                                "y":       data.get("y",         1),
+                                "spacing": data.get("spacing",   4),
                             })
                         else:
                             display_sensors.pop(sensor_id, None)
