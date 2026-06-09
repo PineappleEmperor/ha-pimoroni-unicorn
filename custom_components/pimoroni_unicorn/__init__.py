@@ -14,7 +14,6 @@ from homeassistant.components.persistent_notification import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.helpers import discovery
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
@@ -50,17 +49,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     opts      = _merged_opts(entry)
     device_id = opts[CONF_DEVICE_ID]
 
-    hass.async_create_task(
-        discovery.async_load_platform(
-            hass, "notify", DOMAIN, {"entry_id": entry.entry_id, CONF_DEVICE_ID: device_id}, {}
-        )
-    )
-
     _setup_publishers(hass, entry)
     await _async_subscribe_ha_config(hass, entry)
     await _async_setup_display_sensors(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-    await hass.config_entries.async_forward_entry_setups(entry, ["button"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["button", "notify"])
 
     if not hass.services.has_service(DOMAIN, SERVICE_GENERATE_SECRETS):
         hass.services.async_register(
@@ -76,7 +69,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    await hass.config_entries.async_unload_platforms(entry, ["button"])
+    await hass.config_entries.async_unload_platforms(entry, ["button", "notify"])
     store = hass.data[DOMAIN].pop(entry.entry_id, {})
     for unsub in store.get("unsub", []):
         unsub()
