@@ -50,7 +50,10 @@
           "entity_id": "Entity",
           "name": "Display name",
           "on_color": "On colour (hex, e.g. 00FF00)",
-          "off_color": "Off colour (hex, e.g. 1A1A1A)"
+          "off_color": "Off colour (hex, e.g. 1A1A1A)",
+          "x_pos": "X position",
+          "y_pos": "Y position",
+          "spacing": "Spacing (px to next sensor)"
         }
       },
       "edit_display_sensor": {
@@ -60,7 +63,10 @@
           "entity_id": "Entity",
           "name": "Display name",
           "on_color": "On colour (hex, e.g. 00FF00)",
-          "off_color": "Off colour (hex, e.g. 1A1A1A)"
+          "off_color": "Off colour (hex, e.g. 1A1A1A)",
+          "x_pos": "X position",
+          "y_pos": "Y position",
+          "spacing": "Spacing (px to next sensor)"
         }
       },
       "remove_display_sensor": {

@@ -148,6 +148,9 @@ async def _async_setup_display_sensors(hass: HomeAssistant, entry: ConfigEntry) 
             "name":    sensor.get("name", sensor_id),
             "on_rgb":  _hex_to_rgb(sensor.get("on_color", "00FF00")),
             "off_rgb": _hex_to_rgb(sensor.get("off_color", "1A1A1A")),
+            "x":       sensor.get("x_pos",  37),
+            "y":       sensor.get("y_pos",   1),
+            "spacing": sensor.get("spacing", 4),
         })
         await async_publish(hass, f"{device_id}/display/{sensor_id}/config", config_payload, retain=True)
 

@@ -7,6 +7,9 @@ from homeassistant.core import callback
 from homeassistant.helpers.selector import (
     EntitySelector,
     EntitySelectorConfig,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
@@ -61,10 +64,13 @@ def _display_sensor_schema(current: dict) -> vol.Schema:
         return current.get(key) or default
 
     return vol.Schema({
-        vol.Required("entity_id",  default=_d("entity_id")):          EntitySelector(EntitySelectorConfig()),
-        vol.Optional("name",       default=_d("name")):               TextSelector(TextSelectorConfig()),
-        vol.Optional("on_color",   default=_d("on_color",  "00FF00")): TextSelector(TextSelectorConfig()),
-        vol.Optional("off_color",  default=_d("off_color", "1A1A1A")): TextSelector(TextSelectorConfig()),
+        vol.Required("entity_id",  default=_d("entity_id")):           EntitySelector(EntitySelectorConfig()),
+        vol.Optional("name",       default=_d("name")):                TextSelector(TextSelectorConfig()),
+        vol.Optional("on_color",   default=_d("on_color",  "00FF00")):  TextSelector(TextSelectorConfig()),
+        vol.Optional("off_color",  default=_d("off_color", "1A1A1A")):  TextSelector(TextSelectorConfig()),
+        vol.Optional("x_pos",      default=current.get("x_pos", 37)):  NumberSelector(NumberSelectorConfig(min=0, max=64, step=1, mode=NumberSelectorMode.BOX)),
+        vol.Optional("y_pos",      default=current.get("y_pos",  1)):  NumberSelector(NumberSelectorConfig(min=0, max=16, step=1, mode=NumberSelectorMode.BOX)),
+        vol.Optional("spacing",    default=current.get("spacing",  4)): NumberSelector(NumberSelectorConfig(min=1, max=32, step=1, mode=NumberSelectorMode.BOX)),
     })
 
 
@@ -165,17 +171,25 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
             entity_id = user_input["entity_id"]
             sensor_id = entity_id.replace(".", "_")
             self._display_sensors[sensor_id] = {
-                "id":         sensor_id,
-                "entity_id":  entity_id,
-                "name":       user_input.get("name") or entity_id.split(".")[-1],
-                "on_color":   (user_input.get("on_color") or "00FF00").lstrip("#").upper(),
-                "off_color":  (user_input.get("off_color") or "1A1A1A").lstrip("#").upper(),
+                "id":        sensor_id,
+                "entity_id": entity_id,
+                "name":      user_input.get("name") or entity_id.split(".")[-1],
+                "on_color":  (user_input.get("on_color") or "00FF00").lstrip("#").upper(),
+                "off_color": (user_input.get("off_color") or "1A1A1A").lstrip("#").upper(),
+                "x_pos":     int(user_input.get("x_pos") or 37),
+                "y_pos":     int(user_input.get("y_pos") or 1),
+                "spacing":   int(user_input.get("spacing") or 4),
             }
             return await self.async_step_init()
 
+        defaults: dict = {}
+        if self._display_sensors:
+            rightmost = max(self._display_sensors.values(), key=lambda s: s.get("x_pos", 37))
+            defaults["x_pos"] = rightmost.get("x_pos", 37) + rightmost.get("spacing", 4)
+
         return self.async_show_form(
             step_id="add_display_sensor",
-            data_schema=_display_sensor_schema({}),
+            data_schema=_display_sensor_schema(defaults),
         )
 
     async def async_step_edit_display_sensor(self, user_input=None):
@@ -197,6 +211,9 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
                 "name":      user_input.get("name") or user_input["entity_id"].split(".")[-1],
                 "on_color":  (user_input.get("on_color") or "00FF00").lstrip("#").upper(),
                 "off_color": (user_input.get("off_color") or "1A1A1A").lstrip("#").upper(),
+                "x_pos":     int(user_input.get("x_pos") or 37),
+                "y_pos":     int(user_input.get("y_pos") or 1),
+                "spacing":   int(user_input.get("spacing") or 4),
             })
             self._edit_sensor_id = None
             return await self.async_step_init()

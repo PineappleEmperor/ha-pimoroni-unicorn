@@ -288,13 +288,11 @@ def draw_big_weekdays(current_day, x, y, active_colour, inactive_colour):
 
 
 def draw_display_sensors(display_sensors):
-    """Draw a 2x2 dot for each configured display sensor."""
-    x       = 37
-    spacing = 4
-    for i, sensor in enumerate(display_sensors.values()):
+    """Draw a 2x2 dot for each configured display sensor at its configured x/y position."""
+    for sensor in display_sensors.values():
         rgb = sensor.get("on_rgb", (0, 255, 0)) if sensor.get("state") else sensor.get("off_rgb", (20, 20, 20))
         _g.set_pen(_g.create_pen(*rgb))
-        _g.rectangle(x + i * spacing, 1, 2, 2)
+        _g.rectangle(sensor.get("x", 37), sensor.get("y", 1), 2, 2)
 
 
 def draw_icon(icon_type, x, y):
