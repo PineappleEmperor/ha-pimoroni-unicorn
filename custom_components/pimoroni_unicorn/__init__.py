@@ -35,13 +35,19 @@ from .const import (
     OTA_SOURCE_FILES,
     UNICORN_MODEL_KEYS,
 )
-from .notify import SERVICE_SCHEMA as NOTIFY_SERVICE_SCHEMA, make_notify_handler
+from .notify import (
+    GENERIC_NOTIFY_SCHEMA,
+    SERVICE_SCHEMA as NOTIFY_SERVICE_SCHEMA,
+    make_generic_notify_handler,
+    make_notify_handler,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 SOLAR_INTERVAL        = timedelta(seconds=10)
-SERVICE_GENERATE_SECRETS = "generate_secrets"
-SERVICE_PUSH_FIRMWARE    = "push_firmware"
+SERVICE_GENERATE_SECRETS  = "generate_secrets"
+SERVICE_PUSH_FIRMWARE     = "push_firmware"
+SERVICE_SEND_NOTIFICATION = "send_notification"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -69,6 +75,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_register(
             NOTIFY_DOMAIN, device_id, make_notify_handler(hass, device_id), schema=NOTIFY_SERVICE_SCHEMA
         )
+    if not hass.services.has_service(DOMAIN, SERVICE_SEND_NOTIFICATION):
+        hass.services.async_register(
+            DOMAIN, SERVICE_SEND_NOTIFICATION, make_generic_notify_handler(hass), schema=GENERIC_NOTIFY_SCHEMA
+        )
 
     return True
 
@@ -88,6 +98,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.data.get(DOMAIN):
         hass.services.async_remove(DOMAIN, SERVICE_GENERATE_SECRETS)
         hass.services.async_remove(DOMAIN, SERVICE_PUSH_FIRMWARE)
+        hass.services.async_remove(DOMAIN, SERVICE_SEND_NOTIFICATION)
 
     return True
 
