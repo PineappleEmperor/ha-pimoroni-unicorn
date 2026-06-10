@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from homeassistant.components.mqtt import async_publish, async_subscribe
+from homeassistant.components.notify.const import DOMAIN as NOTIFY_DOMAIN
 from homeassistant.components.persistent_notification import (
     async_create as notify_create,
 )
@@ -34,6 +35,7 @@ from .const import (
     OTA_SOURCE_FILES,
     UNICORN_MODEL_KEYS,
 )
+from .notify import SERVICE_SCHEMA as NOTIFY_SERVICE_SCHEMA, make_notify_handler
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,11 +48,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Pimoroni Unicorn from a config entry."""
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": [], "ha_config": {}, "display_sensor_ids": set()}
 
+    opts      = _merged_opts(entry)
+    device_id = opts[CONF_DEVICE_ID]
+
     _setup_publishers(hass, entry)
     await _async_subscribe_ha_config(hass, entry)
     await _async_setup_display_sensors(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-    await hass.config_entries.async_forward_entry_setups(entry, ["button", "notify"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["button"])
 
     if not hass.services.has_service(DOMAIN, SERVICE_GENERATE_SECRETS):
         hass.services.async_register(
@@ -60,16 +65,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_register(
             DOMAIN, SERVICE_PUSH_FIRMWARE, _make_push_firmware_handler(hass)
         )
+    if device_id and not hass.services.has_service(NOTIFY_DOMAIN, device_id):
+        hass.services.async_register(
+            NOTIFY_DOMAIN, device_id, make_notify_handler(hass, device_id), schema=NOTIFY_SERVICE_SCHEMA
+        )
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    await hass.config_entries.async_unload_platforms(entry, ["button", "notify"])
+    await hass.config_entries.async_unload_platforms(entry, ["button"])
     store = hass.data[DOMAIN].pop(entry.entry_id, {})
     for unsub in store.get("unsub", []):
         unsub()
+
+    opts      = _merged_opts(entry)
+    device_id = opts[CONF_DEVICE_ID]
+    if device_id and hass.services.has_service(NOTIFY_DOMAIN, device_id):
+        hass.services.async_remove(NOTIFY_DOMAIN, device_id)
 
     if not hass.data.get(DOMAIN):
         hass.services.async_remove(DOMAIN, SERVICE_GENERATE_SECRETS)

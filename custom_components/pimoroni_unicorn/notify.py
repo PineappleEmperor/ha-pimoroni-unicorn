@@ -1,47 +1,33 @@
-"""Pimoroni Unicorn notify platform."""
+"""Pimoroni Unicorn notify service."""
 
 import json
 import logging
 from typing import Any
 
-from homeassistant.components.mqtt import async_publish
-from homeassistant.components.notify import NotifyEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+import voluptuous as vol
 
-from .const import CONF_DEVICE_ID, NOTIFY_ANIMATIONS, NOTIFY_SOUNDS
+from homeassistant.components.mqtt import async_publish
+from homeassistant.components.notify.const import ATTR_DATA, ATTR_MESSAGE, ATTR_TITLE
+from homeassistant.core import HomeAssistant, ServiceCall
+import homeassistant.helpers.config_validation as cv
+
+from .const import NOTIFY_ANIMATIONS, NOTIFY_SOUNDS
 
 _LOGGER = logging.getLogger(__name__)
 
-
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """Set up Pimoroni Unicorn notify entity."""
-    opts      = {**entry.data, **entry.options}
-    device_id = opts.get(CONF_DEVICE_ID, "")
-    async_add_entities([PimoroniUnicornNotifyEntity(hass, device_id)])
+SERVICE_SCHEMA = vol.Schema({
+    vol.Required(ATTR_MESSAGE): cv.string,
+    vol.Optional(ATTR_TITLE):   cv.string,
+    vol.Optional(ATTR_DATA):    dict,
+})
 
 
-class PimoroniUnicornNotifyEntity(NotifyEntity):
-    """Send notifications to a Pimoroni Unicorn display via MQTT."""
-
-    _attr_has_entity_name = True
-    _attr_name            = "Notify"
-
-    def __init__(self, hass: HomeAssistant, device_id: str) -> None:
-        """Initialise notify entity."""
-        self.hass            = hass
-        self._device_id      = device_id
-        self._attr_unique_id = f"{device_id}_notify"
-
-    async def async_send_message(self, message: str, title: str | None = None, **kwargs: Any) -> None:
-        """Send notification to device via MQTT."""
-        data: dict    = kwargs.get("data") or {}
-        payload: dict = {}
+def make_notify_handler(hass: HomeAssistant, device_id: str):
+    """Return a ServiceCall handler that publishes notifications via MQTT."""
+    async def async_handle(call: ServiceCall) -> None:
+        message: str       = call.data.get(ATTR_MESSAGE, "")
+        data: dict[str, Any] = call.data.get(ATTR_DATA) or {}
+        payload: dict[str, Any] = {}
 
         if message:
             payload["text"] = message
@@ -68,4 +54,6 @@ class PimoroniUnicornNotifyEntity(NotifyEntity):
             _LOGGER.warning("Pimoroni Unicorn notify: provide at least 'message' or 'animation'")
             return
 
-        await async_publish(self.hass, f"{self._device_id}/notify", json.dumps(payload))
+        await async_publish(hass, f"{device_id}/notify", json.dumps(payload))
+
+    return async_handle
