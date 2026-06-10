@@ -4,12 +4,13 @@ send_notification:
     Send a notification to a Pimoroni Unicorn display.
     Simple mode: icon+text or fullscreen animation. Advanced mode: full layout control.
   fields:
-    device_id:
-      name: Device ID
-      description: MQTT device ID of the target Unicorn (e.g. galactic_unicorn_studio).
+    config_entry_id:
+      name: Device
+      description: The Pimoroni Unicorn device to notify.
       required: true
       selector:
-        text: {}
+        config_entry:
+          integration: pimoroni_unicorn
     mode:
       name: Mode
       description: "simple: icon+text or fullscreen. advanced: explicit layout, entrance effects."
