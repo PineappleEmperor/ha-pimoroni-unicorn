@@ -36,6 +36,7 @@ OTA_SOURCE_FILES = {
     "hardware":            ("hardware.py",             "/hardware.py"),
     "drawing":             ("drawing.py",              "/drawing.py"),
     "notify_animations":   ("notify_animations.py",    "/notify_animations.py"),
+    "icons":               ("icons.py",                "/icons.py"),
     "sounds":              ("sounds.py",               "/sounds.py"),
     "weather_fx":          ("weather_fx.py",           "/weather_fx.py"),
     "bitfonts":            ("bitfonts.py",             "/bitfonts.py"),
@@ -58,3 +59,11 @@ NOTIFY_ANIMATIONS = [
     "retroprompt",
 ]
 NOTIFY_SOUNDS = ["beep", "chime", "alert"]
+
+NOTIFY_STATIC_ICONS = [
+    "battery_full", "battery_half", "battery_low", "battery_charging",
+    "solar", "alert", "home", "lock", "unlock",
+    "thermometer", "sun", "cloud", "rain", "check",
+]
+
+NOTIFY_ENTRANCES = ["none", "slide_left", "slide_right", "center_out", "fade"]
