@@ -272,7 +272,8 @@ def on_message(topic, message):
                 data = json.loads(message)
                 has_text = bool(data.get("text", ""))
                 has_anim = data.get("animation", "") in NOTIFY_ANIMATIONS
-                if (has_text or has_anim) and len(_notify_queue) < 5:
+                has_icon = data.get("icon") is not None
+                if (has_text or has_anim or has_icon) and len(_notify_queue) < 5:
                     _notify_queue.append(data)
             except Exception:
                 pass
