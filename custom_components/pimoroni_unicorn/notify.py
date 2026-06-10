@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 import voluptuous as vol
+
 from homeassistant.components.mqtt import async_publish
 from homeassistant.components.notify.const import ATTR_DATA, ATTR_MESSAGE, ATTR_TITLE
 from homeassistant.core import HomeAssistant, ServiceCall

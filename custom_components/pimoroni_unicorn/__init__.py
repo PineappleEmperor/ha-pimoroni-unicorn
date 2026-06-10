@@ -20,7 +20,6 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 
-from .notify import SERVICE_SCHEMA as NOTIFY_SERVICE_SCHEMA, make_notify_handler
 from .const import (
     CONF_BATTERY_CHARGING_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -36,6 +35,7 @@ from .const import (
     OTA_SOURCE_FILES,
     UNICORN_MODEL_KEYS,
 )
+from .notify import SERVICE_SCHEMA as NOTIFY_SERVICE_SCHEMA, make_notify_handler
 
 _LOGGER = logging.getLogger(__name__)
 
