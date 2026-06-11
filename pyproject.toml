@@ -581,6 +581,7 @@ split-on-trailing-comma = false
 "homeassistant/__main__.py" = ["T201"]
 "homeassistant/scripts/*" = ["T201"]
 "script/*" = ["T20"]
+"scripts/*" = ["T201", "D103", "PTH123"]
 
 # Allow relative imports within auth and within components
 "homeassistant/auth/*/*" = ["TID252"]
