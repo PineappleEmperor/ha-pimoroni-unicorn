@@ -34,6 +34,7 @@ from umqtt.simple import MQTTClient
 from bitfonts import BitFont, font3x5
 
 import drawing
+import icons
 import notify_animations
 import sounds
 import weather_fx
@@ -76,6 +77,7 @@ TOPIC_ENERGY_MODE_CMD   = f"{DEVICE_ID}/energy_mode/set"
 TOPIC_ENERGY_MODE_STATE = f"{DEVICE_ID}/energy_mode/state"
 TOPIC_NOTIFY            = f"{DEVICE_ID}/notify"
 TOPIC_NOTIFY_DISMISS    = f"{DEVICE_ID}/notify/dismiss"
+TOPIC_ICONS_CMD         = f"{DEVICE_ID}/icons/cmd"
 TOPIC_OTA               = f"{DEVICE_ID}/ota"
 
 # --- HA Device details ---
@@ -185,6 +187,12 @@ def _run_ota(payload):
         if not url or not path:
             continue
         _show_ota_screen(path.lstrip("/"), i + 1, total)
+        parent = path.rsplit("/", 1)[0]
+        if parent:
+            try:
+                uos.mkdir(parent)
+            except OSError:
+                pass
         tmp = path + ".tmp"
         try:
             r = urequests.get(url, timeout=30)
@@ -302,6 +310,19 @@ def on_message(topic, message):
                 _notify_queue.clear()
             if HAS_AUDIO:
                 unicorn.stop_playing()
+            return
+
+        if topic_str == TOPIC_ICONS_CMD:
+            try:
+                data   = json.loads(message)
+                action = data.get("action")
+                name   = data.get("name", "")
+                if action == "install" and name:
+                    icons.install(name, data)
+                elif action == "remove" and name:
+                    icons.remove(name)
+            except Exception as e:
+                print("Icon cmd failed:", e)
             return
 
         if topic_str == TOPIC_OTA:
@@ -427,7 +448,7 @@ async def mqtt_task():
             for topic in (
                 TOPIC_COMMAND, TOPIC_SOLAR, TOPIC_WEATHER,
                 TOPIC_ANIM_CMD, TOPIC_ENERGY_MODE_CMD, TOPIC_NOTIFY,
-                TOPIC_NOTIFY_DISMISS, TOPIC_OTA,
+                TOPIC_NOTIFY_DISMISS, TOPIC_ICONS_CMD, TOPIC_OTA,
             ):
                 mqtt_client.subscribe(topic.encode())
 
