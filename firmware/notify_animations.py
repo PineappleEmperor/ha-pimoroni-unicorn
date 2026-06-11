@@ -305,7 +305,7 @@ def _draw_v2_notification(notif, elapsed_ms):
         if anim_fn is None:
             _g.set_pen(_g.create_pen(*bg_color))
             _g.rectangle(0, 0, _icons.ICON_SIZE, _height)
-        _icons.draw_icon(icon, 0, (_height - _icons.ICON_SIZE) // 2)
+        _icons.draw_icon(icon, 0, (_height - _icons.ICON_SIZE) // 2, elapsed_ms)
         tx, tw = _ICON_PANEL_WIDTH, _width - _ICON_PANEL_WIDTH
     else:
         tx, tw = 0, _width

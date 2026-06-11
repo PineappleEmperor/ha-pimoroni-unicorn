@@ -96,6 +96,12 @@ Trigger via `notify.pimoroni_unicorn_<device_id>` or MQTT topic `<device_id>/not
 
 Message text scrolls alongside the animation. Supports `color`, `bg_color`, `animation`, `sound`, and `duration` data fields.
 
+### Icons
+
+8×8 icons render in a left panel beside notification text. A small built-in set ships with the firmware; more can be installed from the [LaMetric icon gallery](https://developer.lametric.com/icons) via **Configure → Install LaMetric icon**: enter a gallery code, preview, name, install. Installed icons (animated GIFs included) are stored on the device and usable in notifications by name or by gallery code. Gallery icons are community-contributed; check the gallery page for individual icon credits.
+
+For bulk preview or generating firmware built-ins there is a dev-side helper: `python scripts/fetch_lametric_icon.py 100-160` renders a labelled preview grid; `--json`/`--builtin` emit device and firmware formats.
+
 ### Energy mode
 
 Cycle display between **Solar**, **Consumption**, and **Net** via the `<device_id>/energy_mode/set` MQTT topic or HA select entity.
