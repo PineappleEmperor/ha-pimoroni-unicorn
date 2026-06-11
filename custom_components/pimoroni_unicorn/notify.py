@@ -9,6 +9,7 @@ import voluptuous as vol
 from homeassistant.components.mqtt import async_publish
 from homeassistant.components.notify.const import ATTR_DATA, ATTR_MESSAGE, ATTR_TITLE
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import device_registry as dr
 import homeassistant.helpers.config_validation as cv
 
 from .const import (
@@ -28,7 +29,7 @@ SERVICE_SCHEMA = vol.Schema({
 })
 
 GENERIC_NOTIFY_SCHEMA = vol.Schema({
-    vol.Required("config_entry_id"):                   cv.string,
+    vol.Required("device_id"):                         cv.string,
     vol.Optional("mode", default="simple"):            vol.In(["simple", "advanced"]),
     vol.Optional(ATTR_MESSAGE, default=""):            cv.string,
     vol.Optional("icon"):          vol.Any(vol.In(NOTIFY_STATIC_ICONS + NOTIFY_ANIMATIONS), list),
@@ -84,13 +85,21 @@ def make_notify_handler(hass: HomeAssistant, device_id: str):
 def make_generic_notify_handler(hass: HomeAssistant):
     """Return a handler that sends to the device_id specified in the call data."""
     async def async_handle(call: ServiceCall) -> None:
-        entry = hass.config_entries.async_get_entry(call.data["config_entry_id"])
+        device = dr.async_get(hass).async_get(call.data["device_id"])
+        if device is None:
+            _LOGGER.error("Device not found")
+            return
+        entry = next(
+            (hass.config_entries.async_get_entry(eid) for eid in device.config_entries
+             if hass.config_entries.async_get_entry(eid) is not None),
+            None,
+        )
         if entry is None:
-            _LOGGER.error("Config entry not found")
+            _LOGGER.error("No config entry for device")
             return
         device_id: str = {**entry.data, **entry.options}.get(CONF_DEVICE_ID, "")
         if not device_id:
-            _LOGGER.error("No device_id for config entry")
+            _LOGGER.error("No MQTT device_id for entry")
             return
         message: str = call.data.get(ATTR_MESSAGE, "")
         payload: dict[str, Any] = {}

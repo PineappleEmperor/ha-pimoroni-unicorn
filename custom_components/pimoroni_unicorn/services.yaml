@@ -4,12 +4,12 @@ send_notification:
     Send a notification to a Pimoroni Unicorn display.
     Simple mode: icon+text or fullscreen animation. Advanced mode: full layout control.
   fields:
-    config_entry_id:
+    device_id:
       name: Device
       description: The Pimoroni Unicorn device to notify.
       required: true
       selector:
-        config_entry:
+        device:
           integration: pimoroni_unicorn
     mode:
       name: Mode

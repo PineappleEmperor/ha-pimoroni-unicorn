@@ -34,7 +34,9 @@ def init(graphics, width, height):
     NOTIFY_ANIMATIONS.update(_load_animations())
     NOTIFY_CAPABILITIES.clear()
     NOTIFY_CAPABILITIES.update({
+        "v":          2,
         "animations": list(NOTIFY_ANIMATIONS.keys()),
+        "effects":    list(NOTIFY_ANIMATIONS.keys()),
         "sounds":     list(NOTIFY_SOUNDS.keys()),
         "icons":      list(_icons.STATIC_ICONS.keys()),
         "entrances":  ["none", "slide_left", "slide_right", "center_out", "fade"],
@@ -126,22 +128,24 @@ def _anim_unknown(elapsed_ms, ax, ay, aw, ah, color, bg_color):
         _g.text("?", ax + aw // 2 - 3, ay + ah // 2 - 4, scale=1)
 
 
-def _draw_notify_text(text, tx, ty, tw, th, color, elapsed_ms, outlined):
+def _draw_notify_text(text, tx, ty, tw, th, color, elapsed_ms, outlined, ms_per_px=_SCROLL_MS_PER_PX):
     """Draw notification text (scrolling if too wide) within a bounding region."""
     _g.set_font("bitmap8")
     text_w = _g.measure_text(text, 1)
     if text_w <= tw:
         sx = tx + (tw - text_w) // 2
     else:
-        adv = elapsed_ms // _SCROLL_MS_PER_PX
+        adv = elapsed_ms // ms_per_px
         sx  = tx + tw - (adv % (text_w + tw))
     text_y = ty + (th - 8) // 2
+    _g.set_clip(tx, ty, tw, th)
     if outlined:
         _g.set_pen(_BLACK)
         for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)):
             _g.text(text, sx + ox, text_y + oy, -1, 1)
     _g.set_pen(_g.create_pen(*color))
     _g.text(text, sx, text_y, -1, 1)
+    _g.remove_clip()
 
 
 def _draw_icon_panel(icon, elapsed_ms, panel_w, color, bg_color):
@@ -251,8 +255,72 @@ def _draw_advanced_notification(notif, elapsed_ms):
     _apply_entrance(elapsed_ms, entrance)
 
 
+def _notify_ms_per_px(notif):
+    """Effective scroll speed in ms per pixel for a notification."""
+    speed = notif.get("scroll_speed", 1.0) or 1.0
+    return max(1, int(_SCROLL_MS_PER_PX / speed))
+
+
+def compute_duration_ms(notif):
+    """Total display time in ms, or None for hold-until-dismissed."""
+    duration_ms = int(notif.get("duration", 3) * 1000)
+    if notif.get("v") != 2:
+        return duration_ms
+    if notif.get("hold"):
+        return None
+    text = notif.get("text", "")
+    if not text:
+        return duration_ms
+    _g.set_font("bitmap8")
+    text_w = _g.measure_text(text, 1)
+    tw = _width - _ICON_PANEL_WIDTH if notif.get("icon") is not None else _width
+    if text_w <= tw:
+        return duration_ms
+    repeat = max(1, int(notif.get("repeat", 1)))
+    return max(duration_ms, repeat * (text_w + tw) * _notify_ms_per_px(notif))
+
+
+def _draw_v2_notification(notif, elapsed_ms):
+    """v2 rendering: derived layout, effect background, speed multipliers."""
+    color    = tuple(notif.get("color",    [255, 255, 255]))
+    bg_color = tuple(notif.get("bg_color", [0, 0, 0]))
+    text     = notif.get("text", "")
+    icon     = notif.get("icon")
+    effect   = notif.get("effect", "")
+    outlined = notif.get("outlined", False)
+    entrance = notif.get("entrance", "none")
+
+    anim_fn = NOTIFY_ANIMATIONS.get(effect)
+    if effect and anim_fn is None:
+        anim_fn = _anim_unknown
+
+    if anim_fn:
+        effect_speed = notif.get("effect_speed", 1.0) or 1.0
+        anim_fn(int(elapsed_ms * effect_speed), 0, 0, _width, _height, color, bg_color)
+    else:
+        _g.set_pen(_g.create_pen(*bg_color))
+        _g.clear()
+
+    if icon is not None:
+        if anim_fn is None:
+            _g.set_pen(_g.create_pen(*bg_color))
+            _g.rectangle(0, 0, _icons.ICON_SIZE, _height)
+        _icons.draw_icon(icon, 0, (_height - _icons.ICON_SIZE) // 2)
+        tx, tw = _ICON_PANEL_WIDTH, _width - _ICON_PANEL_WIDTH
+    else:
+        tx, tw = 0, _width
+
+    if text:
+        _draw_notify_text(text, tx, 0, tw, _height, color, elapsed_ms, outlined, _notify_ms_per_px(notif))
+
+    _apply_entrance(elapsed_ms, entrance)
+
+
 def _draw_notification(notif, elapsed_ms):
-    """Dispatch notification rendering based on mode."""
+    """Dispatch notification rendering based on payload version or mode."""
+    if notif.get("v") == 2:
+        _draw_v2_notification(notif, elapsed_ms)
+        return
     mode = notif.get("mode")
     if mode == "simple":
         _draw_simple_notification(notif, elapsed_ms)

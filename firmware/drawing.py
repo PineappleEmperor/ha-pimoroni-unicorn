@@ -262,10 +262,7 @@ def draw_calendar(day_val, x, y, header_color):
     _g.rectangle(x, y + 3, 9, 7)
     if day_val < 10:
         draw_custom_digit(day_val, x + 3, y + 4, _BLACK, _WHITE)
-    elif day_val == 11:
-        draw_custom_digit(day_val // 10, x + 2, y + 4, _BLACK, _WHITE)
-        draw_custom_digit(day_val % 10,  x + 3, y + 4, _BLACK, _WHITE)
-    elif 9 < day_val < 20:
+    elif 9 < day_val < 20 and day_val != 11:
         draw_custom_digit(day_val // 10, x + 1, y + 4, _BLACK, _WHITE)
         draw_custom_digit(day_val % 10,  x + 4, y + 4, _BLACK, _WHITE)
     else:

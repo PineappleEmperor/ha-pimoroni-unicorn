@@ -42,11 +42,11 @@ from drawing import (
     draw_icon, draw_solar_quadrant,
 )
 from notify_animations import (
-    NOTIFY_ANIMATIONS, NOTIFY_CAPABILITIES, _draw_notification, reset_fire_heat,
+    NOTIFY_ANIMATIONS, NOTIFY_CAPABILITIES, _draw_notification, compute_duration_ms,
+    reset_fire_heat,
 )
 from sounds import NOTIFY_SOUNDS, _start_sound, _tick_sound
 from weather_fx import init_weather_drops, map_owm_code, weather_overlay
-import contextlib
 
 
 machine.freq(200_000_000)
@@ -75,6 +75,7 @@ TOPIC_ANIM_STATE        = f"{DEVICE_ID}/animation/state"
 TOPIC_ENERGY_MODE_CMD   = f"{DEVICE_ID}/energy_mode/set"
 TOPIC_ENERGY_MODE_STATE = f"{DEVICE_ID}/energy_mode/state"
 TOPIC_NOTIFY            = f"{DEVICE_ID}/notify"
+TOPIC_NOTIFY_DISMISS    = f"{DEVICE_ID}/notify/dismiss"
 TOPIC_OTA               = f"{DEVICE_ID}/ota"
 
 # --- HA Device details ---
@@ -103,6 +104,7 @@ weather_condition = "clear"
 _notify_queue    = []
 _notify_active   = None
 _notify_start_ms = 0
+_notify_end_ms   = 0
 _ota_pending     = None
 
 display_sensors: dict = {}  # populated via MQTT {device_id}/display/{id}/config and state
@@ -122,11 +124,13 @@ GREY        = graphics.create_pen(60,  60,  60)
 def send_ha_state():
     """Publish current on/off state and brightness to the HA state topic."""
     if mqtt_client:
-        with contextlib.suppress(Exception):
+        try:
             mqtt_client.publish(TOPIC_STATE, json.dumps({
                 "state": "ON" if system_state == "AWAKE" else "OFF",
                 "brightness": int(brightness * 100),
             }), retain=True)
+        except Exception:
+            pass
 
 
 def is_bst(year, month, day):
@@ -209,8 +213,10 @@ def _run_ota(payload):
                 r.close()
         except Exception as e:
             print("OTA failed:", path, e)
-            with contextlib.suppress(Exception):
+            try:
                 uos.remove(tmp)
+            except Exception:
+                pass
     _show_ota_screen(f"Done {succeeded}/{total}", total, total)
     time.sleep(2)
     machine.reset()
@@ -223,7 +229,7 @@ def on_message(topic, message):
     global msg, system_state, icon_type, brightness
     global solar_power, battery_soc, battery_charging, battery_animation
     global sun_below_horizon, weather_condition, energy_mode, consumption_power
-    global _ota_pending
+    global _ota_pending, _notify_active
     try:
         topic_str = topic.decode()
 
@@ -270,18 +276,39 @@ def on_message(topic, message):
         if topic_str == TOPIC_NOTIFY:
             try:
                 data = json.loads(message)
-                has_text = bool(data.get("text", ""))
-                has_anim = data.get("animation", "") in NOTIFY_ANIMATIONS
-                has_icon = data.get("icon") is not None
-                if (has_text or has_anim or has_icon) and len(_notify_queue) < 5:
-                    _notify_queue.append(data)
+                has_text   = bool(data.get("text", ""))
+                has_anim   = data.get("animation", "") in NOTIFY_ANIMATIONS
+                has_effect = data.get("effect", "") in NOTIFY_ANIMATIONS
+                has_icon   = data.get("icon") is not None
+                if has_text or has_anim or has_effect or has_icon:
+                    if data.get("stack") is False:
+                        _notify_queue.clear()
+                        _notify_active = None
+                        if HAS_AUDIO:
+                            unicorn.stop_playing()
+                    if len(_notify_queue) < 5:
+                        _notify_queue.append(data)
             except Exception:
                 pass
             return
 
+        if topic_str == TOPIC_NOTIFY_DISMISS:
+            try:
+                opts = json.loads(message) if message else {}
+            except Exception:
+                opts = {}
+            _notify_active = None
+            if isinstance(opts, dict) and opts.get("all"):
+                _notify_queue.clear()
+            if HAS_AUDIO:
+                unicorn.stop_playing()
+            return
+
         if topic_str == TOPIC_OTA:
-            with contextlib.suppress(Exception):
+            try:
                 _ota_pending = json.loads(message)
+            except Exception:
+                pass
             return
 
         data = json.loads(message)
@@ -399,7 +426,8 @@ async def mqtt_task():
             mqtt_client.subscribe(f"{DEVICE_ID}/display/#".encode())
             for topic in (
                 TOPIC_COMMAND, TOPIC_SOLAR, TOPIC_WEATHER,
-                TOPIC_ANIM_CMD, TOPIC_ENERGY_MODE_CMD, TOPIC_NOTIFY, TOPIC_OTA,
+                TOPIC_ANIM_CMD, TOPIC_ENERGY_MODE_CMD, TOPIC_NOTIFY,
+                TOPIC_NOTIFY_DISMISS, TOPIC_OTA,
             ):
                 mqtt_client.subscribe(topic.encode())
 
@@ -437,7 +465,7 @@ async def mqtt_task():
 async def main_loop():
     """Handle button presses, draw each frame, and sleep; runs as the main display loop."""
     global brightness, system_state, msg, icon_type
-    global _notify_active, _notify_start_ms, _ota_pending
+    global _notify_active, _notify_start_ms, _notify_end_ms, _ota_pending
 
     last_button_time = 0
 
@@ -454,7 +482,12 @@ async def main_loop():
                 last_button_time = current_time
                 send_ha_state()
 
-        if system_state == "AWAKE":
+        notify_wakeup = system_state != "AWAKE" and (
+            (_notify_active is not None and _notify_active.get("wakeup"))
+            or (_notify_active is None and _notify_queue and _notify_queue[0].get("wakeup"))
+        )
+
+        if system_state == "AWAKE" or notify_wakeup:
             graphics.set_pen(BLACK)
             graphics.clear()
 
@@ -462,26 +495,37 @@ async def main_loop():
             if _notify_active is None and _notify_queue:
                 _notify_active   = _notify_queue.pop(0)
                 _notify_start_ms = current_time
+                _notify_end_ms   = compute_duration_ms(_notify_active)
                 reset_fire_heat()
                 sound = _notify_active.get("sound")
                 if sound:
                     _start_sound(sound)
 
             if _notify_active is not None:
-                elapsed     = time.ticks_diff(current_time, _notify_start_ms)
-                duration_ms = int(_notify_active.get("duration", 3) * 1000)
-                sound       = _notify_active.get("sound")
+                elapsed = time.ticks_diff(current_time, _notify_start_ms)
+                sound   = _notify_active.get("sound")
                 if sound:
                     _tick_sound(sound)
-                if elapsed >= duration_ms:
+                expired = _notify_end_ms is not None and elapsed >= _notify_end_ms
+                if expired or (_notify_end_ms is None and _notify_queue):
                     _notify_active = None
                     if HAS_AUDIO:
                         unicorn.stop_playing()
                 else:
+                    if notify_wakeup:
+                        unicorn.set_brightness(brightness)
                     _draw_notification(_notify_active, elapsed)
                     unicorn.update(graphics)
                     await asyncio.sleep(0.01)
                     continue
+
+            if notify_wakeup:
+                graphics.set_pen(BLACK)
+                graphics.clear()
+                unicorn.set_brightness(0)
+                unicorn.update(graphics)
+                await asyncio.sleep(0.01)
+                continue
 
             # Brightness buttons
             if SWITCH_BRIGHTNESS_UP is not None and unicorn.is_pressed(SWITCH_BRIGHTNESS_UP):
