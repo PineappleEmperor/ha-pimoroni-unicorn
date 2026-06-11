@@ -46,7 +46,6 @@ from notify_animations import (
 )
 from sounds import NOTIFY_SOUNDS, _start_sound, _tick_sound
 from weather_fx import init_weather_drops, map_owm_code, weather_overlay
-import contextlib
 
 
 machine.freq(200_000_000)
@@ -122,11 +121,13 @@ GREY        = graphics.create_pen(60,  60,  60)
 def send_ha_state():
     """Publish current on/off state and brightness to the HA state topic."""
     if mqtt_client:
-        with contextlib.suppress(Exception):
+        try:
             mqtt_client.publish(TOPIC_STATE, json.dumps({
                 "state": "ON" if system_state == "AWAKE" else "OFF",
                 "brightness": int(brightness * 100),
             }), retain=True)
+        except Exception:
+            pass
 
 
 def is_bst(year, month, day):
@@ -209,8 +210,10 @@ def _run_ota(payload):
                 r.close()
         except Exception as e:
             print("OTA failed:", path, e)
-            with contextlib.suppress(Exception):
+            try:
                 uos.remove(tmp)
+            except Exception:
+                pass
     _show_ota_screen(f"Done {succeeded}/{total}", total, total)
     time.sleep(2)
     machine.reset()
@@ -280,8 +283,10 @@ def on_message(topic, message):
             return
 
         if topic_str == TOPIC_OTA:
-            with contextlib.suppress(Exception):
+            try:
                 _ota_pending = json.loads(message)
+            except Exception:
+                pass
             return
 
         data = json.loads(message)

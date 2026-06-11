@@ -574,8 +574,8 @@ split-on-trailing-comma = false
 
 [tool.ruff.lint.per-file-ignores]
 
-# firmware uses intentional MicroPython patterns: globals, print, open(), exec, broad except, local import order, exec-injected names
-"firmware/**" = ["PLW0603", "T201", "PTH123", "S102", "BLE001", "I001", "F821"]
+# firmware uses intentional MicroPython patterns: globals, print, open(), exec, broad except, local import order, exec-injected names, no contextlib
+"firmware/**" = ["PLW0603", "T201", "PTH123", "S102", "BLE001", "I001", "F821", "SIM105"]
 
 # Allow for main entry & scripts to write to stdout
 "homeassistant/__main__.py" = ["T201"]

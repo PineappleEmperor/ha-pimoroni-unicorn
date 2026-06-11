@@ -136,12 +136,14 @@ def _draw_notify_text(text, tx, ty, tw, th, color, elapsed_ms, outlined):
         adv = elapsed_ms // _SCROLL_MS_PER_PX
         sx  = tx + tw - (adv % (text_w + tw))
     text_y = ty + (th - 8) // 2
+    _g.set_clip(tx, ty, tw, th)
     if outlined:
         _g.set_pen(_BLACK)
         for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)):
             _g.text(text, sx + ox, text_y + oy, -1, 1)
     _g.set_pen(_g.create_pen(*color))
     _g.text(text, sx, text_y, -1, 1)
+    _g.remove_clip()
 
 
 def _draw_icon_panel(icon, elapsed_ms, panel_w, color, bg_color):
