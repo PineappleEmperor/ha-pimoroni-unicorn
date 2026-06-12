@@ -581,6 +581,10 @@ split-on-trailing-comma = false
 "homeassistant/__main__.py" = ["T201"]
 "homeassistant/scripts/*" = ["T201"]
 "script/*" = ["T20"]
+"scripts/*" = ["T201", "D103", "PTH123"]
+"scripts/emulator/*" = ["D1", "E731", "PLC0415", "PTH", "SLF001"]
+"scripts/emulate.py" = ["D1", "E731", "PLC0415", "PTH", "SLF001"]
+"scripts/emulator/font8.py" = ["PLR2044", "W291"]
 
 # Allow relative imports within auth and within components
 "homeassistant/auth/*/*" = ["TID252"]
