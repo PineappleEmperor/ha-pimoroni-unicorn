@@ -10,6 +10,7 @@ import base64
 import builtins
 import os
 import sys
+import time
 import types
 
 FIRMWARE_DIR = os.path.abspath(
@@ -44,12 +45,21 @@ def install_mocks():
         remove=lambda p: os.remove(_translate(p)),
         rename=lambda a, b: os.rename(_translate(a), _translate(b)),
     )
+    micropython_mock = types.SimpleNamespace(
+        native=lambda f: f, viper=lambda f: f, const=lambda x: x
+    )
+    sys.modules["micropython"] = micropython_mock
+    builtins.micropython = micropython_mock
     sys.modules["sounds"] = types.SimpleNamespace(
         NOTIFY_SOUNDS={"beep": [], "chime": [], "alert": []},
         _start_sound=lambda *a: None,
         _tick_sound=lambda *a: None,
     )
     builtins.open = lambda path, *a, **k: _orig_open(_translate(path), *a, **k)
+    if not hasattr(time, "ticks_ms"):
+        time.ticks_ms   = lambda: int(time.monotonic() * 1000)
+        time.ticks_diff = lambda a, b: a - b
+        time.ticks_add  = lambda a, b: a + b
     os.makedirs(ICONS_DIR, exist_ok=True)
     if FIRMWARE_DIR not in sys.path:
         sys.path.insert(0, FIRMWARE_DIR)
@@ -71,11 +81,31 @@ def reload_notify(graphics, width, height):
     return load_notify(graphics, width, height)
 
 
+def load_display(graphics, width, height):
+    """Import firmware drawing + weather_fx against the shim graphics."""
+    import bitfonts
+    import drawing
+    import weather_fx
+
+    bitfont = bitfonts.BitFont(graphics)
+    drawing.init(graphics, bitfont, width, height)
+    weather_fx.init(graphics, width, height)
+    return drawing, weather_fx
+
+
+def reload_display(graphics, width, height):
+    """Drop cached display modules and re-import (hot reload)."""
+    for mod in ("drawing", "weather_fx", "bitfonts", "monospace_digits", "monospace_big_digits"):
+        sys.modules.pop(mod, None)
+    return load_display(graphics, width, height)
+
+
 def watched_mtimes():
     """Snapshot of watched firmware file mtimes for change detection."""
     snapshot = {}
-    for path in (os.path.join(FIRMWARE_DIR, "notify_animations.py"),
-                 os.path.join(FIRMWARE_DIR, "icons.py")):
+    for name in ("notify_animations.py", "icons.py", "drawing.py",
+                 "weather_fx.py", "bitfonts.py"):
+        path = os.path.join(FIRMWARE_DIR, name)
         snapshot[path] = os.path.getmtime(path)
     anim_dir = _DEVICE_ROOTS["/animations"]
     if os.path.isdir(anim_dir):
