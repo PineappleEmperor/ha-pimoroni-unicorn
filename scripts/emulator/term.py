@@ -46,6 +46,7 @@ class TerminalRenderer:
                     f"\x1b[38;2;{tr};{tg};{tb}m\x1b[48;2;{br};{bg_};{bb}m▀"
                 )
             rows.append("".join(cells) + _RESET)
+        status = status.replace("\n", "\x1b[K\n")
         frame = _HOME + "\n".join(rows) + "\n" + _RESET + "\x1b[K" + status + "\x1b[J"
         if frame != self._last:
             sys.stdout.write(frame)
