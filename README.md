@@ -121,6 +121,19 @@ Stages firmware files in `www/pimoroni_unicorn/<device_id>/` and publishes an OT
 | `files` | List of file keys to push (e.g. `["main", "hardware"]`) |
 | `file_content` | Optional map of key → content to push inline without reading from disk, however it will replace the file on disk to keep parity |
 
+
+## Development
+
+`scripts/emulate.py` runs the real firmware rendering code against a CPython PicoGraphics shim and draws the LED matrix in the terminal (24-bit ANSI, two pixels per character row) — no hardware needed:
+
+```bash
+python scripts/emulate.py animations                                # cycle animation modules
+python scripts/emulate.py notify '{"v":2,"text":"hi","icon":"check"}'
+python scripts/emulate.py icons                                     # built-in + installed icons
+```
+
+Keys: `space` pause, `r` restart, `n`/`p` cycle, `+`/`-` speed, `q` quit. Edits to `firmware/notify_animations.py`, `icons.py`, or `animations/*.py` hot-reload live. `--model cosmic|stellar` switches matrix size; `--frames N` renders headless (CI-friendly). The renderer consumes a plain RGB framebuffer, so alternative frontends (e.g. a web canvas) can reuse the same shim.
+
 <!-- Badges -->
 
 [commits-badge]: https://img.shields.io/github/commits-since/PineappleEmperor/ha-pimoroni-unicorn/latest?style=flat-square
