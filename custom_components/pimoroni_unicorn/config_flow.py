@@ -18,7 +18,7 @@ from homeassistant.helpers.selector import (
 )
 from homeassistant.util import slugify
 
-from . import lametric
+from . import lametric, layout
 from .const import (
     CONF_BATTERY_CHARGING_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -143,12 +143,19 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         """Show main options menu."""
         self._init_state()
         registry = await lametric.async_get_registry(self.hass)
+        layouts = await layout.async_get_registry(self.hass)
+        active  = self._settings.get(layout.CONF_ACTIVE_LAYOUT)
         menu_options = ["settings", "add_display_sensor"]
         if self._display_sensors:
             menu_options += ["edit_display_sensor", "remove_display_sensor"]
         menu_options.append("add_icon")
         if registry:
             menu_options.append("remove_icon")
+        menu_options.append("import_layout")
+        if layouts:
+            menu_options.append("select_layout")
+        if active and active in layouts:
+            menu_options.append("toggle_widgets")
         menu_options.append("save")
 
         sensor_list = "\n".join(
@@ -161,10 +168,14 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
             for name, icon in registry.items()
         ) if registry else "None installed"
 
+        layout_list = "\n".join(
+            f"- {name}{' (active)' if name == active else ''}" for name in layouts
+        ) if layouts else "None imported"
+
         return self.async_show_menu(
             step_id="init",
             menu_options=menu_options,
-            description_placeholders={"sensors": sensor_list, "icons": icon_list},
+            description_placeholders={"sensors": sensor_list, "icons": icon_list, "layouts": layout_list},
         )
 
     async def async_step_settings(self, user_input=None):
@@ -312,6 +323,75 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
                 vol.Required("icon_name"): SelectSelector(SelectSelectorConfig(
                     options=sorted(registry), mode=SelectSelectorMode.DROPDOWN
                 )),
+            }),
+        )
+
+    async def async_step_import_layout(self, user_input=None):
+        """Import a layout JSON authored in the emulator and make it active."""
+        errors = {}
+        if user_input is not None:
+            parsed = layout.parse_layout(user_input["layout_json"])
+            if parsed is None:
+                errors["layout_json"] = "invalid_layout"
+            else:
+                existing = await layout.async_get_registry(self.hass)
+                name = str(parsed.get("name") or f"layout_{len(existing) + 1}")
+                await layout.async_save_layout(self.hass, name, parsed)
+                self._settings[layout.CONF_ACTIVE_LAYOUT] = name
+                await layout.async_push_layout(
+                    self.hass, layout.entry_device_id(self._config_entry), parsed)
+                return await self.async_step_init()
+
+        return self.async_show_form(
+            step_id="import_layout",
+            data_schema=vol.Schema({
+                vol.Required("layout_json"): TextSelector(TextSelectorConfig(multiline=True)),
+            }),
+            errors=errors,
+        )
+
+    async def async_step_select_layout(self, user_input=None):
+        """Select which stored layout is active for this device."""
+        layouts = await layout.async_get_registry(self.hass)
+        if user_input is not None:
+            name = user_input["layout_name"]
+            self._settings[layout.CONF_ACTIVE_LAYOUT] = name
+            await layout.async_push_layout(
+                self.hass, layout.entry_device_id(self._config_entry), layouts[name])
+            return await self.async_step_init()
+
+        return self.async_show_form(
+            step_id="select_layout",
+            data_schema=vol.Schema({
+                vol.Required("layout_name", default=self._settings.get(layout.CONF_ACTIVE_LAYOUT)):
+                    SelectSelector(SelectSelectorConfig(options=sorted(layouts), mode=SelectSelectorMode.DROPDOWN)),
+            }),
+        )
+
+    async def async_step_toggle_widgets(self, user_input=None):
+        """Enable/disable widgets in the active layout and re-push."""
+        layouts = await layout.async_get_registry(self.hass)
+        name    = self._settings.get(layout.CONF_ACTIVE_LAYOUT)
+        lay     = layouts.get(name) if name else None
+        if lay is None:
+            return await self.async_step_init()
+        ids = [w["id"] for w in lay["widgets"]]
+
+        if user_input is not None:
+            enabled = set(user_input.get("widgets", []))
+            for w in lay["widgets"]:
+                w["enabled"] = w["id"] in enabled
+            await layout.async_save_layout(self.hass, str(name), lay)
+            await layout.async_push_layout(
+                self.hass, layout.entry_device_id(self._config_entry), lay)
+            return await self.async_step_init()
+
+        current = [w["id"] for w in lay["widgets"] if w.get("enabled", True)]
+        return self.async_show_form(
+            step_id="toggle_widgets",
+            data_schema=vol.Schema({
+                vol.Optional("widgets", default=current): SelectSelector(SelectSelectorConfig(
+                    options=ids, multiple=True, mode=SelectSelectorMode.LIST)),
             }),
         )
 
