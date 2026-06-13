@@ -68,17 +68,20 @@ def soc_colour(soc_pct, is_charging):
 
 
 def draw_solar_quadrant(
+    x, y, w, h,
     solar=0.0, battery_soc=0, is_charging=False,
     sun_below_horizon=False, mode="Net", consumption=0.0,
     battery_animation=False,
 ):
-    """Draw energy value, sun/moon icon, and battery indicator in the top-right corner."""
+    """Draw energy value, sun/moon icon, and battery indicator within an x/y/w/h box (anchored top-right)."""
     net = solar - consumption
     if solar <= 0.1 and consumption <= 0.1 and battery_soc == 0 and not sun_below_horizon:
         return
 
-    tr_x = _width - 1
-    tr_y  = 0
+    right  = x + w
+    bottom = y + h
+    tr_x = right - 1
+    tr_y = y
 
     if mode == "Consumption":
         val = consumption
@@ -120,13 +123,13 @@ def draw_solar_quadrant(
         _g.circle(tr_x, tr_y, 3)
 
     _g.set_pen(text_colour)
-    _bitfont.draw_text(val_str, _width - 1, 6, font3x5, d=0)
+    _bitfont.draw_text(val_str, right - 1, bottom - 5, font3x5, d=0)
 
     text_width = (len(val_str) * 4) - 1
-    text_start = _width - text_width
+    text_start = right - text_width
     bw = 4
     bx = text_start - bw - 1
-    by = 6
+    by = bottom - 5
 
     rgb        = soc_colour(battery_soc, is_charging)
     exact_fill = (battery_soc / 100.0) * BATTERY_ROWS
@@ -140,7 +143,7 @@ def draw_solar_quadrant(
     _g.rectangle(bx + 1, by,     2, 1)
 
     for row in range(BATTERY_ROWS):
-        py = (_height - 1) - row
+        py = (bottom - 1) - row
         if row < full_rows:
             _g.set_pen(_g.create_pen(*rgb))
         elif row == full_rows and frac > 0.05:
@@ -157,7 +160,7 @@ def draw_solar_quadrant(
         if cycle_rows > 0:
             pulse_row = (tick // 600) % cycle_rows
             for row in range(BATTERY_ROWS):
-                py          = (_height - 1) - row
+                py          = (bottom - 1) - row
                 is_frac_row = row == full_rows and frac > 0.05
                 if row == pulse_row:
                     if row == next_row:
@@ -192,7 +195,7 @@ def draw_solar_quadrant(
         if active_rows > 0:
             pulse_row = (active_rows - 1) - (tick // 500) % active_rows
             for row in range(BATTERY_ROWS):
-                py          = (_height - 1) - row
+                py          = (bottom - 1) - row
                 is_frac_row = row == full_rows and frac > 0.05
                 if row == pulse_row:
                     if is_frac_row:
@@ -237,13 +240,27 @@ def draw_big_custom_digit(digit, x, y, colour, background=None):
         _g.pixel(x + i % 5, y + i // 5)
 
 
-def draw_clock(x, t):
-    """Draw large HH:MM digits starting at column x using BIG_DIGITS."""
-    slots = [x + 1, x + 7, x + 13, x + 13, x + 19]
-    draw_big_custom_digit(t[3] // 10, slots[0], 1, _WHITE)
-    draw_big_custom_digit(t[3] % 10,  slots[1], 1, _WHITE)
-    draw_big_custom_digit(t[4] // 10, slots[3], 1, _WHITE)
-    draw_big_custom_digit(t[4] % 10,  slots[4], 1, _WHITE)
+BIG_DIGIT_W = 5
+BIG_DIGIT_STEP = BIG_DIGIT_W + 1
+
+
+def draw_clock(x, t=None, y=1, variant="big", color=None):
+    """Draw HH:MM at (x, y). variant 'big' uses BIG_DIGITS, 'tiny' uses bitmap6."""
+    if t is None:
+        t = time.localtime()
+    pen = _g.create_pen(*color) if color else _WHITE
+    if variant == "tiny":
+        _g.set_font("bitmap6")
+        _g.set_pen(pen)
+        _g.text(f"{t[3]:02d}:{t[4]:02d}", x, y, scale=1)
+        return
+    digits = (t[3] // 10, t[3] % 10, t[4] // 10, t[4] % 10)
+    if variant == "small":
+        for i, digit in enumerate(digits):
+            draw_custom_digit(digit, x + i * 4, y, pen)
+        return
+    for i, digit in enumerate(digits):
+        draw_big_custom_digit(digit, x + 1 + i * BIG_DIGIT_STEP, y, pen)
 
 
 def draw_tiny_clock():

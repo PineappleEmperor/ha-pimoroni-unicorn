@@ -76,17 +76,15 @@ def run_display(args):
     g = PicoGraphics(width, height)
     loader.install_mocks()
     na, _icons = loader.load_notify(g, width, height)
-    drawing, weather_fx = loader.load_display(g, width, height)
+    wdg, lyt = loader.load_layout(g, width, height)
+    import drawing
+    import weather_fx
+    active_layout = lyt.default_layout(args.model)
     payloads = [json.loads(p) for p in args.payloads] or DEMO_PAYLOADS
 
     state = {
         "solar": 2.5, "consumption": 0.8, "soc": 75, "charging": True,
         "sun_below": False, "energy_mode": 0, "weather": 0, "anim": True,
-    }
-    pens = {
-        "postit_red": g.create_pen(200, 0, 0),
-        "blue2":      g.create_pen(0, 0, 128),
-        "grey":       g.create_pen(60, 60, 60),
     }
     sensors = {
         "demo_a": {"state": True,  "on_rgb": (140, 192, 80), "off_rgb": (35, 48, 20), "x": 37, "y": 1, "spacing": 4, "name": "a"},
@@ -96,17 +94,17 @@ def run_display(args):
     def render():
         g.set_pen(g.create_pen(0, 0, 0))
         g.clear()
-        t = time.localtime()
-        drawing.draw_clock(10, t)
-        drawing.draw_calendar(t[2], 0, 0, pens["postit_red"])
-        drawing.draw_big_weekdays(t[6], 12, 7, pens["blue2"], pens["grey"])
-        drawing.draw_solar_quadrant(
-            state["solar"], state["soc"], state["charging"], state["sun_below"],
-            mode=ENERGY_MODES[state["energy_mode"]], consumption=state["consumption"],
-            battery_animation=state["anim"],
-        )
+        fw_state = {
+            "time": time.localtime(),
+            "solar": state["solar"], "consumption": state["consumption"],
+            "soc": state["soc"], "charging": state["charging"],
+            "sun_below": state["sun_below"],
+            "energy_mode": ENERGY_MODES[state["energy_mode"]],
+            "weather": WEATHER_CONDITIONS[state["weather"]],
+            "display_sensors": sensors, "battery_animation": state["anim"],
+        }
+        wdg.render_layout(g, active_layout, fw_state)
         drawing.draw_display_sensors(sensors)
-        weather_fx.weather_overlay(WEATHER_CONDITIONS[state["weather"]])
 
     if args.frames:
         for _ in range(args.frames):
@@ -135,7 +133,10 @@ def run_display(args):
                 if current != mtimes:
                     mtimes = current
                     na, _icons = loader.reload_notify(g, width, height)
-                    drawing, weather_fx = loader.reload_display(g, width, height)
+                    wdg, lyt = loader.reload_layout(g, width, height)
+                    import drawing
+                    import weather_fx
+                    active_layout = lyt.default_layout(args.model)
 
             key = kb.poll()
             if key == "q":
