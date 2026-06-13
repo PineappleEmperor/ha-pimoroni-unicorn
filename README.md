@@ -96,6 +96,12 @@ Trigger via `notify.pimoroni_unicorn_<device_id>` or MQTT topic `<device_id>/not
 
 Message text scrolls alongside the animation. Supports `color`, `bg_color`, `animation`, `sound`, and `duration` data fields.
 
+### Icons
+
+8×8 icons render in a left panel beside notification text. A small built-in set ships with the firmware; more can be installed from the [LaMetric icon gallery](https://developer.lametric.com/icons) via **Configure → Install LaMetric icon**: enter a gallery code, preview, name, install. Installed icons (animated GIFs included) are stored on the device and usable in notifications by name or by gallery code. Gallery icons are community-contributed; check the gallery page for individual icon credits.
+
+For bulk preview or generating firmware built-ins there is a dev-side helper: `python scripts/fetch_lametric_icon.py 100-160` renders a labelled preview grid; `--json`/`--builtin` emit device and firmware formats.
+
 ### Energy mode
 
 Cycle display between **Solar**, **Consumption**, and **Net** via the `<device_id>/energy_mode/set` MQTT topic or HA select entity.
@@ -114,6 +120,23 @@ Stages firmware files in `www/pimoroni_unicorn/<device_id>/` and publishes an OT
 |-------|-------------|
 | `files` | List of file keys to push (e.g. `["main", "hardware"]`) |
 | `file_content` | Optional map of key → content to push inline without reading from disk, however it will replace the file on disk to keep parity |
+
+
+## Development
+
+`scripts/emulate.py` runs the real firmware rendering code against a CPython PicoGraphics shim and draws the LED matrix in the terminal (24-bit ANSI, two pixels per character row) — no hardware needed:
+
+```bash
+python scripts/emulate.py animations                                # cycle animation modules
+python scripts/emulate.py notify '{"v":2,"text":"hi","icon":"check"}'
+python scripts/emulate.py icons                                     # built-in + installed icons
+python scripts/emulate.py display --model cosmic                    # main screen, per-model layout
+python scripts/emulate.py layout  --model cosmic                    # visual layout editor
+```
+
+Keys: `space` pause, `r` restart, `n`/`p` cycle, `+`/`-` speed, `q` quit. In `display` mode press `t` to fire a notification over the running screen (takeover, like the device). In `layout` mode the arrow keys move the selected widget (snapped to the grid), `tab` selects the next, `v` cycles its variant, `space` enables/disables it, `a`/`r` add/remove, and `s` saves to `scripts/emulator/layouts/<model>.json`. Apply that JSON to a device either by importing it under **Configure → Import layout** (stored by name, selectable per device, pushed over MQTT) or by publishing it directly to the `<device_id>/layout` topic.
+
+Edits to watched firmware files (`notify_animations.py`, `icons.py`, `drawing.py`, `weather_fx.py`, `bitfonts.py`, `widgets.py`, `layouts.py`, `animations/*.py`) hot-reload live. `--model cosmic|stellar` switches matrix size; `--frames N` renders headless (CI-friendly). The renderer consumes a plain RGB framebuffer, so alternative frontends (e.g. a web canvas) can reuse the same shim. Note: the shim has no `bitmap6` font, so the `tiny` clock variant renders approximately (font8 substituted); `big`/`small` are exact.
 
 <!-- Badges -->
 

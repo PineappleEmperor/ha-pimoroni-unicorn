@@ -182,3 +182,7 @@ cython_debug/
 
 # Built Visual Studio Code Extensions
 *.vsix
+
+# Emulator local authoring output
+scripts/emulator/.device_icons/
+scripts/emulator/layouts/

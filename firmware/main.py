@@ -24,7 +24,7 @@ import ntptime
 import uasyncio as asyncio
 import uos
 from hardware import (
-    DISPLAY, HAS_AUDIO, MODEL_NAME,
+    DISPLAY, HAS_AUDIO, MODEL, MODEL_NAME,
     SWITCH_BRIGHTNESS_DOWN, SWITCH_BRIGHTNESS_UP, SWITCH_SLEEP,
     HEIGHT as height, WIDTH as width, unicorn,
 )
@@ -34,19 +34,19 @@ from umqtt.simple import MQTTClient
 from bitfonts import BitFont, font3x5
 
 import drawing
+import icons
+import layouts
 import notify_animations
 import sounds
 import weather_fx
-from drawing import (
-    draw_big_weekdays, draw_calendar, draw_display_sensors, draw_clock,
-    draw_icon, draw_solar_quadrant,
-)
+import widgets
+from drawing import draw_display_sensors, draw_icon
 from notify_animations import (
     NOTIFY_ANIMATIONS, NOTIFY_CAPABILITIES, _draw_notification, compute_duration_ms,
     reset_fire_heat,
 )
 from sounds import NOTIFY_SOUNDS, _start_sound, _tick_sound
-from weather_fx import init_weather_drops, map_owm_code, weather_overlay
+from weather_fx import init_weather_drops, map_owm_code
 
 
 machine.freq(200_000_000)
@@ -76,6 +76,8 @@ TOPIC_ENERGY_MODE_CMD   = f"{DEVICE_ID}/energy_mode/set"
 TOPIC_ENERGY_MODE_STATE = f"{DEVICE_ID}/energy_mode/state"
 TOPIC_NOTIFY            = f"{DEVICE_ID}/notify"
 TOPIC_NOTIFY_DISMISS    = f"{DEVICE_ID}/notify/dismiss"
+TOPIC_ICONS_CMD         = f"{DEVICE_ID}/icons/cmd"
+TOPIC_LAYOUT            = f"{DEVICE_ID}/layout"
 TOPIC_OTA               = f"{DEVICE_ID}/ota"
 
 # --- HA Device details ---
@@ -107,16 +109,30 @@ _notify_start_ms = 0
 _notify_end_ms   = 0
 _ota_pending     = None
 
+LAYOUT_PATH = "/layout.json"
+
+
+def _load_layout():
+    """Return the active layout: pushed /layout.json if valid, else model default."""
+    try:
+        with open(LAYOUT_PATH) as f:
+            data = json.load(f)
+        if isinstance(data, dict) and data.get("widgets") is not None:
+            return data
+    except (OSError, ValueError):
+        pass
+    return layouts.default_layout(MODEL)
+
+
+_active_layout = _load_layout()
+
 display_sensors: dict = {}  # populated via MQTT {device_id}/display/{id}/config and state
 TOPIC_DISPLAY_PREFIX = f"{DEVICE_ID}/display/"
 
-# Colour pens used directly in main.py (OTA screen + main_loop draw calls)
+# Colour pens used directly in main.py (OTA screen + sleep clear)
 BLACK       = graphics.create_pen(0,   0,   0)
 WHITE       = graphics.create_pen(255, 255, 255)
 ENERGY_CYAN = graphics.create_pen(0,   206, 206)
-POSTIT_RED  = graphics.create_pen(200, 0,   0)
-BLUE2       = graphics.create_pen(0,   0,   128)
-GREY        = graphics.create_pen(60,  60,  60)
 
 
 # --- Helpers ---
@@ -185,6 +201,12 @@ def _run_ota(payload):
         if not url or not path:
             continue
         _show_ota_screen(path.lstrip("/"), i + 1, total)
+        parent = path.rsplit("/", 1)[0]
+        if parent:
+            try:
+                uos.mkdir(parent)
+            except OSError:
+                pass
         tmp = path + ".tmp"
         try:
             r = urequests.get(url, timeout=30)
@@ -229,7 +251,7 @@ def on_message(topic, message):
     global msg, system_state, icon_type, brightness
     global solar_power, battery_soc, battery_charging, battery_animation
     global sun_below_horizon, weather_condition, energy_mode, consumption_power
-    global _ota_pending, _notify_active
+    global _ota_pending, _notify_active, _active_layout
     try:
         topic_str = topic.decode()
 
@@ -302,6 +324,30 @@ def on_message(topic, message):
                 _notify_queue.clear()
             if HAS_AUDIO:
                 unicorn.stop_playing()
+            return
+
+        if topic_str == TOPIC_ICONS_CMD:
+            try:
+                data   = json.loads(message)
+                action = data.get("action")
+                name   = data.get("name", "")
+                if action == "install" and name:
+                    icons.install(name, data)
+                elif action == "remove" and name:
+                    icons.remove(name)
+            except Exception as e:
+                print("Icon cmd failed:", e)
+            return
+
+        if topic_str == TOPIC_LAYOUT:
+            try:
+                data = json.loads(message)
+                if isinstance(data, dict) and data.get("widgets") is not None:
+                    with open(LAYOUT_PATH, "w") as f:
+                        json.dump(data, f)
+                    _active_layout = data
+            except Exception as e:
+                print("Layout cmd failed:", e)
             return
 
         if topic_str == TOPIC_OTA:
@@ -427,7 +473,7 @@ async def mqtt_task():
             for topic in (
                 TOPIC_COMMAND, TOPIC_SOLAR, TOPIC_WEATHER,
                 TOPIC_ANIM_CMD, TOPIC_ENERGY_MODE_CMD, TOPIC_NOTIFY,
-                TOPIC_NOTIFY_DISMISS, TOPIC_OTA,
+                TOPIC_NOTIFY_DISMISS, TOPIC_ICONS_CMD, TOPIC_LAYOUT, TOPIC_OTA,
             ):
                 mqtt_client.subscribe(topic.encode())
 
@@ -435,6 +481,10 @@ async def mqtt_task():
             mqtt_client.publish(TOPIC_ENERGY_MODE_STATE, energy_mode.encode(), retain=True)
             mqtt_client.publish(
                 f"{DEVICE_ID}/notify/capabilities", json.dumps(NOTIFY_CAPABILITIES), retain=True
+            )
+            mqtt_client.publish(
+                f"{DEVICE_ID}/layout/capabilities",
+                json.dumps(widgets.LAYOUT_CAPABILITIES), retain=True,
             )
             _ha_config = {
                 k: v for k, v in (
@@ -535,17 +585,16 @@ async def main_loop():
             brightness = max(0.0, min(1.0, brightness))
             unicorn.set_brightness(brightness)
 
-            # Normal display
-            draw_clock(10, t)
-            draw_calendar(t[2], 0, 0, POSTIT_RED)
-            draw_big_weekdays(t[6], 12, 7, BLUE2, GREY)
-            draw_solar_quadrant(
-                solar_power, battery_soc, battery_charging, sun_below_horizon,
-                mode=energy_mode, consumption=consumption_power,
-                battery_animation=battery_animation,
-            )
+            # Normal display — render the active layout (widgets + overlays)
+            state = {
+                "time": t, "solar": solar_power, "consumption": consumption_power,
+                "soc": battery_soc, "charging": battery_charging,
+                "sun_below": sun_below_horizon, "energy_mode": energy_mode,
+                "weather": weather_condition, "display_sensors": display_sensors,
+                "battery_animation": battery_animation,
+            }
+            widgets.render_layout(graphics, _active_layout, state)
             draw_display_sensors(display_sensors)
-            weather_overlay(weather_condition)
 
             if icon_type != "none":
                 draw_icon(icon_type, 2, 2)

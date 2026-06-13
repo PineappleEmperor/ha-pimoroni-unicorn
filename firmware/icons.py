@@ -1,8 +1,18 @@
-"""Static 8×8 pixel icons for Pimoroni Unicorn notification display."""
+"""8×8 pixel icons for Pimoroni Unicorn notification display."""
+
+import json
+
+import ubinascii
+import uos
 
 _g = None
 
-ICON_SIZE = 8
+ICON_SIZE  = 8
+_ICON_DIR  = "/icons"
+_CACHE_MAX = 8
+
+_user_cache = {}
+_code_alias = {}
 
 _K = (0,   0,   0)    # black / transparent
 _W = (255, 255, 255)  # white
@@ -166,16 +176,116 @@ STATIC_ICONS = {
 def init(graphics):
     global _g
     _g = graphics
+    _build_code_alias()
 
 
-def draw_icon(icon, x, y):
-    """Draw an 8×8 icon at (x, y). icon is a name string or flat list of [r,g,b]."""
-    if isinstance(icon, str):
-        data = STATIC_ICONS.get(icon)
-        if data is None:
-            return False
-    else:
-        data = bytes([v for rgb in icon for v in rgb])
+def install(name, data):
+    """Write an icon JSON file pushed over MQTT and refresh lookup state."""
+    try:
+        uos.mkdir(_ICON_DIR)
+    except OSError:
+        pass
+    payload = {
+        "code":      data.get("code"),
+        "frames":    data["frames"],
+        "durations": data.get("durations", []),
+    }
+    with open(_ICON_DIR + "/" + name + ".json", "w") as f:
+        json.dump(payload, f)
+    _user_cache.pop(name, None)
+    if payload["code"] is not None:
+        _code_alias[str(payload["code"])] = name
+
+
+def remove(name):
+    """Delete an installed icon file and clear lookup state."""
+    _user_cache.pop(name, None)
+    try:
+        uos.remove(_ICON_DIR + "/" + name + ".json")
+    except OSError:
+        pass
+    for code in [c for c, n in _code_alias.items() if n == name]:
+        del _code_alias[code]
+
+
+def _build_code_alias():
+    """Map LaMetric code strings to installed icon names by scanning /icons/."""
+    _code_alias.clear()
+    try:
+        files = uos.listdir(_ICON_DIR)
+    except OSError:
+        return
+    for fname in files:
+        if not fname.endswith(".json"):
+            continue
+        try:
+            with open(_ICON_DIR + "/" + fname) as f:
+                code = json.load(f).get("code")
+            if code is not None:
+                _code_alias[str(code)] = fname[:-5]
+        except Exception:
+            pass
+
+
+def _load_user_icon(name):
+    cached = _user_cache.get(name)
+    if cached is not None:
+        return cached
+    try:
+        with open(_ICON_DIR + "/" + name + ".json") as f:
+            data = json.load(f)
+        icon = (
+            [ubinascii.a2b_base64(fr) for fr in data["frames"]],
+            [int(d) for d in data.get("durations", [])],
+        )
+    except Exception:
+        return None
+    if len(_user_cache) >= _CACHE_MAX:
+        _user_cache.pop(next(iter(_user_cache)))
+    _user_cache[name] = icon
+    return icon
+
+
+def _resolve(icon):
+    """Return (frames, durations) for a name, code, or raw [r,g,b] list."""
+    if not isinstance(icon, str):
+        return [bytes([v for rgb in icon for v in rgb])], [0]
+    data = STATIC_ICONS.get(icon)
+    if data is not None:
+        if isinstance(data, bytes):
+            return [data], [0]
+        return data
+    user = _load_user_icon(icon)
+    if user is None:
+        alias = _code_alias.get(icon)
+        if alias:
+            user = _load_user_icon(alias)
+    return user
+
+
+def _frame_at(frames, durations, elapsed_ms):
+    if len(frames) == 1:
+        return frames[0]
+    total = 0
+    for d in durations:
+        total += d if d > 0 else 100
+    if total <= 0:
+        return frames[0]
+    t   = elapsed_ms % total
+    acc = 0
+    for fr, d in zip(frames, durations):
+        acc += d if d > 0 else 100
+        if t < acc:
+            return fr
+    return frames[-1]
+
+
+def draw_icon(icon, x, y, elapsed_ms=0):
+    """Draw an 8×8 icon at (x, y). icon is a name, LaMetric code, or flat [r,g,b] list."""
+    resolved = _resolve(icon)
+    if resolved is None:
+        return False
+    data = _frame_at(resolved[0], resolved[1], elapsed_ms)
 
     for i in range(ICON_SIZE * ICON_SIZE):
         r = data[i * 3]
