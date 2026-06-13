@@ -11,18 +11,24 @@ Usage:
   python scripts/emulate.py icons                       cycle built-in + installed icons
   python scripts/emulate.py display                     main display (clock/calendar/solar/weather)
   python scripts/emulate.py display '{"v":2,"text":"hi"}'   custom takeover payloads for [t]
+  python scripts/emulate.py layout --model cosmic       visual layout editor (saves JSON)
   --model galactic|cosmic|stellar (default galactic), --frames N (headless)
 
 Keys: [space] pause  [r] restart  [n]/[p] next/prev  [+]/[-] speed  [q] quit
 display mode: [t] send notification (cycles payloads, demo set if none given)
               [x] dismiss  [X] dismiss all  [w] weather  [e] energy mode
               [d] day/night  [c] charging  [n]/[p] battery %  [+]/[-] solar power
+layout mode:  arrows move selected widget (snap to grid), [tab] next widget,
+              [v] variant, [space] enable/disable, [g] grid step, [a] add,
+              [r] remove, [s] save to scripts/emulator/layouts/<model>.json
 Edits to watched firmware files (notify_animations, icons, drawing,
 weather_fx, bitfonts, animations/*) hot-reload automatically.
 """
 
 import argparse
+import copy
 import json
+import os
 import sys
 import time
 
@@ -198,6 +204,125 @@ def run_display(args):
             time.sleep(0.02)
 
 
+LAYOUT_DIR = os.path.join(os.path.dirname(__file__), "emulator", "layouts")
+
+_EDITOR_STATE = {
+    "time": None, "solar": 2.5, "consumption": 0.8, "soc": 75, "charging": True,
+    "sun_below": False, "energy_mode": "Net", "weather": "clear",
+    "display_sensors": {}, "battery_animation": False,
+}
+
+
+def _move(entry, wdg, dx, dy, grid, width, height):
+    w, h = wdg.widget_box(entry["id"], {**_widget_cfg(wdg, entry)})
+    entry["x"] = max(0, min(width - w, entry.get("x", 0) + dx * grid))
+    entry["y"] = max(0, min(height - h, entry.get("y", 0) + dy * grid))
+
+
+def _widget_cfg(wdg, entry):
+    meta = wdg.WIDGET_REGISTRY.get(entry["id"], {})
+    return {**meta.get("default_cfg", {}), **entry.get("cfg", {})}
+
+
+def run_layout(args):
+    width, height = MODELS[args.model]
+    g = PicoGraphics(width, height)
+    loader.install_mocks()
+    wdg, lyt = loader.load_layout(g, width, height)
+
+    save_path = os.path.join(LAYOUT_DIR, f"{args.model}.json")
+    if os.path.isfile(save_path):
+        with open(save_path) as f:
+            layout = json.load(f)
+    else:
+        layout = copy.deepcopy(lyt.default_layout(args.model))
+
+    grid = layout.get("grid", 2)
+    sel = 0
+    state = dict(_EDITOR_STATE)
+
+    def render():
+        state["time"] = time.localtime()
+        g.set_pen(g.create_pen(0, 0, 0))
+        g.clear()
+        wdg.render_layout(g, layout, state)
+
+    if args.frames:
+        for _ in range(args.frames):
+            render()
+        print(f"layout {args.model}: {len(layout['widgets'])} widgets, grid {grid}")
+        return
+
+    if not term.is_tty():
+        sys.exit("not a tty — use --frames N for headless rendering")
+
+    saved_note = ""
+    with term.TerminalRenderer(width, height, status_lines=3) as renderer, term.Keyboard() as kb:
+        while True:
+            ws = layout["widgets"]
+            sel = max(0, min(sel, len(ws) - 1))
+            entry = ws[sel] if ws else None
+            key = kb.poll()
+
+            if key == "q":
+                return
+            if entry is not None and key in ("UP", "DOWN", "LEFT", "RIGHT"):
+                d = {"UP": (0, -1), "DOWN": (0, 1), "LEFT": (-1, 0), "RIGHT": (1, 0)}[key]
+                _move(entry, wdg, d[0], d[1], grid, width, height)
+            elif key in ("\t", "j"):
+                sel = (sel + 1) % len(ws)
+            elif key == "k":
+                sel = (sel - 1) % len(ws)
+            elif key and key.isdigit() and 1 <= int(key) <= len(ws):
+                sel = int(key) - 1
+            elif key == "v" and entry is not None:
+                variants = wdg.WIDGET_REGISTRY.get(entry["id"], {}).get("variants", [])
+                if variants:
+                    cfg = entry.setdefault("cfg", {})
+                    cur = cfg.get("variant", variants[0])
+                    cfg["variant"] = variants[(variants.index(cur) + 1) % len(variants)] if cur in variants else variants[0]
+            elif key == " " and entry is not None:
+                entry["enabled"] = not entry.get("enabled", True)
+            elif key == "g":
+                grid = {1: 2, 2: 4, 4: 1}.get(grid, 2)
+                layout["grid"] = grid
+            elif key == "a":
+                present = {e["id"] for e in ws}
+                for wid in wdg.WIDGET_REGISTRY:
+                    if wid not in present:
+                        ws.append({"id": wid, "x": 0, "y": 0, "cfg": {}})
+                        sel = len(ws) - 1
+                        break
+            elif key == "r" and ws:
+                ws.pop(sel)
+            elif key == "s":
+                os.makedirs(LAYOUT_DIR, exist_ok=True)
+                layout["model"] = args.model
+                with open(save_path, "w") as f:
+                    json.dump(layout, f, indent=2)
+                saved_note = " SAVED"
+
+            render()
+            listing = "  ".join(
+                f"{'[' if i == sel else ''}{'~' if e.get('enabled') is False else ''}"
+                f"{e['id']}@{e.get('x', 0)},{e.get('y', 0)}{']' if i == sel else ''}"
+                for i, e in enumerate(ws)
+            ) or "(no widgets)"
+            detail = ""
+            if entry is not None:
+                cfg = _widget_cfg(wdg, entry)
+                detail = (f"sel={entry['id']} x={entry.get('x', 0)} y={entry.get('y', 0)}"
+                          f" variant={cfg.get('variant', '-')} {'on' if entry.get('enabled', True) else 'OFF'}")
+            renderer.draw(
+                g.buffer,
+                f"model={args.model} grid={grid}  ->{os.path.relpath(save_path)}{saved_note}\n"
+                f"{listing}\n"
+                f"{detail}  arrows=move tab=next v=variant space=toggle g=grid a=add r=remove s=save q=quit",
+            )
+            saved_note = ""
+            time.sleep(0.02)
+
+
 def run(args):
     width, height = MODELS[args.model]
     g = PicoGraphics(width, height)
@@ -208,7 +333,6 @@ def run(args):
         items = sorted(na.NOTIFY_ANIMATIONS)
         label = lambda i: f"animation: {items[i]}"
     elif args.mode == "icons":
-        import os
         installed = [f[:-5] for f in sorted(os.listdir(loader.ICONS_DIR)) if f.endswith(".json")]
         items = sorted(icons.STATIC_ICONS) + installed
         label = lambda i: f"icon: {items[i]}"
@@ -295,13 +419,15 @@ def run(args):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("mode", choices=["animations", "notify", "icons", "display"])
+    ap.add_argument("mode", choices=["animations", "notify", "icons", "display", "layout"])
     ap.add_argument("payloads", nargs="*", help="notify payload JSON strings")
     ap.add_argument("--model", choices=MODELS, default="galactic")
     ap.add_argument("--frames", type=int, help="render N frames headless and exit")
     args = ap.parse_args()
     if args.mode == "display":
         run_display(args)
+    elif args.mode == "layout":
+        run_layout(args)
     else:
         run(args)
 

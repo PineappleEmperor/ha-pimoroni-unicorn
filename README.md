@@ -130,9 +130,13 @@ Stages firmware files in `www/pimoroni_unicorn/<device_id>/` and publishes an OT
 python scripts/emulate.py animations                                # cycle animation modules
 python scripts/emulate.py notify '{"v":2,"text":"hi","icon":"check"}'
 python scripts/emulate.py icons                                     # built-in + installed icons
+python scripts/emulate.py display --model cosmic                    # main screen, per-model layout
+python scripts/emulate.py layout  --model cosmic                    # visual layout editor
 ```
 
-Keys: `space` pause, `r` restart, `n`/`p` cycle, `+`/`-` speed, `q` quit. Edits to `firmware/notify_animations.py`, `icons.py`, or `animations/*.py` hot-reload live. `--model cosmic|stellar` switches matrix size; `--frames N` renders headless (CI-friendly). The renderer consumes a plain RGB framebuffer, so alternative frontends (e.g. a web canvas) can reuse the same shim.
+Keys: `space` pause, `r` restart, `n`/`p` cycle, `+`/`-` speed, `q` quit. In `display` mode press `t` to fire a notification over the running screen (takeover, like the device). In `layout` mode the arrow keys move the selected widget (snapped to the grid), `tab` selects the next, `v` cycles its variant, `space` enables/disables it, `a`/`r` add/remove, and `s` saves to `scripts/emulator/layouts/<model>.json` — that JSON is what you publish to the device's `<device_id>/layout` topic.
+
+Edits to watched firmware files (`notify_animations.py`, `icons.py`, `drawing.py`, `weather_fx.py`, `bitfonts.py`, `widgets.py`, `layouts.py`, `animations/*.py`) hot-reload live. `--model cosmic|stellar` switches matrix size; `--frames N` renders headless (CI-friendly). The renderer consumes a plain RGB framebuffer, so alternative frontends (e.g. a web canvas) can reuse the same shim. Note: the shim has no `bitmap6` font, so the `tiny` clock variant renders approximately (font8 substituted); `big`/`small` are exact.
 
 <!-- Badges -->
 
