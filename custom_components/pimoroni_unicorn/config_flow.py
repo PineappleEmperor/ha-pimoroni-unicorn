@@ -16,7 +16,9 @@ from homeassistant.helpers.selector import (
     TextSelector,
     TextSelectorConfig,
 )
+from homeassistant.util import slugify
 
+from . import lametric
 from .const import (
     CONF_BATTERY_CHARGING_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -29,6 +31,7 @@ from .const import (
     CONF_SUN_ENTITY,
     CONF_WEATHER_CODE_ENTITY,
     DOMAIN,
+    NOTIFY_STATIC_ICONS,
     UNICORN_MODELS,
 )
 
@@ -122,6 +125,7 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         self._settings: dict = {}
         self._display_sensors: dict = {}
         self._edit_sensor_id: str | None = None
+        self._pending_icon: dict | None = None
         self._initialized = False
 
     def _init_state(self) -> None:
@@ -138,9 +142,13 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         """Show main options menu."""
         self._init_state()
+        registry = await lametric.async_get_registry(self.hass)
         menu_options = ["settings", "add_display_sensor"]
         if self._display_sensors:
             menu_options += ["edit_display_sensor", "remove_display_sensor"]
+        menu_options.append("add_icon")
+        if registry:
+            menu_options.append("remove_icon")
         menu_options.append("save")
 
         sensor_list = "\n".join(
@@ -148,10 +156,15 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
             for s in self._display_sensors.values()
         ) if self._display_sensors else "None configured"
 
+        icon_list = "\n".join(
+            f"- {name} (code {icon.get('code', '?')}, {len(icon.get('frames', []))} frame(s))"
+            for name, icon in registry.items()
+        ) if registry else "None installed"
+
         return self.async_show_menu(
             step_id="init",
             menu_options=menu_options,
-            description_placeholders={"sensors": sensor_list},
+            description_placeholders={"sensors": sensor_list, "icons": icon_list},
         )
 
     async def async_step_settings(self, user_input=None):
@@ -233,6 +246,73 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="remove_display_sensor",
             data_schema=_select_sensor_schema(self._display_sensors),
+        )
+
+    async def async_step_add_icon(self, user_input=None):
+        """Fetch a LaMetric gallery icon by code."""
+        errors = {}
+        if user_input is not None:
+            code = int(user_input["code"])
+            icon = await lametric.async_fetch_icon(self.hass, code)
+            if icon is None:
+                errors["code"] = "icon_not_found"
+            else:
+                self._pending_icon = icon
+                return await self.async_step_icon_preview()
+
+        return self.async_show_form(
+            step_id="add_icon",
+            data_schema=vol.Schema({
+                vol.Required("code"): NumberSelector(NumberSelectorConfig(
+                    min=1, max=999999, step=1, mode=NumberSelectorMode.BOX
+                )),
+            }),
+            errors=errors,
+        )
+
+    async def async_step_icon_preview(self, user_input=None):
+        """Preview the fetched icon and name it to install."""
+        pending = self._pending_icon
+        if pending is None:
+            return await self.async_step_add_icon()
+        errors = {}
+        code   = pending["code"]
+        if user_input is not None:
+            name = slugify(user_input.get("name") or f"lm_{code}")
+            if name in NOTIFY_STATIC_ICONS:
+                errors["name"] = "name_taken"
+            else:
+                await lametric.async_install_icon(self.hass, name, pending)
+                self._pending_icon = None
+                return await self.async_step_init()
+
+        return self.async_show_form(
+            step_id="icon_preview",
+            data_schema=vol.Schema({
+                vol.Optional("name", default=f"lm_{code}"): TextSelector(TextSelectorConfig()),
+            }),
+            errors=errors,
+            description_placeholders={
+                "code":   str(code),
+                "frames": str(len(pending["frames"])),
+                "url":    lametric.ICON_THUMB_URL.format(code=code),
+            },
+        )
+
+    async def async_step_remove_icon(self, user_input=None):
+        """Remove an installed icon from registry and devices."""
+        registry = await lametric.async_get_registry(self.hass)
+        if user_input is not None:
+            await lametric.async_remove_icon(self.hass, user_input["icon_name"])
+            return await self.async_step_init()
+
+        return self.async_show_form(
+            step_id="remove_icon",
+            data_schema=vol.Schema({
+                vol.Required("icon_name"): SelectSelector(SelectSelectorConfig(
+                    options=sorted(registry), mode=SelectSelectorMode.DROPDOWN
+                )),
+            }),
         )
 
     async def async_step_save(self, user_input=None):

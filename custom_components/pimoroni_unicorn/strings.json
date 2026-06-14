@@ -18,12 +18,14 @@
     "step": {
       "init": {
         "title": "Pimoroni Unicorn Options",
-        "description": "Display sensors:\n{sensors}",
+        "description": "Display sensors:\n{sensors}\n\nInstalled icons:\n{icons}",
         "menu_options": {
           "settings": "Configure settings",
           "add_display_sensor": "Add display sensor",
           "edit_display_sensor": "Edit display sensor",
           "remove_display_sensor": "Remove display sensor",
+          "add_icon": "Install LaMetric icon",
+          "remove_icon": "Remove installed icon",
           "save": "Save & close"
         }
       },
@@ -74,7 +76,31 @@
         "data": {
           "sensor_id": "Select sensor to remove"
         }
+      },
+      "add_icon": {
+        "title": "Install LaMetric icon",
+        "description": "Enter a numeric icon code from the LaMetric gallery. The icon is fetched and previewed before installing.",
+        "data": {
+          "code": "Icon code"
+        }
+      },
+      "icon_preview": {
+        "title": "Preview & name icon",
+        "description": "Icon {code} ({frames} frame(s)) — preview (shown at actual 8×8 size, zoom in if needed):\n\n![icon]({url})\n\nChoose a name to install it on all devices. The code {code} will also work as an alias in notifications.",
+        "data": {
+          "name": "Icon name"
+        }
+      },
+      "remove_icon": {
+        "title": "Remove installed icon",
+        "data": {
+          "icon_name": "Select icon to remove"
+        }
       }
+    },
+    "error": {
+      "icon_not_found": "No icon found for that code, or the gallery is unreachable.",
+      "name_taken": "That name is already used by a built-in icon."
     }
   }
 }
