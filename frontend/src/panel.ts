@@ -88,6 +88,44 @@ export class PimoroniUnicornPanel extends LitElement {
 
   protected firstUpdated(): void { this.loadDevices(); }
 
+  connectedCallback(): void {
+    super.connectedCallback();
+    window.addEventListener("keydown", this._onKey);
+  }
+  disconnectedCallback(): void {
+    window.removeEventListener("keydown", this._onKey);
+    super.disconnectedCallback();
+  }
+
+  private _onKey = (e: KeyboardEvent): void => {
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    const d: Record<string, [number, number]> = {
+      ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+    };
+    const delta = d[e.key];
+    if (!delta) return;
+    e.preventDefault();
+    this._nudge(delta[0], delta[1]);
+  };
+
+  private _nudge(dx: number, dy: number): void {
+    const [W, H] = this.dims;
+    if (this.selected >= 0 && this.layout.widgets[this.selected]) {
+      const entry = this.layout.widgets[this.selected];
+      const [bw, bh] = this.boxDims(entry);
+      entry.x = Math.max(1 - bw, Math.min(W - 1, entry.x + dx));
+      entry.y = Math.max(1 - bh, Math.min(H - 1, entry.y + dy));
+      this.edited();
+    } else if (this.selSensor >= 0 && this.sensors[this.selSensor]) {
+      const sn = this.sensors[this.selSensor];
+      const sz = sn.size ?? 2;
+      sn.x_pos = Math.max(0, Math.min(W - sz, sn.x_pos + dx));
+      sn.y_pos = Math.max(0, Math.min(H - sz, sn.y_pos + dy));
+      this.edited();
+    }
+  }
+
   private async loadDevices(): Promise<void> {
     const res = await this.hass.callWS({ type: "pimoroni_unicorn/devices" });
     this.devices = res.devices ?? [];
