@@ -208,7 +208,7 @@ BIG_DIGIT_STEP = BIG_DIGIT_W + 1
 
 
 def draw_clock(x, t=None, y=1, variant="big", color=None):
-    """Draw HH:MM at (x, y). variant 'big' uses BIG_DIGITS, 'tiny' uses bitmap6."""
+    """Draw the time at (x, y). variant: big (HHMM row), small (3x5 row), stacked (HH over MM)."""
     if t is None:
         t = time.localtime()
     pen = _g.create_pen(*color) if color else _WHITE
@@ -216,6 +216,21 @@ def draw_clock(x, t=None, y=1, variant="big", color=None):
     if variant == "small":
         for i, digit in enumerate(digits):
             draw_custom_digit(digit, x + i * 4, y, pen)
+        return
+    if variant == "wide":
+        draw_custom_digit(digits[0], x,      y, pen)
+        draw_custom_digit(digits[1], x + 4,  y, pen)
+        _g.set_pen(pen)
+        _g.pixel(x + 7, y + 1)
+        _g.pixel(x + 7, y + 3)
+        draw_custom_digit(digits[2], x + 9,  y, pen)
+        draw_custom_digit(digits[3], x + 13, y, pen)
+        return
+    if variant == "stacked":
+        draw_big_custom_digit(digits[0], x,                  y,     pen)
+        draw_big_custom_digit(digits[1], x + BIG_DIGIT_STEP, y,     pen)
+        draw_big_custom_digit(digits[2], x,                  y + 8, pen)
+        draw_big_custom_digit(digits[3], x + BIG_DIGIT_STEP, y + 8, pen)
         return
     for i, digit in enumerate(digits):
         draw_big_custom_digit(digit, x + i * BIG_DIGIT_STEP, y, pen)

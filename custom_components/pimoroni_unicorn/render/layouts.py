@@ -33,7 +33,7 @@ DEFAULT_LAYOUTS = {
     "stellar": {
         "name": "default", "model": "stellar", "grid": 1,
         "widgets": [
-            {"id": "clock",    "x": 0, "y": 1, "cfg": {"variant": "small", "color": [255, 255, 255]}},
+            {"id": "clock",    "x": 0, "y": 0, "cfg": {"variant": "wide", "color": [255, 255, 255]}},
             {"id": "calendar", "x": 0, "y": 6, "cfg": {"header_color": [200, 0, 0]}},
             {"id": "weekdays", "x": 0, "y": 1, "cfg": {"variant": "small", "active": [0, 0, 128], "inactive": [60, 60, 60]}, "enabled": False},
             {"id": "energy",   "x": 0, "y": 0, "cfg": {}, "enabled": False},
