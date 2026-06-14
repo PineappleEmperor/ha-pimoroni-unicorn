@@ -68,6 +68,7 @@ export class PimoroniUnicornPanel extends LitElement {
     button[disabled] { opacity: .5; cursor: not-allowed; }
     button.secondary { background: var(--secondary-background-color, #e0e0e0); color: var(--primary-text-color, #111); }
     button.danger { background: var(--error-color, #db4437); }
+    button.zbtn { padding: 4px 9px; min-width: 28px; line-height: 1; }
     .stage { position: relative; display: inline-block; background: #000; line-height: 0; border: 1px solid var(--divider-color, #444); overflow: hidden; }
     .stage img { image-rendering: pixelated; display: block; }
     .grid, .boxes { position: absolute; inset: 0; pointer-events: none; }
@@ -217,6 +218,13 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private capFor(id: string): WidgetCap | undefined { return this.caps.find((c) => c.id === id); }
   private get scale(): number { return this.zoom || Math.max(4, Math.floor(PREVIEW_TARGET_PX / this.dims[0])); }
+  private zoomBy(delta: number): void {
+    this.zoom = Math.min(48, Math.max(4, this.scale + delta));
+  }
+  private onWheel(e: WheelEvent): void {
+    e.preventDefault();
+    this.zoomBy(e.deltaY < 0 ? 2 : -2);
+  }
   // Box dims come from the backend (computed by the real widget_box), so any
   // cfg-driven sizing (variant, size, digits…) is correct without client logic.
   private boxDims(i: number): Size {
@@ -427,15 +435,20 @@ export class PimoroniUnicornPanel extends LitElement {
             ${[1, 2, 4].map((n) => html`<option ?selected=${(this.layout.grid ?? 2) === n}>${n}</option>`)}
           </select>
         </label>
-        <label>Zoom <input type="range" min="4" max="48" .value=${String(this.scale)}
-          @input=${(e: Event) => (this.zoom = +(e.target as HTMLInputElement).value)} /></label>
+        <label>Zoom
+          <button class="zbtn" @click=${() => this.zoomBy(-2)} title="Zoom out">&minus;</button>
+          <input type="range" min="4" max="48" .value=${String(this.scale)}
+            @input=${(e: Event) => (this.zoom = +(e.target as HTMLInputElement).value)} />
+          <button class="zbtn" @click=${() => this.zoomBy(2)} title="Zoom in">+</button>
+        </label>
         <label><input type="checkbox" .checked=${this.wireframe} @change=${(e: Event) => (this.wireframe = (e.target as HTMLInputElement).checked)} /> wireframe</label>
         <label><input type="checkbox" .checked=${this.live} ?disabled=${!this.entryId} @change=${(e: Event) => (this.live = (e.target as HTMLInputElement).checked)} /> live push</label>
       </div>
 
       <div class="wrap">
         <div class="col">
-          <div class="stage" style=${`width:${this.dims[0] * s}px;height:${this.dims[1] * s}px`}>
+          <div class="stage" style=${`width:${this.dims[0] * s}px;height:${this.dims[1] * s}px`}
+            @wheel=${this.onWheel}>
             ${this.png ? html`<img src="data:image/png;base64,${this.png}" width=${this.dims[0] * s} height=${this.dims[1] * s} @load=${this.onImgLoad} />` : ""}
             <div class="grid" style=${gridStyle}></div>
             ${this.wireframe ? html`<div class="boxes">${this.layout.widgets.map((w, i) => {
