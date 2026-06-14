@@ -121,12 +121,19 @@ def render_layout(g, layout, state):
             overlay["render"](g, state)
 
 
+def _variant_sizes(wid, m):
+    """Map each variant to its (w, h) box so editors draw accurate footprints."""
+    if not m["variants"]:
+        return {}
+    return {v: list(widget_box(wid, {**m["default_cfg"], "variant": v})) for v in m["variants"]}
+
+
 LAYOUT_CAPABILITIES = {
     "widgets": [
         {
             "id": wid, "label": m["label"], "w": m["w"], "h": m["h"],
             "variants": m["variants"], "default_cfg": m["default_cfg"],
-            "cfg_fields": m["cfg_fields"],
+            "cfg_fields": m["cfg_fields"], "sizes": _variant_sizes(wid, m),
         }
         for wid, m in WIDGET_REGISTRY.items()
     ],
