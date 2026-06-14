@@ -34,7 +34,7 @@ TIMES = [
     time.struct_time((2026, 6, 28, 23, 59, 0, 2, 179, 0)),
 ]
 BASE = {
-    "solar": 12.3, "consumption": 0.8, "soc": 100, "charging": True,
+    "solar": 2.5, "consumption": 0.8, "soc": 100, "charging": True,
     "sun_below": False, "energy_mode": "Net", "weather": "clear",
     "display_sensors": {}, "battery_animation": False,
 }
