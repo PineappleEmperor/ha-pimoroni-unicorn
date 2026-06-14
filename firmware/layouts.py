@@ -11,8 +11,8 @@ DEFAULT_LAYOUTS = {
         "name": "default", "model": "galactic", "grid": 2,
         "widgets": [
             {"id": "calendar", "x": 0,  "y": 0, "cfg": {"header_color": [200, 0, 0]}},
-            {"id": "clock",    "x": 10, "y": 1, "cfg": {"variant": "big", "color": [255, 255, 255]}},
-            {"id": "weekdays", "x": 12, "y": 7, "cfg": {"variant": "big", "active": [0, 0, 128], "inactive": [60, 60, 60]}},
+            {"id": "clock",    "x": 11, "y": 1, "cfg": {"variant": "big", "color": [255, 255, 255]}},
+            {"id": "weekdays", "x": 12, "y": 9, "cfg": {"variant": "big", "active": [0, 0, 128], "inactive": [60, 60, 60]}},
             {"id": "solar",    "x": 37, "y": 0, "cfg": {}},
         ],
         "overlays": ["weather"],
@@ -20,10 +20,10 @@ DEFAULT_LAYOUTS = {
     "cosmic": {
         "name": "default", "model": "cosmic", "grid": 2,
         "widgets": [
-            {"id": "clock",    "x": 4,  "y": 2,  "cfg": {"variant": "big", "color": [255, 255, 255]}},
+            {"id": "clock",    "x": 5,  "y": 2,  "cfg": {"variant": "big", "color": [255, 255, 255]}},
             {"id": "calendar", "x": 0,  "y": 11, "cfg": {"header_color": [200, 0, 0]}},
             {"id": "solar",    "x": 16, "y": 11, "cfg": {}},
-            {"id": "weekdays", "x": 6,  "y": 27, "cfg": {"variant": "big", "active": [0, 0, 128], "inactive": [60, 60, 60]}},
+            {"id": "weekdays", "x": 6,  "y": 29, "cfg": {"variant": "big", "active": [0, 0, 128], "inactive": [60, 60, 60]}},
         ],
         "overlays": ["weather"],
     },

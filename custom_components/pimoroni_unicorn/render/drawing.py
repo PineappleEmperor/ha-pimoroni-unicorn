@@ -256,7 +256,7 @@ def draw_clock(x, t=None, y=1, variant="big", color=None):
             draw_custom_digit(digit, x + i * 4, y, pen)
         return
     for i, digit in enumerate(digits):
-        draw_big_custom_digit(digit, x + 1 + i * BIG_DIGIT_STEP, y, pen)
+        draw_big_custom_digit(digit, x + i * BIG_DIGIT_STEP, y, pen)
 
 
 def draw_tiny_clock():
@@ -291,10 +291,10 @@ def draw_weekdays(current_day, x, y, active_colour, inactive_colour):
 
 
 def draw_big_weekdays(current_day, x, y, active_colour, inactive_colour):
-    """Draw a row of seven 2x1 day bars, highlighting current_day."""
+    """Draw a row of seven 2x1 day bars at (x, y), highlighting current_day."""
     for i in range(7):
         _g.set_pen(active_colour if i == current_day else inactive_colour)
-        _g.rectangle(x + i * 3, y + 2, 2, 1)
+        _g.rectangle(x + i * 3, y, 2, 1)
 
 
 def draw_display_sensors(display_sensors):

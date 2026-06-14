@@ -246,11 +246,10 @@ export class PimoroniUnicornPanel extends LitElement {
 
   render() {
     const s = this.scale;
-    const grid = this.layout.grid ?? 2;
     const present = new Set(this.layout.widgets.map((w) => w.id));
     const addable = this.caps.filter((c) => !present.has(c.id));
     const overlays = new Set(this.layout.overlays ?? []);
-    const gridStyle = `background-image:linear-gradient(to right,rgba(255,255,255,.12) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.12) 1px,transparent 1px);background-size:${grid * s}px ${grid * s}px`;
+    const gridStyle = `background-image:linear-gradient(to right,rgba(255,255,255,.10) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.10) 1px,transparent 1px);background-size:${s}px ${s}px`;
     return html`
       <div class="bar">
         <label>Device
