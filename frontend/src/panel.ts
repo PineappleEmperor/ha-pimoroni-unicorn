@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
+type Rect = [number, number, number, number];
 interface CfgField { key: string; type: "select" | "rgb" | "number"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
 interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; }
 interface OverlayCap { id: string; label: string; }
@@ -164,10 +165,14 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private async selectMock(model: string): Promise<void> {
     this.entryId = "";
-    this.sensors = dummySensors();
+    this.sensors = [];
     this.selSensor = -1;
     await this.loadCaps({ model });
     this.loadLayout(this.defaultLayout);
+    for (const sn of dummySensors()) {
+      const [x, y] = this.freeSlot(sn.size ?? 2);
+      this.sensors = [...this.sensors, { ...sn, x_pos: x, y_pos: y }];
+    }
   }
 
   private renderSensors() {
@@ -224,6 +229,28 @@ export class PimoroniUnicornPanel extends LitElement {
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
     this.zoomBy(e.deltaY < 0 ? 2 : -2);
+  }
+  // Rectangles already occupied by enabled widgets and existing sensors.
+  private occupiedRects(): Rect[] {
+    const rects: Rect[] = [];
+    this.layout.widgets.forEach((w, i) => {
+      if (w.enabled === false || !this.capFor(w.id)) return;
+      const [bw, bh] = this.boxDims(i);
+      rects.push([w.x, w.y, bw, bh]);
+    });
+    for (const sn of this.sensors) rects.push([sn.x_pos, sn.y_pos, sn.size ?? 2, sn.size ?? 2]);
+    return rects;
+  }
+  // First top-left cell where a size×size box clears all occupied rects.
+  private freeSlot(size: number): [number, number] {
+    const [W, H] = this.dims;
+    const taken = this.occupiedRects();
+    const hits = (x: number, y: number) =>
+      taken.some(([rx, ry, rw, rh]) => x < rx + rw && x + size > rx && y < ry + rh && y + size > ry);
+    for (let y = 0; y <= H - size; y++)
+      for (let x = 0; x <= W - size; x++)
+        if (!hits(x, y)) return [x, y];
+    return [0, 0];
   }
   // Box dims come from the backend (computed by the real widget_box), so any
   // cfg-driven sizing (variant, size, digits…) is correct without client logic.
@@ -318,9 +345,10 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private addSensor(): void {
+    const [x, y] = this.freeSlot(2);
     this.sensors.push({
       id: `sensor_${this.sensors.length + 1}`, entity_id: "", name: "Sensor",
-      on_color: "#00ff00", off_color: "#1a1a1a", x_pos: 0, y_pos: 0, size: 2,
+      on_color: "#00ff00", off_color: "#1a1a1a", x_pos: x, y_pos: y, size: 2,
     });
     this.selSensor = this.sensors.length - 1;
     this.edited();
