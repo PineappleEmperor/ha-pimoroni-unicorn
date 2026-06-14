@@ -3,6 +3,9 @@ name: Check Manifest Version Bump
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches-ignore:
+      - main
 
 permissions:
   contents: read
@@ -19,7 +22,7 @@ jobs:
           fetch-depth: 0
 
       - name: Get base branch
-        run: echo "BASE_REF=${{ github.event.pull_request.base.ref }}" >> $GITHUB_ENV
+        run: echo "BASE_REF=${{ github.event.pull_request.base.ref || 'main' }}" >> $GITHUB_ENV
 
       - name: Checkout base manifest.json
         run: |
@@ -46,6 +49,7 @@ jobs:
 
       - name: Determine bump type from PR labels
         id: bump
+        if: github.event_name == 'pull_request'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -106,7 +110,7 @@ jobs:
           echo "SUGGESTED_VERSION=$EXPECTED_VERSION" >> $GITHUB_OUTPUT
 
       - name: Comment on PR if version unchanged
-        if: steps.compare.outputs.unchanged == 'true'
+        if: github.event_name == 'pull_request' && steps.compare.outputs.unchanged == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -151,7 +155,7 @@ jobs:
           exit 1
 
       - name: Comment if version number is incorrect
-        if: steps.bump.outputs.RECOMMENDED_BUMP != 'none' && steps.bump.outputs.SUGGESTED_VERSION != format('v{0}', steps.compare.outputs.pr_version)
+        if: github.event_name == 'pull_request' && steps.bump.outputs.RECOMMENDED_BUMP != 'none' && steps.bump.outputs.SUGGESTED_VERSION != format('v{0}', steps.compare.outputs.pr_version)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
