@@ -36,7 +36,7 @@ def _energy(g, x, y, w, h, cfg, state):
         x, y, w, h,
         solar=state["solar"], battery_soc=state["soc"], is_charging=state["charging"],
         mode=state["energy_mode"], consumption=state["consumption"],
-        battery_animation=state["battery_animation"],
+        battery_animation=state["battery_animation"], decimals=int(cfg.get("decimals", 1)),
     )
 
 
@@ -62,6 +62,14 @@ def _clock_box(cfg):
 def _sun_moon_box(cfg):
     s = int(cfg.get("size", 7))
     return (s, s)
+
+
+def _energy_box(cfg):
+    # battery(4)+gap(1) + value field. integer digit = 4px, decimal point = 2px, each dp = 4px.
+    d = max(1, int(cfg.get("digits", 1)))
+    k = max(0, int(cfg.get("decimals", 1)))
+    value = d * 4 + (2 + k * 4 if k > 0 else 0) - 1
+    return (5 + value, 5)
 
 
 def _weekdays_box(cfg):
@@ -96,8 +104,12 @@ WIDGET_REGISTRY = {
     },
     "energy": {
         "label": "Energy (battery + value)", "w": 14, "h": 5, "variants": [],
-        "default_cfg": {}, "cfg_fields": [],
-        "box": None, "render": _energy,
+        "default_cfg": {"digits": 1, "decimals": 1},
+        "cfg_fields": [
+            {"key": "digits", "type": "number", "min": 1, "max": 3, "step": 1, "label": "Range (int digits)"},
+            {"key": "decimals", "type": "number", "min": 0, "max": 2, "step": 1, "label": "Decimals"},
+        ],
+        "box": _energy_box, "render": _energy,
     },
     "sun_moon": {
         "label": "Sun / Moon", "w": 7, "h": 7, "variants": [],

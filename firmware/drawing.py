@@ -160,7 +160,7 @@ def draw_battery(x, y, soc, is_charging, battery_animation):
 
 
 def draw_energy(x, y, w, h, solar=0.0, battery_soc=0, is_charging=False,
-                mode="Net", consumption=0.0, battery_animation=False):
+                mode="Net", consumption=0.0, battery_animation=False, decimals=1):
     """Battery indicator plus the left-aligned energy value, top-left at (x, y)."""
     draw_battery(x, y, battery_soc, is_charging, battery_animation)
     if mode == "Consumption":
@@ -170,7 +170,7 @@ def draw_energy(x, y, w, h, solar=0.0, battery_soc=0, is_charging=False,
     else:
         val = solar
     _g.set_pen(_energy_colour(solar, consumption, mode, battery_soc))
-    _bitfont.draw_text(f"{val:.1f}", x + 5, y, font3x5, d=1)
+    _bitfont.draw_text(f"{val:.{decimals}f}", x + 5, y, font3x5, d=1)
 
 
 def draw_sun_moon(x, y, w, h, solar=0.0, sun_below_horizon=False):

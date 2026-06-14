@@ -98,7 +98,8 @@ async def ws_render(hass, connection, msg):
     """Render a layout to a base64 PNG using the device's own render code."""
     png = await hass.async_add_executor_job(
         render_service.render_layout_png, msg["model"], msg["layout"], msg.get("sensors"))
-    connection.send_result(msg["id"], {"png": png})
+    boxes = render_service.layout_boxes(msg["layout"])
+    connection.send_result(msg["id"], {"png": png, "boxes": boxes})
 
 
 @websocket_api.websocket_command({

@@ -74,6 +74,20 @@ def _sensors_dict(sensors):
     return out
 
 
+def layout_boxes(layout: dict) -> list:
+    """Per-widget [w, h] boxes for the layout, computed by the real widget_box."""
+    *_, widgets, _ = _modules()
+    out = []
+    for entry in layout.get("widgets", []):
+        meta = widgets.WIDGET_REGISTRY.get(entry.get("id"))
+        if meta is None:
+            out.append([0, 0])
+            continue
+        cfg = {**meta["default_cfg"], **entry.get("cfg", {})}
+        out.append(list(widgets.widget_box(entry["id"], cfg)))
+    return out
+
+
 def render_layout_png(model: str, layout: dict, sensors=None) -> str:
     """Render a layout (and any display sensors) for a model; return a base64 PNG."""
     from PIL import Image

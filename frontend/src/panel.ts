@@ -42,6 +42,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private defaultLayout: Layout = { widgets: [] };
   @state() private stored: Record<string, Layout> = {};
   @state() private png = "";
+  @state() private wboxes: Size[] = [];
   @state() private dims: Size = [53, 11];
   @state() private selected = -1;
   @state() private sensors: Sensor[] = [];
@@ -113,7 +114,7 @@ export class PimoroniUnicornPanel extends LitElement {
     const [W, H] = this.dims;
     if (this.selected >= 0 && this.layout.widgets[this.selected]) {
       const entry = this.layout.widgets[this.selected];
-      const [bw, bh] = this.boxDims(entry);
+      const [bw, bh] = this.boxDims(this.selected);
       entry.x = Math.max(1 - bw, Math.min(W - 1, entry.x + dx));
       entry.y = Math.max(1 - bh, Math.min(H - 1, entry.y + dy));
       this.edited();
@@ -191,6 +192,7 @@ export class PimoroniUnicornPanel extends LitElement {
     try {
       const res = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: this.layout, sensors: this.renderSensors() });
       this.png = res.png;
+      this.wboxes = res.boxes ?? [];
       if (this.status.startsWith("Render failed")) this.status = "";
     } catch (err: any) {
       this.png = "";
@@ -214,13 +216,13 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private capFor(id: string): WidgetCap | undefined { return this.caps.find((c) => c.id === id); }
   private get scale(): number { return Math.max(4, Math.floor(PREVIEW_TARGET_PX / this.dims[0])); }
-  private boxDims(entry: WidgetEntry): Size {
-    const cap = this.capFor(entry.id);
-    if (!cap) return [0, 0];
-    const size = this.cfgVal(entry, "size");
-    if (typeof size === "number") return [size, size];
-    const v = this.cfgVal(entry, "variant") as string;
-    return cap.sizes?.[v] ?? [cap.w, cap.h];
+  // Box dims come from the backend (computed by the real widget_box), so any
+  // cfg-driven sizing (variant, size, digits…) is correct without client logic.
+  private boxDims(i: number): Size {
+    const b = this.wboxes[i];
+    if (b) return b;
+    const cap = this.capFor(this.layout.widgets[i]?.id ?? "");
+    return cap ? [cap.w, cap.h] : [0, 0];
   }
   private cfgVal(entry: WidgetEntry, key: string): unknown {
     return entry.cfg?.[key] ?? this.capFor(entry.id)?.default_cfg[key];
@@ -230,7 +232,7 @@ export class PimoroniUnicornPanel extends LitElement {
     this.edited();
   }
   private setPos(entry: WidgetEntry, axis: "x" | "y", value: number): void {
-    const [bw, bh] = this.boxDims(entry);
+    const [bw, bh] = this.boxDims(this.selected);
     const [W, H] = this.dims;
     const v = Math.round(value);
     if (axis === "x") entry.x = Math.max(1 - bw, Math.min(W - 1, v));
@@ -247,7 +249,7 @@ export class PimoroniUnicornPanel extends LitElement {
     ev.preventDefault();
     this.selected = idx;
     const entry = this.layout.widgets[idx];
-    const [bw, bh] = this.boxDims(entry);
+    const [bw, bh] = this.boxDims(idx);
     const grid = this.layout.grid ?? 2;
     const [W, H] = this.dims;
     const sx = ev.clientX, sy = ev.clientY, ox = entry.x, oy = entry.y;
@@ -435,7 +437,7 @@ export class PimoroniUnicornPanel extends LitElement {
             <div class="grid" style=${gridStyle}></div>
             ${this.wireframe ? html`<div class="boxes">${this.layout.widgets.map((w, i) => {
               if (!this.capFor(w.id) || w.enabled === false) return "";
-              const [bw, bh] = this.boxDims(w);
+              const [bw, bh] = this.boxDims(i);
               return html`<div class="box ${i === this.selected ? "sel" : ""}"
                 style=${`left:${w.x * s}px;top:${w.y * s}px;width:${bw * s}px;height:${bh * s}px`}
                 @pointerdown=${(e: PointerEvent) => this.startDrag(i, e)}>
