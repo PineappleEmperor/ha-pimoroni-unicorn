@@ -102,6 +102,12 @@ Message text scrolls alongside the animation. Supports `color`, `bg_color`, `ani
 
 For bulk preview or generating firmware built-ins there is a dev-side helper: `python scripts/fetch_lametric_icon.py 100-160` renders a labelled preview grid; `--json`/`--builtin` emit device and firmware formats.
 
+### Layout editor
+
+Each Unicorn model has a configurable display layout (which widgets — clock, calendar, weekday bars, solar/energy — sit where, with per-widget variant and colour). Edit it visually from the **Unicorn Layout** panel in the HA sidebar: pick a device, drag widgets on a pixel-accurate preview (rendered by the device's own code in the backend), then **Save & Push** to store the named layout and send it to the device over MQTT — no reflash. Layouts can also be authored in the terminal emulator (`scripts/emulate.py layout`) and imported under **Configure → Import layout**.
+
+The panel frontend is a Lit/TypeScript bundle built from `frontend/` (`npm run build`) into `custom_components/pimoroni_unicorn/panel/editor.js`.
+
 ### Energy mode
 
 Cycle display between **Solar**, **Consumption**, and **Net** via the `<device_id>/energy_mode/set` MQTT topic or HA select entity.

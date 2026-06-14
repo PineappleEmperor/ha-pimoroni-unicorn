@@ -1,0 +1,35 @@
+name: Frontend build
+
+on:
+  push:
+    paths:
+      - "frontend/**"
+      - "custom_components/pimoroni_unicorn/panel/**"
+      - ".github/workflows/frontend_build.yml"
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "custom_components/pimoroni_unicorn/panel/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install and type-check
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run check
+
+      - name: Build bundle
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify committed bundle matches build
+        run: git diff --exit-code custom_components/pimoroni_unicorn/panel/editor.js

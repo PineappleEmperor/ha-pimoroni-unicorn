@@ -186,3 +186,6 @@ cython_debug/
 # Emulator local authoring output
 scripts/emulator/.device_icons/
 scripts/emulator/layouts/
+
+# Frontend build deps
+frontend/node_modules/
