@@ -14,13 +14,14 @@ WS_LAYOUTS        = "pimoroni_unicorn/layouts"
 WS_RENDER         = "pimoroni_unicorn/render"
 WS_SAVE_LAYOUT    = "pimoroni_unicorn/save_layout"
 WS_PUSH_LAYOUT    = "pimoroni_unicorn/push_layout"
+WS_DELETE_LAYOUT  = "pimoroni_unicorn/delete_layout"
 
 
 @callback
 def async_register(hass: HomeAssistant) -> None:
     """Register all layout-editor websocket commands (once)."""
     for handler in (ws_devices, ws_capabilities, ws_layouts, ws_render,
-                    ws_save_layout, ws_push_layout):
+                    ws_save_layout, ws_push_layout, ws_delete_layout):
         websocket_api.async_register_command(hass, handler)
 
 
@@ -128,4 +129,15 @@ async def ws_push_layout(hass, connection, msg):
         connection.send_error(msg["id"], "not_found", "Unknown device")
         return
     await layout.async_push_layout(hass, layout.entry_device_id(entry), msg["layout"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_DELETE_LAYOUT,
+    vol.Required("name"): str,
+})
+@websocket_api.async_response
+async def ws_delete_layout(hass, connection, msg):
+    """Remove a stored named layout."""
+    await layout.async_remove_layout(hass, msg["name"])
     connection.send_result(msg["id"], {"ok": True})

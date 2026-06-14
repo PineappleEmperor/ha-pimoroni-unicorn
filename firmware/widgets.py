@@ -61,21 +61,32 @@ WIDGET_REGISTRY = {
     "clock": {
         "label": "Clock", "w": 23, "h": 7, "variants": ["big", "small", "tiny"],
         "default_cfg": {"variant": "big", "color": [255, 255, 255]},
+        "cfg_fields": [
+            {"key": "variant", "type": "select", "options": ["big", "small", "tiny"]},
+            {"key": "color", "type": "rgb", "label": "Colour"},
+        ],
         "box": _clock_box, "render": _clock,
     },
     "calendar": {
         "label": "Calendar", "w": 9, "h": 10, "variants": [],
         "default_cfg": {"header_color": [200, 0, 0]},
+        "cfg_fields": [{"key": "header_color", "type": "rgb", "label": "Header"}],
         "box": None, "render": _calendar,
     },
     "weekdays": {
         "label": "Weekdays", "w": 20, "h": 3, "variants": ["big", "small"],
         "default_cfg": {"variant": "big", "active": [0, 0, 128], "inactive": [60, 60, 60]},
+        "cfg_fields": [
+            {"key": "variant", "type": "select", "options": ["big", "small"]},
+            {"key": "active", "type": "rgb", "label": "Active"},
+            {"key": "inactive", "type": "rgb", "label": "Inactive"},
+        ],
         "box": _weekdays_box, "render": _weekdays,
     },
     "solar": {
         "label": "Solar/Energy", "w": 16, "h": 11, "variants": [],
-        "default_cfg": {}, "box": None, "render": _solar,
+        "default_cfg": {}, "cfg_fields": [],
+        "box": None, "render": _solar,
     },
 }
 
@@ -111,7 +122,11 @@ def render_layout(g, layout, state):
 
 LAYOUT_CAPABILITIES = {
     "widgets": [
-        {"id": wid, "label": m["label"], "w": m["w"], "h": m["h"], "variants": m["variants"]}
+        {
+            "id": wid, "label": m["label"], "w": m["w"], "h": m["h"],
+            "variants": m["variants"], "default_cfg": m["default_cfg"],
+            "cfg_fields": m["cfg_fields"],
+        }
         for wid, m in WIDGET_REGISTRY.items()
     ],
     "overlays": [{"id": oid, "label": m["label"]} for oid, m in OVERLAY_REGISTRY.items()],
