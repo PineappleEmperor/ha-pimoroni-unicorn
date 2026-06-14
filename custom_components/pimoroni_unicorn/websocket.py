@@ -53,17 +53,19 @@ def ws_devices(hass, connection, msg):
 
 @websocket_api.websocket_command({
     vol.Required("type"): WS_CAPABILITIES,
-    vol.Required("entry_id"): str,
+    vol.Optional("entry_id"): str,
+    vol.Optional("model"): vol.In(list(render_service.MODEL_DIMS)),
 })
 @callback
 def ws_capabilities(hass, connection, msg):
-    """Return the widget catalogue + model default layout for a device."""
-    entry = _entry(hass, msg["entry_id"])
-    if entry is None:
-        connection.send_error(msg["id"], "not_found", "Unknown device")
-        return
-    model = _model_key(entry)
-    caps  = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("layout_caps")
+    """Widget catalogue + model default layout, for a device or a bare model (mock)."""
+    caps = None
+    entry = _entry(hass, msg["entry_id"]) if msg.get("entry_id") else None
+    if entry is not None:
+        model = _model_key(entry)
+        caps  = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("layout_caps")
+    else:
+        model = msg.get("model", "galactic")
     if not caps:
         caps = render_service.layout_capabilities()
     connection.send_result(msg["id"], {
