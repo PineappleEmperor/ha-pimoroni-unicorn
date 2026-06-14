@@ -96,7 +96,7 @@ WIDGET_REGISTRY = {
         "box": _weekdays_box, "render": _weekdays,
     },
     "energy": {
-        "label": "Energy (battery + value)", "w": 19, "h": 5, "variants": [],
+        "label": "Energy (battery + value)", "w": 14, "h": 5, "variants": [],
         "default_cfg": {}, "cfg_fields": [],
         "box": None, "render": _energy,
     },
