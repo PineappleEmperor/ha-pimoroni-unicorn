@@ -6,7 +6,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from . import layout, render_service
-from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN, UNICORN_MODEL_KEYS
+from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN
 
 WS_DEVICES        = "pimoroni_unicorn/devices"
 WS_CAPABILITIES   = "pimoroni_unicorn/capabilities"
@@ -86,7 +86,7 @@ async def ws_layouts(hass, connection, msg):
 
 @websocket_api.websocket_command({
     vol.Required("type"): WS_RENDER,
-    vol.Required("model"): vol.In(UNICORN_MODEL_KEYS),
+    vol.Required("model"): vol.In(list(render_service.MODEL_DIMS)),
     vol.Required("layout"): dict,
 })
 @websocket_api.async_response

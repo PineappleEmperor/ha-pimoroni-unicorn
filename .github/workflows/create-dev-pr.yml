@@ -67,7 +67,7 @@ jobs:
               --head "$BRANCH"
             PR_NUMBER=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number')
           else
-            gh pr edit "$PR_NUMBER" --body "$BODY"
+            gh pr edit "$PR_NUMBER" --title "$TITLE" --body "$BODY"
           fi
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
 
@@ -85,5 +85,9 @@ jobs:
             chore|docs) LABEL="chore" ;;
             *)          exit 0 ;;
           esac
+          # Replace any stale type label so it reflects the current commits.
+          for L in feature fix chore; do
+            [ "$L" != "$LABEL" ] && gh pr edit "$PR_NUMBER" --remove-label "$L" 2>/dev/null || true
+          done
           gh label create "$LABEL" --force 2>/dev/null || true
           gh pr edit "$PR_NUMBER" --add-label "$LABEL"
