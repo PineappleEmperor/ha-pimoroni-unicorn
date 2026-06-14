@@ -50,7 +50,7 @@ def _clock_box(cfg):
 
 
 def _weekdays_box(cfg):
-    return (14, 2) if cfg.get("variant") == "small" else (20, 3)
+    return (13, 2) if cfg.get("variant") == "small" else (20, 1)
 
 
 WIDGET_REGISTRY = {
@@ -70,7 +70,7 @@ WIDGET_REGISTRY = {
         "box": None, "render": _calendar,
     },
     "weekdays": {
-        "label": "Weekdays", "w": 20, "h": 3, "variants": ["big", "small"],
+        "label": "Weekdays", "w": 20, "h": 1, "variants": ["big", "small"],
         "default_cfg": {"variant": "big", "active": [0, 0, 128], "inactive": [60, 60, 60]},
         "cfg_fields": [
             {"key": "variant", "type": "select", "options": ["big", "small"]},
@@ -80,7 +80,7 @@ WIDGET_REGISTRY = {
         "box": _weekdays_box, "render": _weekdays,
     },
     "solar": {
-        "label": "Solar/Energy", "w": 16, "h": 11, "variants": [],
+        "label": "Solar/Energy", "w": 20, "h": 11, "variants": [],
         "default_cfg": {}, "cfg_fields": [],
         "box": None, "render": _solar,
     },
