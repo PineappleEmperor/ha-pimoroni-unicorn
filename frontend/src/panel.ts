@@ -44,6 +44,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private png = "";
   @state() private wboxes: Size[] = [];
   @state() private dims: Size = [53, 11];
+  @state() private zoom = 0;  // px per LED; 0 = auto-fit
   @state() private selected = -1;
   @state() private sensors: Sensor[] = [];
   @state() private selSensor = -1;
@@ -215,7 +216,7 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private capFor(id: string): WidgetCap | undefined { return this.caps.find((c) => c.id === id); }
-  private get scale(): number { return Math.max(4, Math.floor(PREVIEW_TARGET_PX / this.dims[0])); }
+  private get scale(): number { return this.zoom || Math.max(4, Math.floor(PREVIEW_TARGET_PX / this.dims[0])); }
   // Box dims come from the backend (computed by the real widget_box), so any
   // cfg-driven sizing (variant, size, digits…) is correct without client logic.
   private boxDims(i: number): Size {
@@ -426,6 +427,8 @@ export class PimoroniUnicornPanel extends LitElement {
             ${[1, 2, 4].map((n) => html`<option ?selected=${(this.layout.grid ?? 2) === n}>${n}</option>`)}
           </select>
         </label>
+        <label>Zoom <input type="range" min="4" max="48" .value=${String(this.scale)}
+          @input=${(e: Event) => (this.zoom = +(e.target as HTMLInputElement).value)} /></label>
         <label><input type="checkbox" .checked=${this.wireframe} @change=${(e: Event) => (this.wireframe = (e.target as HTMLInputElement).checked)} /> wireframe</label>
         <label><input type="checkbox" .checked=${this.live} ?disabled=${!this.entryId} @change=${(e: Event) => (this.live = (e.target as HTMLInputElement).checked)} /> live push</label>
       </div>

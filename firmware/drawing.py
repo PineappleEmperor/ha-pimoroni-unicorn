@@ -174,15 +174,26 @@ def draw_energy(x, y, w, h, solar=0.0, battery_soc=0, is_charging=False,
 
 
 def draw_sun_moon(x, y, w, h, solar=0.0, sun_below_horizon=False):
-    """Draw a sun (day) or moon (night) pip filling the w*h box at (x, y)."""
+    """Draw a sun (day) or moon (night) filled disc in the w*h box at (x, y).
+
+    Uses explicit pixels (not _g.circle) so the device and the CPython shim
+    render an identical shape.
+    """
     if solar >= 0.1:
         _g.set_pen(_SUN_YELLOW)
     elif sun_below_horizon:
         _g.set_pen(_MOON_SILVER)
     else:
         return
-    r = (min(w, h) - 1) // 2
-    _g.circle(x + r, y + r, r)
+    d = min(w, h)
+    r = (d - 1) / 2.0
+    lim = (r + 0.5) * (r + 0.5)
+    for iy in range(d):
+        for ix in range(d):
+            dx = ix - r
+            dy = iy - r
+            if dx * dx + dy * dy <= lim:
+                _g.pixel(x + ix, y + iy)
 
 
 def draw_custom_digit(digit_idx, x, y, colour, background=None):
@@ -237,14 +248,6 @@ def draw_clock(x, t=None, y=1, variant="big", color=None):
         draw_big_custom_digit(digit, x + i * BIG_DIGIT_STEP, y, pen)
 
 
-def draw_tiny_clock():
-    """Draw HH:MM in the top-left corner using the bitmap6 font."""
-    t = time.localtime()
-    _g.set_font("bitmap6")
-    _g.set_pen(_WHITE)
-    _g.text(f"{t[3]:02d}:{t[4]:02d}", 1, 0, scale=1)
-
-
 def draw_calendar(day_val, x, y, header_color):
     """Draw a post-it style calendar widget showing day_val at (x, y)."""
     _g.set_pen(header_color)
@@ -285,28 +288,28 @@ def draw_display_sensors(display_sensors):
 
 
 def draw_icon(icon_type, x, y):
-    """Draw a small icon (alert/home/check) at (x, y)."""
+    """Draw a small status icon (alert/home/check) at (x, y) with explicit pixels.
+
+    Pixel-only (no triangle/line) so device and emulator render identically.
+    """
     if icon_type == "alert":
         _g.set_pen(_RED)
         _g.rectangle(x + 2, y, 1, 5)
         _g.pixel(x + 2, y + 6)
     elif icon_type == "home":
         _g.set_pen(_CYAN)
-        _g.triangle(x + 2, y, x, y + 3, x + 4, y + 3)
-        _g.rectangle(x, y + 3, 5, 4)
+        _g.pixel(x + 2, y)                       # roof apex
+        for px in (x + 1, x + 2, x + 3):
+            _g.pixel(px, y + 1)
+        for px in range(x, x + 5):
+            _g.pixel(px, y + 2)
+        _g.rectangle(x, y + 3, 5, 4)             # body
     elif icon_type == "check":
         _g.set_pen(_GREEN)
-        _g.line(x, y + 3, x + 2, y + 5)
-        _g.line(x + 2, y + 5, x + 5, y)
-
-
-def draw_outlined_text(text, x, y, color):
-    """Draw text with a single-pixel black outline at (x, y)."""
-    _g.set_pen(_BLACK)
-    for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-        _g.text(text, x + ox, y + oy, scale=1)
-    _g.set_pen(color)
-    _g.text(text, x, y, scale=1)
+        for i in range(3):                       # down-stroke
+            _g.pixel(x + i, y + 1 + i)
+        for i in range(1, 4):                    # up-stroke
+            _g.pixel(x + 2 + i, y + 3 - i)
 
 
 def get_time_string():
