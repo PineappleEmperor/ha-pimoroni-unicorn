@@ -1,24 +1,14 @@
 send_notification:
-  name: Send notification
-  description: Show a notification on a Pimoroni Unicorn display.
   fields:
     device_id:
-      name: Device
-      description: The Pimoroni Unicorn device to notify.
       required: true
       selector:
         device:
           integration: pimoroni_unicorn
     message:
-      name: Message
-      description: Text to show (scrolls if it does not fit).
-      required: false
       selector:
         text: {}
     icon:
-      name: Icon
-      description: Built-in icon name, an installed LaMetric icon name, or its gallery code.
-      required: false
       selector:
         select:
           custom_value: true
@@ -38,9 +28,6 @@ send_notification:
             - rain
             - check
     effect:
-      name: Effect
-      description: Full-screen background animation.
-      required: false
       selector:
         select:
           options:
@@ -57,9 +44,6 @@ send_notification:
             - supercomputer
             - retroprompt
     sound:
-      name: Sound
-      description: Sound effect to play (audio models only).
-      required: false
       selector:
         select:
           options:
@@ -67,9 +51,6 @@ send_notification:
             - chime
             - alert
     duration:
-      name: Duration
-      description: Minimum seconds to show (auto-extends to finish scrolling text).
-      required: false
       selector:
         number:
           min: 1
@@ -77,31 +58,18 @@ send_notification:
           step: 0.5
           unit_of_measurement: s
     appearance:
-      name: Appearance
       collapsed: true
       fields:
         color:
-          name: Text colour
-          description: RGB colour for the message text (default white).
-          required: false
           selector:
             color_rgb: {}
         bg_color:
-          name: Background colour
-          description: RGB background colour (default black).
-          required: false
           selector:
             color_rgb: {}
         outlined:
-          name: Outlined text
-          description: Draw a black outline around the text.
-          required: false
           selector:
             boolean: {}
         entrance:
-          name: Entrance effect
-          description: Transition when the notification appears.
-          required: false
           selector:
             select:
               options:
@@ -111,100 +79,53 @@ send_notification:
                 - center_out
                 - fade
         scroll_speed:
-          name: Scroll speed
-          description: Text scroll speed multiplier (1 = default).
-          required: false
           selector:
             number:
               min: 0.1
               max: 5
               step: 0.1
         effect_speed:
-          name: Effect speed
-          description: Animation speed multiplier (1 = default).
-          required: false
           selector:
             number:
               min: 0.1
               max: 5
               step: 0.1
     behaviour:
-      name: Behaviour
       collapsed: true
       fields:
         hold:
-          name: Hold
-          description: Keep showing until dismissed or replaced.
-          required: false
           selector:
             boolean: {}
         repeat:
-          name: Repeat
-          description: Number of full scroll passes for overflowing text.
-          required: false
           selector:
             number:
               min: 1
               max: 10
               step: 1
         stack:
-          name: Stack
-          description: If off, replace the current notification immediately.
-          required: false
           selector:
             boolean: {}
         wakeup:
-          name: Wake up
-          description: Show even while the display is asleep.
-          required: false
           selector:
             boolean: {}
 
 dismiss_notification:
-  name: Dismiss notification
-  description: Dismiss the active notification on a Pimoroni Unicorn display.
   fields:
     device_id:
-      name: Device
-      description: The Pimoroni Unicorn device to dismiss on.
       required: true
       selector:
         device:
           integration: pimoroni_unicorn
     all:
-      name: Clear queue
-      description: Also clear any queued notifications.
-      required: false
       selector:
         boolean: {}
 
 generate_secrets:
-  name: Generate firmware secrets
-  description: >
-    Generates a secrets.py file for each configured Pimoroni Unicorn device,
-    pre-filled with the MQTT broker address, port, and username from your HA
-    MQTT config. WiFi credentials and MQTT password must be filled in manually.
-    Output is written to {config_dir}/pimoroni_unicorn/secrets_{device_id}.py
-    and a persistent notification is created with next steps.
   fields: {}
 
 push_firmware:
-  name: Push firmware to device
-  description: >
-    Stages firmware files and sends an OTA update command to the device over
-    MQTT. The device validates syntax, writes files, and reboots automatically.
-    If file_content is provided for a key, that content is used instead of
-    reading from disk. Source files must exist in
-    {config_dir}/pimoroni_unicorn/firmware/ when not using inline content.
   fields:
     files:
-      name: Files to push
-      description: >
-        Which firmware files to push. Defaults to main only. Common values:
-        main, bitfonts, monospace_digits, monospace_big_digits.
-        Any filename (with or without .py extension) is accepted — bare names
-        get .py appended automatically and are placed in the device root.
-      required: false
       default:
         - main
       selector:
@@ -222,10 +143,5 @@ push_firmware:
             - monospace_digits
             - monospace_big_digits
     file_content:
-      name: Inline file content
-      description: >
-        Optional map of file key to content string. Overrides disk files.
-        Example: {main: "# my main.py content"}
-      required: false
       selector:
         object: {}
