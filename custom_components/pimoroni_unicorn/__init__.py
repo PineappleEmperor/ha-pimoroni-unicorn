@@ -8,6 +8,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from homeassistant.components import frontend, panel_custom
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.mqtt import async_publish, async_subscribe
 from homeassistant.components.notify.const import DOMAIN as NOTIFY_DOMAIN
 from homeassistant.components.persistent_notification import (
@@ -20,7 +22,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 
-from . import layout
+from . import layout, websocket as ws_api
 from .const import (
     CONF_BATTERY_CHARGING_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -60,10 +62,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _setup_publishers(hass, entry)
     await _async_subscribe_ha_config(hass, entry)
+    await _async_subscribe_layout_caps(hass, entry)
     await _async_setup_display_sensors(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     await hass.config_entries.async_forward_entry_setups(entry, ["button"])
+
+    if not hass.data.get(f"{DOMAIN}_ws_registered"):
+        ws_api.async_register(hass)
+        hass.data[f"{DOMAIN}_ws_registered"] = True
+    await _async_register_panel(hass)
 
     if not hass.services.has_service(DOMAIN, SERVICE_GENERATE_SECRETS):
         hass.services.async_register(
@@ -101,8 +109,33 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_GENERATE_SECRETS)
         hass.services.async_remove(DOMAIN, SERVICE_PUSH_FIRMWARE)
         hass.services.async_remove(DOMAIN, SERVICE_SEND_NOTIFICATION)
+        if hass.data.pop(f"{DOMAIN}_panel_registered", False):
+            frontend.async_remove_panel(hass, PANEL_URL_PATH)
 
     return True
+
+
+PANEL_URL_PATH    = "pimoroni-unicorn"
+PANEL_MODULE_URL  = "/pimoroni_unicorn_panel/editor.js"
+
+
+async def _async_register_panel(hass: HomeAssistant) -> None:
+    """Serve the editor bundle and register the sidebar panel (once)."""
+    if hass.data.get(f"{DOMAIN}_panel_registered"):
+        return
+    await hass.http.async_register_static_paths([
+        StaticPathConfig(PANEL_MODULE_URL, str(Path(__file__).parent / "panel" / "editor.js"), False),
+    ])
+    await panel_custom.async_register_panel(
+        hass,
+        frontend_url_path=PANEL_URL_PATH,
+        webcomponent_name="pimoroni-unicorn-panel",
+        module_url=PANEL_MODULE_URL,
+        sidebar_title="Unicorn Layout",
+        sidebar_icon="mdi:view-grid",
+        require_admin=True,
+    )
+    hass.data[f"{DOMAIN}_panel_registered"] = True
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -127,6 +160,23 @@ async def _async_subscribe_ha_config(hass: HomeAssistant, entry: ConfigEntry) ->
             pass
 
     unsub = await async_subscribe(hass, f"{device_id}/ha_config", _on_ha_config)
+    hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
+
+
+async def _async_subscribe_layout_caps(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Subscribe to retained layout/capabilities and cache the widget catalogue."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+
+    @callback
+    def _on_caps(msg: Any) -> None:
+        try:
+            data = json.loads(msg.payload)
+            if isinstance(data, dict) and entry.entry_id in hass.data.get(DOMAIN, {}):
+                hass.data[DOMAIN][entry.entry_id]["layout_caps"] = data
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    unsub = await async_subscribe(hass, f"{device_id}/layout/capabilities", _on_caps)
     hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
 
 

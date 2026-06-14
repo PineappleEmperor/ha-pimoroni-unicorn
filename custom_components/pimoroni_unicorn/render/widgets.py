@@ -1,3 +1,4 @@
+# AUTO-GENERATED from firmware/ by scripts/sync_render.py — do not edit.
 """Widget registry mapping layout entries to drawing primitives.
 
 Each widget render has the uniform signature render(g, x, y, w, h, cfg, state).
@@ -5,8 +6,8 @@ state is a per-frame dict; cfg is per-instance config (variant, colours).
 Overlays (e.g. weather) render full-screen after positioned widgets.
 """
 
-import drawing
-import weather_fx
+from . import drawing
+from . import weather_fx
 
 
 def _pen(g, rgb, default):
