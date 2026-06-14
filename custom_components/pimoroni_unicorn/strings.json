@@ -18,7 +18,7 @@
     "step": {
       "init": {
         "title": "Pimoroni Unicorn Options",
-        "description": "Display sensors:\n{sensors}\n\nInstalled icons:\n{icons}",
+        "description": "Display sensors:\n{sensors}\n\nInstalled icons:\n{icons}\n\nLayouts:\n{layouts}",
         "menu_options": {
           "settings": "Configure settings",
           "add_display_sensor": "Add display sensor",
@@ -26,6 +26,9 @@
           "remove_display_sensor": "Remove display sensor",
           "add_icon": "Install LaMetric icon",
           "remove_icon": "Remove installed icon",
+          "import_layout": "Import layout (from emulator)",
+          "select_layout": "Select active layout",
+          "toggle_widgets": "Enable/disable widgets",
           "save": "Save & close"
         }
       },
@@ -96,11 +99,32 @@
         "data": {
           "icon_name": "Select icon to remove"
         }
+      },
+      "import_layout": {
+        "title": "Import layout",
+        "description": "Paste a layout JSON authored in the emulator (scripts/emulate.py layout). It is stored by its name and pushed to this device.",
+        "data": {
+          "layout_json": "Layout JSON"
+        }
+      },
+      "select_layout": {
+        "title": "Select active layout",
+        "data": {
+          "layout_name": "Layout"
+        }
+      },
+      "toggle_widgets": {
+        "title": "Enable/disable widgets",
+        "description": "Selected widgets are shown; unselected are hidden.",
+        "data": {
+          "widgets": "Visible widgets"
+        }
       }
     },
     "error": {
       "icon_not_found": "No icon found for that code, or the gallery is unreachable.",
-      "name_taken": "That name is already used by a built-in icon."
+      "name_taken": "That name is already used by a built-in icon.",
+      "invalid_layout": "Not a valid layout JSON (needs a \"widgets\" list)."
     }
   }
 }

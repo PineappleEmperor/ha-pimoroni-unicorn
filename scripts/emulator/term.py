@@ -66,10 +66,15 @@ class Keyboard:
     def __exit__(self, *exc):
         termios.tcsetattr(self._fd, termios.TCSADRAIN, self._saved)
 
+    _ARROWS = {"[A": "UP", "[B": "DOWN", "[C": "RIGHT", "[D": "LEFT"}
+
     def poll(self):
-        if select.select([sys.stdin], [], [], 0)[0]:
-            return sys.stdin.read(1)
-        return None
+        if not select.select([sys.stdin], [], [], 0)[0]:
+            return None
+        ch = sys.stdin.read(1)
+        if ch == "\x1b" and select.select([sys.stdin], [], [], 0.002)[0]:
+            return self._ARROWS.get(sys.stdin.read(2), "\x1b")
+        return ch
 
 
 def is_tty():

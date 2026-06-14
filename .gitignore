@@ -181,4 +181,8 @@ cython_debug/
 .history/
 
 # Built Visual Studio Code Extensions
-*.vsixscripts/emulator/.device_icons/
+*.vsix
+
+# Emulator local authoring output
+scripts/emulator/.device_icons/
+scripts/emulator/layouts/

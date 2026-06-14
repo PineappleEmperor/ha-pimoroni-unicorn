@@ -100,6 +100,22 @@ def reload_display(graphics, width, height):
     return load_display(graphics, width, height)
 
 
+def load_layout(graphics, width, height):
+    """Import firmware widgets + layouts (and their drawing deps) against the shim."""
+    load_display(graphics, width, height)
+    import layouts
+    import widgets
+    return widgets, layouts
+
+
+def reload_layout(graphics, width, height):
+    """Drop cached layout modules and re-import (hot reload)."""
+    for mod in ("widgets", "layouts", "drawing", "weather_fx", "bitfonts",
+                "monospace_digits", "monospace_big_digits"):
+        sys.modules.pop(mod, None)
+    return load_layout(graphics, width, height)
+
+
 def watched_mtimes():
     """Snapshot of watched firmware file mtimes for change detection."""
     snapshot = {}

@@ -20,6 +20,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 
+from . import layout
 from .const import (
     CONF_BATTERY_CHARGING_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -60,6 +61,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _setup_publishers(hass, entry)
     await _async_subscribe_ha_config(hass, entry)
     await _async_setup_display_sensors(hass, entry)
+    await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     await hass.config_entries.async_forward_entry_setups(entry, ["button"])
 
@@ -108,6 +110,7 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     await _async_subscribe_ha_config(hass, entry)
     await _async_publish_ha_config(hass, entry)
     await _async_setup_display_sensors(hass, entry)
+    await layout.async_push_active(hass, entry)
 
 
 async def _async_subscribe_ha_config(hass: HomeAssistant, entry: ConfigEntry) -> None:
