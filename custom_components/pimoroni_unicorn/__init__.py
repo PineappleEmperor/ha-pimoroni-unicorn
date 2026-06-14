@@ -20,7 +20,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 
-from . import layout
+from . import layout, websocket as ws_api
 from .const import (
     CONF_BATTERY_CHARGING_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -60,10 +60,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _setup_publishers(hass, entry)
     await _async_subscribe_ha_config(hass, entry)
+    await _async_subscribe_layout_caps(hass, entry)
     await _async_setup_display_sensors(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     await hass.config_entries.async_forward_entry_setups(entry, ["button"])
+
+    if not hass.data.get(f"{DOMAIN}_ws_registered"):
+        ws_api.async_register(hass)
+        hass.data[f"{DOMAIN}_ws_registered"] = True
 
     if not hass.services.has_service(DOMAIN, SERVICE_GENERATE_SECRETS):
         hass.services.async_register(
@@ -127,6 +132,23 @@ async def _async_subscribe_ha_config(hass: HomeAssistant, entry: ConfigEntry) ->
             pass
 
     unsub = await async_subscribe(hass, f"{device_id}/ha_config", _on_ha_config)
+    hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
+
+
+async def _async_subscribe_layout_caps(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Subscribe to retained layout/capabilities and cache the widget catalogue."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+
+    @callback
+    def _on_caps(msg: Any) -> None:
+        try:
+            data = json.loads(msg.payload)
+            if isinstance(data, dict) and entry.entry_id in hass.data.get(DOMAIN, {}):
+                hass.data[DOMAIN][entry.entry_id]["layout_caps"] = data
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    unsub = await async_subscribe(hass, f"{device_id}/layout/capabilities", _on_caps)
     hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
 
 

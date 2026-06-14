@@ -335,6 +335,8 @@ max-line-length-suggestions = 72
 
 [tool.ruff]
 required-version = ">=0.12.1"
+# render/ holds auto-generated firmware copies (see scripts/sync_render.py); lint the source in firmware/.
+extend-exclude = ["custom_components/pimoroni_unicorn/render"]
 
 [tool.ruff.lint]
 select = [
@@ -583,6 +585,8 @@ split-on-trailing-comma = false
 "script/*" = ["T20"]
 "scripts/*" = ["T201", "D103", "PTH123"]
 "scripts/emulator/*" = ["D1", "E731", "PLC0415", "PTH", "SLF001"]
+# render_service defers imports until MicroPython mocks are installed; module-level cache is intentional
+"custom_components/pimoroni_unicorn/render_service.py" = ["PLC0415", "PLW0603"]
 "scripts/emulate.py" = ["D1", "E731", "PLC0415", "PTH", "SLF001"]
 "scripts/emulator/font8.py" = ["PLR2044", "W291"]
 

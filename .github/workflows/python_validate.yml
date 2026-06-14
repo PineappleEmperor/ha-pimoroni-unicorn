@@ -27,3 +27,6 @@ jobs:
 
       - name: Run pyright
         run: pyright custom_components/
+
+      - name: Check render/ is in sync with firmware/
+        run: python scripts/check_render_sync.py

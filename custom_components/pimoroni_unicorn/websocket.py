@@ -1,0 +1,131 @@
+"""Websocket API backing the layout editor panel."""
+
+import voluptuous as vol
+
+from homeassistant.components import websocket_api
+from homeassistant.core import HomeAssistant, callback
+
+from . import layout, render_service
+from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN, UNICORN_MODEL_KEYS
+
+WS_DEVICES        = "pimoroni_unicorn/devices"
+WS_CAPABILITIES   = "pimoroni_unicorn/capabilities"
+WS_LAYOUTS        = "pimoroni_unicorn/layouts"
+WS_RENDER         = "pimoroni_unicorn/render"
+WS_SAVE_LAYOUT    = "pimoroni_unicorn/save_layout"
+WS_PUSH_LAYOUT    = "pimoroni_unicorn/push_layout"
+
+
+@callback
+def async_register(hass: HomeAssistant) -> None:
+    """Register all layout-editor websocket commands (once)."""
+    for handler in (ws_devices, ws_capabilities, ws_layouts, ws_render,
+                    ws_save_layout, ws_push_layout):
+        websocket_api.async_register_command(hass, handler)
+
+
+def _entry(hass, entry_id):
+    return hass.config_entries.async_get_entry(entry_id)
+
+
+def _model_key(entry) -> str:
+    model = {**entry.data, **entry.options}.get(CONF_MODEL, "")
+    return model if model in render_service.MODEL_DIMS else "galactic"
+
+
+@websocket_api.websocket_command({vol.Required("type"): WS_DEVICES})
+@callback
+def ws_devices(hass, connection, msg):
+    """List configured Pimoroni Unicorn devices."""
+    devices = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        opts = {**entry.data, **entry.options}
+        devices.append({
+            "entry_id":  entry.entry_id,
+            "device_id": opts.get(CONF_DEVICE_ID, ""),
+            "model":     _model_key(entry),
+            "name":      entry.title,
+            "active_layout": opts.get(layout.CONF_ACTIVE_LAYOUT),
+        })
+    connection.send_result(msg["id"], {"devices": devices})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_CAPABILITIES,
+    vol.Required("entry_id"): str,
+})
+@callback
+def ws_capabilities(hass, connection, msg):
+    """Return the widget catalogue + model default layout for a device."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown device")
+        return
+    model = _model_key(entry)
+    caps  = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("layout_caps")
+    if not caps:
+        caps = render_service.layout_capabilities()
+    connection.send_result(msg["id"], {
+        "model": model,
+        "widgets": caps.get("widgets", []),
+        "overlays": caps.get("overlays", []),
+        "default_layout": render_service.default_layout(model),
+    })
+
+
+@websocket_api.websocket_command({vol.Required("type"): WS_LAYOUTS})
+@websocket_api.async_response
+async def ws_layouts(hass, connection, msg):
+    """Return the stored named-layout registry."""
+    registry = await layout.async_get_registry(hass)
+    connection.send_result(msg["id"], {"layouts": registry})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_RENDER,
+    vol.Required("model"): vol.In(UNICORN_MODEL_KEYS),
+    vol.Required("layout"): dict,
+})
+@websocket_api.async_response
+async def ws_render(hass, connection, msg):
+    """Render a layout to a base64 PNG using the device's own render code."""
+    png = await hass.async_add_executor_job(
+        render_service.render_layout_png, msg["model"], msg["layout"])
+    connection.send_result(msg["id"], {"png": png})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_SAVE_LAYOUT,
+    vol.Required("entry_id"): str,
+    vol.Required("name"): str,
+    vol.Required("layout"): dict,
+})
+@websocket_api.async_response
+async def ws_save_layout(hass, connection, msg):
+    """Store a named layout, make it the device's active layout, and push it."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown device")
+        return
+    name = msg["name"]
+    await layout.async_save_layout(hass, name, msg["layout"])
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, layout.CONF_ACTIVE_LAYOUT: name})
+    await layout.async_push_layout(hass, layout.entry_device_id(entry), msg["layout"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_PUSH_LAYOUT,
+    vol.Required("entry_id"): str,
+    vol.Required("layout"): dict,
+})
+@websocket_api.async_response
+async def ws_push_layout(hass, connection, msg):
+    """Push a layout to a device without storing it (live preview)."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown device")
+        return
+    await layout.async_push_layout(hass, layout.entry_device_id(entry), msg["layout"])
+    connection.send_result(msg["id"], {"ok": True})
