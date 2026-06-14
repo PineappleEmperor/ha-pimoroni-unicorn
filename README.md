@@ -88,13 +88,14 @@ The Pico W connects to Wi-Fi, syncs NTP, connects to MQTT, and starts displaying
 
 ### Notifications
 
-Trigger via `notify.pimoroni_unicorn_<device_id>` or MQTT topic `<device_id>/notify`.
+Use the **`pimoroni_unicorn.send_notification`** action (sectioned UI: basics, plus collapsed Appearance and Behaviour), the `notify.pimoroni_unicorn_<device_id>` entity, or the MQTT topic `<device_id>/notify`. **`pimoroni_unicorn.dismiss_notification`** clears the active notification (`all: true` also empties the queue).
 
-**Animations:** `rainbow`, `fire`, `matrix`, `scanner`, `comet`, `snow`, `confetti`, `flash`, `pulse`, `bounce`, `supercomputer`, `retroprompt`
+A notification with an `icon` shows it in a left panel beside the text; an `effect` plays a full-screen background animation.
 
-**Sounds** (Galactic/Cosmic only — models with audio): `beep`, `chime`, `alert`
+**Effects:** `rainbow`, `fire`, `matrix`, `scanner`, `comet`, `snow`, `confetti`, `flash`, `pulse`, `bounce`, `supercomputer`, `retroprompt`
+**Sounds** (Galactic/Cosmic only): `beep`, `chime`, `alert`
 
-Message text scrolls alongside the animation. Supports `color`, `bg_color`, `animation`, `sound`, and `duration` data fields.
+Fields: `message`, `icon`, `effect`, `effect_speed`, `sound`, `color`, `bg_color`, `duration`, `scroll_speed`, `entrance`, `outlined`, plus behaviour — `hold` (stay until dismissed/replaced), `repeat` (full scroll passes), `stack` (off = replace immediately), `wakeup` (show while asleep). Duration auto-extends so overflowing text completes its scroll. Old `mode`/`animation`/`layout` payloads still render (legacy compatibility), and v2 calls auto-downconvert for pre-1.4.0 firmware.
 
 ### Icons
 

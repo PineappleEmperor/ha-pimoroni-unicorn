@@ -1,8 +1,6 @@
 send_notification:
   name: Send notification
-  description: >
-    Send a notification to a Pimoroni Unicorn display.
-    Simple mode: icon+text or fullscreen animation. Advanced mode: full layout control.
+  description: Show a notification on a Pimoroni Unicorn display.
   fields:
     device_id:
       name: Device
@@ -11,27 +9,15 @@ send_notification:
       selector:
         device:
           integration: pimoroni_unicorn
-    mode:
-      name: Mode
-      description: "simple: icon+text or fullscreen. advanced: explicit layout, entrance effects."
-      required: false
-      default: simple
-      selector:
-        select:
-          options:
-            - simple
-            - advanced
     message:
       name: Message
-      description: Text to scroll or display on screen.
+      description: Text to show (scrolls if it does not fit).
       required: false
       selector:
         text: {}
     icon:
       name: Icon
-      description: >
-        Named static icon or animation name to display in the left panel (simple mode)
-        or split panel (advanced mode). Animations scale to fit the panel.
+      description: Built-in icon name, an installed LaMetric icon name, or its gallery code.
       required: false
       selector:
         select:
@@ -51,21 +37,9 @@ send_notification:
             - cloud
             - rain
             - check
-            - rainbow
-            - fire
-            - matrix
-            - scanner
-            - comet
-            - snow
-            - confetti
-            - flash
-            - pulse
-            - bounce
-            - supercomputer
-            - retroprompt
-    animation:
-      name: Animation
-      description: Background animation to play alongside or instead of text.
+    effect:
+      name: Effect
+      description: Full-screen background animation.
       required: false
       selector:
         select:
@@ -84,7 +58,7 @@ send_notification:
             - retroprompt
     sound:
       name: Sound
-      description: Sound effect to play.
+      description: Sound effect to play (audio models only).
       required: false
       selector:
         select:
@@ -92,63 +66,114 @@ send_notification:
             - beep
             - chime
             - alert
-    color:
-      name: Text colour
-      description: RGB colour for message text (default white).
-      required: false
-      selector:
-        color_rgb: {}
-    bg_color:
-      name: Background colour
-      description: RGB background colour (default black).
-      required: false
-      selector:
-        color_rgb: {}
     duration:
       name: Duration
-      description: How long to show the notification in seconds (default 3).
+      description: Minimum seconds to show (auto-extends to finish scrolling text).
       required: false
-      default: 3
       selector:
         number:
           min: 1
           max: 60
           step: 0.5
           unit_of_measurement: s
-    entrance:
-      name: Entrance effect
-      description: Transition effect when the notification appears (advanced mode only).
-      required: false
+    appearance:
+      name: Appearance
+      collapsed: true
+      fields:
+        color:
+          name: Text colour
+          description: RGB colour for the message text (default white).
+          required: false
+          selector:
+            color_rgb: {}
+        bg_color:
+          name: Background colour
+          description: RGB background colour (default black).
+          required: false
+          selector:
+            color_rgb: {}
+        outlined:
+          name: Outlined text
+          description: Draw a black outline around the text.
+          required: false
+          selector:
+            boolean: {}
+        entrance:
+          name: Entrance effect
+          description: Transition when the notification appears.
+          required: false
+          selector:
+            select:
+              options:
+                - none
+                - slide_left
+                - slide_right
+                - center_out
+                - fade
+        scroll_speed:
+          name: Scroll speed
+          description: Text scroll speed multiplier (1 = default).
+          required: false
+          selector:
+            number:
+              min: 0.1
+              max: 5
+              step: 0.1
+        effect_speed:
+          name: Effect speed
+          description: Animation speed multiplier (1 = default).
+          required: false
+          selector:
+            number:
+              min: 0.1
+              max: 5
+              step: 0.1
+    behaviour:
+      name: Behaviour
+      collapsed: true
+      fields:
+        hold:
+          name: Hold
+          description: Keep showing until dismissed or replaced.
+          required: false
+          selector:
+            boolean: {}
+        repeat:
+          name: Repeat
+          description: Number of full scroll passes for overflowing text.
+          required: false
+          selector:
+            number:
+              min: 1
+              max: 10
+              step: 1
+        stack:
+          name: Stack
+          description: If off, replace the current notification immediately.
+          required: false
+          selector:
+            boolean: {}
+        wakeup:
+          name: Wake up
+          description: Show even while the display is asleep.
+          required: false
+          selector:
+            boolean: {}
+
+dismiss_notification:
+  name: Dismiss notification
+  description: Dismiss the active notification on a Pimoroni Unicorn display.
+  fields:
+    device_id:
+      name: Device
+      description: The Pimoroni Unicorn device to dismiss on.
+      required: true
       selector:
-        select:
-          options:
-            - none
-            - slide_left
-            - slide_right
-            - center_out
-            - fade
-    layout:
-      name: Layout
-      description: How animation/icon and text are arranged (advanced mode only).
-      required: false
-      selector:
-        select:
-          options:
-            - fullscreen
-            - split
-    split_width:
-      name: Animation panel width
-      description: Pixel width of the animation panel when layout is split.
-      required: false
-      selector:
-        number:
-          min: 1
-          max: 64
-          step: 1
-          unit_of_measurement: px
-    outlined:
-      name: Outlined text
-      description: Draw an outline around the message text.
+        device:
+          integration: pimoroni_unicorn
+    all:
+      name: Clear queue
+      description: Also clear any queued notifications.
       required: false
       selector:
         boolean: {}

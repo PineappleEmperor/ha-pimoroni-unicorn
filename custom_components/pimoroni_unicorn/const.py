@@ -67,3 +67,7 @@ NOTIFY_STATIC_ICONS = [
 ]
 
 NOTIFY_ENTRANCES = ["none", "slide_left", "slide_right", "center_out", "fade"]
+
+# v2 notification payload. NOTIFY_EFFECTS is the renamed concept for animations.
+NOTIFY_EFFECTS = NOTIFY_ANIMATIONS
+NOTIFY_PAYLOAD_VERSION = 2
