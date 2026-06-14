@@ -82,7 +82,7 @@
       },
       "add_icon": {
         "title": "Install LaMetric icon",
-        "description": "Enter an icon code from the LaMetric gallery (https://developer.lametric.com/icons). The icon is fetched and previewed before installing.",
+        "description": "Enter a numeric icon code from the LaMetric gallery. The icon is fetched and previewed before installing.",
         "data": {
           "code": "Icon code"
         }
