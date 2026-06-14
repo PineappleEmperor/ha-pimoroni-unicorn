@@ -60,6 +60,11 @@ def _clock_box(cfg):
     return (23, 7)
 
 
+def _sun_moon_box(cfg):
+    s = int(cfg.get("size", 7))
+    return (s, s)
+
+
 def _weekdays_box(cfg):
     return (13, 2) if cfg.get("variant") == "small" else (20, 1)
 
@@ -97,8 +102,9 @@ WIDGET_REGISTRY = {
     },
     "sun_moon": {
         "label": "Sun / Moon", "w": 7, "h": 7, "variants": [],
-        "default_cfg": {}, "cfg_fields": [],
-        "box": None, "render": _sun_moon,
+        "default_cfg": {"size": 7},
+        "cfg_fields": [{"key": "size", "type": "number", "min": 3, "max": 31, "step": 2, "label": "Size"}],
+        "box": _sun_moon_box, "render": _sun_moon,
     },
 }
 

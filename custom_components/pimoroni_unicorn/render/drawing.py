@@ -175,14 +175,15 @@ def draw_energy(x, y, w, h, solar=0.0, battery_soc=0, is_charging=False,
 
 
 def draw_sun_moon(x, y, w, h, solar=0.0, sun_below_horizon=False):
-    """Draw a sun (day) or moon (night) pip in a 7x7 box at (x, y)."""
+    """Draw a sun (day) or moon (night) pip filling the w*h box at (x, y)."""
     if solar >= 0.1:
         _g.set_pen(_SUN_YELLOW)
     elif sun_below_horizon:
         _g.set_pen(_MOON_SILVER)
     else:
         return
-    _g.circle(x + 3, y + 3, 3)
+    r = (min(w, h) - 1) // 2
+    _g.circle(x + r, y + r, r)
 
 
 def draw_custom_digit(digit_idx, x, y, colour, background=None):

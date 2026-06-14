@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
-interface CfgField { key: string; type: "select" | "rgb"; options?: string[]; label?: string; }
+interface CfgField { key: string; type: "select" | "rgb" | "number"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
 interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; }
 interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
@@ -150,6 +150,8 @@ export class PimoroniUnicornPanel extends LitElement {
   private boxDims(entry: WidgetEntry): Size {
     const cap = this.capFor(entry.id);
     if (!cap) return [0, 0];
+    const size = this.cfgVal(entry, "size");
+    if (typeof size === "number") return [size, size];
     const v = this.cfgVal(entry, "variant") as string;
     return cap.sizes?.[v] ?? [cap.w, cap.h];
   }
@@ -246,14 +248,23 @@ export class PimoroniUnicornPanel extends LitElement {
         <label>Y</label><input type="number" style="width:60px" .value=${String(entry.y)}
           @change=${(e: Event) => this.setPos(entry, "y", +(e.target as HTMLInputElement).value)} />
       </div>
-      ${cap.cfg_fields.map((f) => f.type === "select"
-        ? html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+      ${cap.cfg_fields.map((f) => {
+        if (f.type === "select") {
+          return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
             <select @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLSelectElement).value)}>
               ${(f.options ?? []).map((o) => html`<option ?selected=${this.cfgVal(entry, f.key) === o}>${o}</option>`)}
-            </select></div>`
-        : html`<div class="panelrow"><label>${f.label ?? f.key}</label>
-            <input type="color" .value=${hex(this.cfgVal(entry, f.key) as Rgb)}
-              @input=${(e: Event) => this.setCfg(entry, f.key, unhex((e.target as HTMLInputElement).value))} /></div>`)}
+            </select></div>`;
+        }
+        if (f.type === "number") {
+          return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+            <input type="number" style="width:60px" min=${f.min ?? 1} max=${f.max ?? 64} step=${f.step ?? 1}
+              .value=${String(this.cfgVal(entry, f.key))}
+              @change=${(e: Event) => this.setCfg(entry, f.key, +(e.target as HTMLInputElement).value)} /></div>`;
+        }
+        return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+          <input type="color" .value=${hex(this.cfgVal(entry, f.key) as Rgb)}
+            @input=${(e: Event) => this.setCfg(entry, f.key, unhex((e.target as HTMLInputElement).value))} /></div>`;
+      })}
       <div class="panelrow"><button class="danger" @click=${() => this.removeWidget(this.selected)}>Remove widget</button></div>
     `;
   }
