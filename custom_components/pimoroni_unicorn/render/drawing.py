@@ -250,11 +250,6 @@ def draw_clock(x, t=None, y=1, variant="big", color=None):
     if t is None:
         t = time.localtime()
     pen = _g.create_pen(*color) if color else _WHITE
-    if variant == "tiny":
-        _g.set_font("bitmap6")
-        _g.set_pen(pen)
-        _g.text(f"{t[3]:02d}:{t[4]:02d}", x, y, scale=1)
-        return
     digits = (t[3] // 10, t[3] % 10, t[4] // 10, t[4] % 10)
     if variant == "small":
         for i, digit in enumerate(digits):

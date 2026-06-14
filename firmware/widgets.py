@@ -45,12 +45,7 @@ def _weather(g, state):
 
 
 def _clock_box(cfg):
-    variant = cfg.get("variant")
-    if variant == "tiny":
-        return (18, 6)
-    if variant == "small":
-        return (15, 5)
-    return (23, 7)
+    return (15, 5) if cfg.get("variant") == "small" else (23, 7)
 
 
 def _weekdays_box(cfg):
@@ -59,10 +54,10 @@ def _weekdays_box(cfg):
 
 WIDGET_REGISTRY = {
     "clock": {
-        "label": "Clock", "w": 23, "h": 7, "variants": ["big", "small", "tiny"],
+        "label": "Clock", "w": 23, "h": 7, "variants": ["big", "small"],
         "default_cfg": {"variant": "big", "color": [255, 255, 255]},
         "cfg_fields": [
-            {"key": "variant", "type": "select", "options": ["big", "small", "tiny"]},
+            {"key": "variant", "type": "select", "options": ["big", "small"]},
             {"key": "color", "type": "rgb", "label": "Colour"},
         ],
         "box": _clock_box, "render": _clock,
