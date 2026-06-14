@@ -59,8 +59,22 @@ def layout_capabilities() -> dict:
     return widgets.LAYOUT_CAPABILITIES
 
 
-def render_layout_png(model: str, layout: dict) -> str:
-    """Render a layout for a model and return a base64-encoded PNG."""
+def _sensors_dict(sensors):
+    """Convert a list of render-shape sensors to the draw_display_sensors dict."""
+    out = {}
+    for i, s in enumerate(sensors or []):
+        out[str(i)] = {
+            "state":   bool(s.get("state")),
+            "on_rgb":  tuple(s.get("on_rgb", [0, 255, 0])),
+            "off_rgb": tuple(s.get("off_rgb", [20, 20, 20])),
+            "x":       int(s.get("x", 0)),
+            "y":       int(s.get("y", 0)),
+        }
+    return out
+
+
+def render_layout_png(model: str, layout: dict, sensors=None) -> str:
+    """Render a layout (and any display sensors) for a model; return a base64 PNG."""
     from PIL import Image
 
     PicoGraphics, bitfonts, drawing, weather_fx, widgets, _ = _modules()
@@ -74,6 +88,7 @@ def render_layout_png(model: str, layout: dict) -> str:
     g.set_pen(g.create_pen(0, 0, 0))
     g.clear()
     widgets.render_layout(g, layout, state)
+    drawing.draw_display_sensors(_sensors_dict(sensors))
 
     img = Image.new("RGB", (width, height))
     img.putdata(g.buffer)
