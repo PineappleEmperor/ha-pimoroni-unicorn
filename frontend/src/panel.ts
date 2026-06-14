@@ -160,6 +160,14 @@ export class PimoroniUnicornPanel extends LitElement {
     entry.cfg = { ...(entry.cfg ?? {}), [key]: value };
     this.edited();
   }
+  private setPos(entry: WidgetEntry, axis: "x" | "y", value: number): void {
+    const [bw, bh] = this.boxDims(entry);
+    const [W, H] = this.dims;
+    const v = Math.round(value);
+    if (axis === "x") entry.x = Math.max(1 - bw, Math.min(W - 1, v));
+    else entry.y = Math.max(1 - bh, Math.min(H - 1, v));
+    this.edited();
+  }
 
   private onImgLoad(e: Event): void {
     const img = e.target as HTMLImageElement;
@@ -232,7 +240,12 @@ export class PimoroniUnicornPanel extends LitElement {
     if (!cap) return "";
     return html`
       <h3>${cap.label}</h3>
-      <div class="panelrow"><label>X</label>${entry.x} <label>Y</label>${entry.y}</div>
+      <div class="panelrow">
+        <label>X</label><input type="number" style="width:60px" .value=${String(entry.x)}
+          @change=${(e: Event) => this.setPos(entry, "x", +(e.target as HTMLInputElement).value)} />
+        <label>Y</label><input type="number" style="width:60px" .value=${String(entry.y)}
+          @change=${(e: Event) => this.setPos(entry, "y", +(e.target as HTMLInputElement).value)} />
+      </div>
       ${cap.cfg_fields.map((f) => f.type === "select"
         ? html`<div class="panelrow"><label>${f.label ?? f.key}</label>
             <select @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLSelectElement).value)}>
@@ -272,6 +285,11 @@ export class PimoroniUnicornPanel extends LitElement {
         <label>Name <input .value=${this.layoutName} @input=${(e: Event) => (this.layoutName = (e.target as HTMLInputElement).value)} /></label>
         <button @click=${this.save} ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to save/push"}>Save &amp; Push</button>
         ${this.stored[this.layoutName] ? html`<button class="danger" @click=${this.deleteLayout}>Delete</button>` : ""}
+        <label>Snap
+          <select @change=${(e: Event) => { this.layout.grid = +(e.target as HTMLSelectElement).value; this.edited(); }}>
+            ${[1, 2, 4].map((n) => html`<option ?selected=${(this.layout.grid ?? 2) === n}>${n}</option>`)}
+          </select>
+        </label>
         <label><input type="checkbox" .checked=${this.wireframe} @change=${(e: Event) => (this.wireframe = (e.target as HTMLInputElement).checked)} /> wireframe</label>
         <label><input type="checkbox" .checked=${this.live} ?disabled=${!this.entryId} @change=${(e: Event) => (this.live = (e.target as HTMLInputElement).checked)} /> live push</label>
       </div>
