@@ -55,7 +55,7 @@ export class PimoroniUnicornPanel extends LitElement {
     button[disabled] { opacity: .5; cursor: not-allowed; }
     button.secondary { background: var(--secondary-background-color, #e0e0e0); color: var(--primary-text-color, #111); }
     button.danger { background: var(--error-color, #db4437); }
-    .stage { position: relative; display: inline-block; background: #000; line-height: 0; border: 1px solid var(--divider-color, #444); }
+    .stage { position: relative; display: inline-block; background: #000; line-height: 0; border: 1px solid var(--divider-color, #444); overflow: hidden; }
     .stage img { image-rendering: pixelated; display: block; }
     .grid, .boxes { position: absolute; inset: 0; pointer-events: none; }
     .boxes { pointer-events: none; }
@@ -178,8 +178,9 @@ export class PimoroniUnicornPanel extends LitElement {
     const move = (e: PointerEvent) => {
       const dx = Math.round((e.clientX - sx) / this.scale / grid) * grid;
       const dy = Math.round((e.clientY - sy) / this.scale / grid) * grid;
-      entry.x = Math.max(0, Math.min(W - bw, ox + dx));
-      entry.y = Math.max(0, Math.min(H - bh, oy + dy));
+      // Allow hanging off either edge, keeping at least 1px on screen.
+      entry.x = Math.max(1 - bw, Math.min(W - 1, ox + dx));
+      entry.y = Math.max(1 - bh, Math.min(H - 1, oy + dy));
       this.edited();
     };
     const up = () => {
