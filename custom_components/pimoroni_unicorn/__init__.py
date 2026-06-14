@@ -141,7 +141,7 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
         webcomponent_name="pimoroni-unicorn-panel",
         module_url=PANEL_MODULE_URL,
         sidebar_title="Unicorn Layout",
-        sidebar_icon="mdi:view-grid",
+        sidebar_icon="mdi:dots-grid",
         require_admin=True,
     )
     hass.data[f"{DOMAIN}_panel_registered"] = True
