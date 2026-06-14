@@ -588,6 +588,7 @@ split-on-trailing-comma = false
 # render_service defers imports until MicroPython mocks are installed; module-level cache is intentional
 "custom_components/pimoroni_unicorn/render_service.py" = ["PLC0415", "PLW0603"]
 "scripts/emulate.py" = ["D1", "E731", "PLC0415", "PTH", "SLF001"]
+"scripts/check_widget_boxes.py" = ["D103", "E731", "E402", "PTH"]
 "scripts/emulator/font8.py" = ["PLR2044", "W291"]
 
 # Allow relative imports within auth and within components

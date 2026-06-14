@@ -79,7 +79,7 @@ WIDGET_REGISTRY = {
         "box": _weekdays_box, "render": _weekdays,
     },
     "solar": {
-        "label": "Solar/Energy", "w": 16, "h": 11, "variants": [],
+        "label": "Solar/Energy", "w": 20, "h": 11, "variants": [],
         "default_cfg": {}, "cfg_fields": [],
         "box": None, "render": _solar,
     },

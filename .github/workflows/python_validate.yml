@@ -30,3 +30,6 @@ jobs:
 
       - name: Check render/ is in sync with firmware/
         run: python scripts/check_render_sync.py
+
+      - name: Check widget boxes match rendered output
+        run: python scripts/check_widget_boxes.py

@@ -14,7 +14,7 @@ DEFAULT_LAYOUTS = {
             {"id": "calendar", "x": 0,  "y": 0, "cfg": {"header_color": [200, 0, 0]}},
             {"id": "clock",    "x": 11, "y": 1, "cfg": {"variant": "big", "color": [255, 255, 255]}},
             {"id": "weekdays", "x": 12, "y": 9, "cfg": {"variant": "big", "active": [0, 0, 128], "inactive": [60, 60, 60]}},
-            {"id": "solar",    "x": 37, "y": 0, "cfg": {}},
+            {"id": "solar",    "x": 33, "y": 0, "cfg": {}},
         ],
         "overlays": ["weather"],
     },
@@ -23,7 +23,7 @@ DEFAULT_LAYOUTS = {
         "widgets": [
             {"id": "clock",    "x": 5,  "y": 2,  "cfg": {"variant": "big", "color": [255, 255, 255]}},
             {"id": "calendar", "x": 0,  "y": 11, "cfg": {"header_color": [200, 0, 0]}},
-            {"id": "solar",    "x": 16, "y": 11, "cfg": {}},
+            {"id": "solar",    "x": 12, "y": 11, "cfg": {}},
             {"id": "weekdays", "x": 6,  "y": 29, "cfg": {"variant": "big", "active": [0, 0, 128], "inactive": [60, 60, 60]}},
         ],
         "overlays": ["weather"],
