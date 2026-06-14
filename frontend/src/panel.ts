@@ -9,7 +9,7 @@ interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
 interface Layout { name?: string; model?: string; grid?: number; widgets: WidgetEntry[]; overlays?: string[]; }
 interface Device { entry_id: string; device_id: string; model: string; name: string; active_layout?: string; }
-interface Sensor { id: string; entity_id: string; name: string; on_color: string; off_color: string; x_pos: number; y_pos: number; spacing?: number; }
+interface Sensor { id: string; entity_id: string; name: string; on_color: string; off_color: string; x_pos: number; y_pos: number; size?: number; spacing?: number; }
 
 const PREVIEW_TARGET_PX = 560;
 const MODELS: Record<string, Size> = { galactic: [53, 11], cosmic: [32, 32], stellar: [16, 16] };
@@ -131,7 +131,7 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private renderSensors() {
     return this.sensors.map((s) => ({
-      x: s.x_pos, y: s.y_pos,
+      x: s.x_pos, y: s.y_pos, size: s.size ?? 2,
       on_rgb: unhex(s.on_color), off_rgb: unhex(s.off_color),
       state: s.entity_id ? this.hass?.states?.[s.entity_id]?.state === "on" : true,
     }));
@@ -249,13 +249,14 @@ export class PimoroniUnicornPanel extends LitElement {
     const s = this.sensors[i];
     const grid = this.layout.grid ?? 1;
     const [W, H] = this.dims;
+    const sz = s.size ?? 2;
     const sx = ev.clientX, sy = ev.clientY, ox = s.x_pos, oy = s.y_pos;
     (ev.target as HTMLElement).setPointerCapture(ev.pointerId);
     const move = (e: PointerEvent) => {
       const dx = Math.round((e.clientX - sx) / this.scale / grid) * grid;
       const dy = Math.round((e.clientY - sy) / this.scale / grid) * grid;
-      s.x_pos = Math.max(0, Math.min(W - 2, ox + dx));
-      s.y_pos = Math.max(0, Math.min(H - 2, oy + dy));
+      s.x_pos = Math.max(0, Math.min(W - sz, ox + dx));
+      s.y_pos = Math.max(0, Math.min(H - sz, oy + dy));
       this.edited();
     };
     const up = () => {
@@ -270,7 +271,7 @@ export class PimoroniUnicornPanel extends LitElement {
   private addSensor(): void {
     this.sensors.push({
       id: `sensor_${this.sensors.length + 1}`, entity_id: "", name: "Sensor",
-      on_color: "#00ff00", off_color: "#1a1a1a", x_pos: 0, y_pos: 0,
+      on_color: "#00ff00", off_color: "#1a1a1a", x_pos: 0, y_pos: 0, size: 2,
     });
     this.selSensor = this.sensors.length - 1;
     this.edited();
@@ -280,7 +281,7 @@ export class PimoroniUnicornPanel extends LitElement {
     this.selSensor = -1;
     this.edited();
   }
-  private setSensor(i: number, key: keyof Sensor, value: string): void {
+  private setSensor(i: number, key: keyof Sensor, value: string | number): void {
     (this.sensors[i] as any)[key] = value;
     this.edited();
   }
@@ -402,7 +403,7 @@ export class PimoroniUnicornPanel extends LitElement {
                 @pointerdown=${(e: PointerEvent) => this.startDrag(i, e)}>
                 <span class="tag">${w.id}</span></div>`;
             })}${this.sensors.map((sn, i) => html`<div class="box sensor ${i === this.selSensor ? "sel" : ""}"
-                style=${`left:${sn.x_pos * s}px;top:${sn.y_pos * s}px;width:${2 * s}px;height:${2 * s}px`}
+                style=${`left:${sn.x_pos * s}px;top:${sn.y_pos * s}px;width:${(sn.size ?? 2) * s}px;height:${(sn.size ?? 2) * s}px`}
                 @pointerdown=${(e: PointerEvent) => this.startSensorDrag(i, e)}></div>`)}</div>` : ""}
           </div>
           <div class="status ${this.status.startsWith("Render failed") ? "err" : ""}">${this.status}</div>
@@ -438,6 +439,8 @@ export class PimoroniUnicornPanel extends LitElement {
               </select>
               <input type="color" .value=${sn.on_color} @input=${(e: Event) => this.setSensor(i, "on_color", (e.target as HTMLInputElement).value)} title="On colour" />
               <input type="color" .value=${sn.off_color} @input=${(e: Event) => this.setSensor(i, "off_color", (e.target as HTMLInputElement).value)} title="Off colour" />
+              <input type="number" style="width:46px" min="1" max="16" .value=${String(sn.size ?? 2)}
+                @change=${(e: Event) => this.setSensor(i, "size", +(e.target as HTMLInputElement).value)} title="Size (px)" />
               <button class="danger" @click=${(e: Event) => { e.stopPropagation(); this.removeSensor(i); }}>✕</button>
             </div>`)}
           <div class="panelrow">

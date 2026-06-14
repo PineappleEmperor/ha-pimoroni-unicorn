@@ -69,6 +69,7 @@ def _sensors_dict(sensors):
             "off_rgb": tuple(s.get("off_rgb", [20, 20, 20])),
             "x":       int(s.get("x", 0)),
             "y":       int(s.get("y", 0)),
+            "size":    int(s.get("size", 2)),
         }
     return out
 
