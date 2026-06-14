@@ -174,14 +174,15 @@ def draw_energy(x, y, w, h, solar=0.0, battery_soc=0, is_charging=False,
 
 
 def draw_sun_moon(x, y, w, h, solar=0.0, sun_below_horizon=False):
-    """Draw a sun (day) or moon (night) pip in a 7x7 box at (x, y)."""
+    """Draw a sun (day) or moon (night) pip filling the w*h box at (x, y)."""
     if solar >= 0.1:
         _g.set_pen(_SUN_YELLOW)
     elif sun_below_horizon:
         _g.set_pen(_MOON_SILVER)
     else:
         return
-    _g.circle(x + 3, y + 3, 3)
+    r = (min(w, h) - 1) // 2
+    _g.circle(x + r, y + r, r)
 
 
 def draw_custom_digit(digit_idx, x, y, colour, background=None):
@@ -208,7 +209,7 @@ BIG_DIGIT_STEP = BIG_DIGIT_W + 1
 
 
 def draw_clock(x, t=None, y=1, variant="big", color=None):
-    """Draw HH:MM at (x, y). variant 'big' uses BIG_DIGITS, 'tiny' uses bitmap6."""
+    """Draw the time at (x, y). variant: big (HHMM row), small (3x5 row), stacked (HH over MM)."""
     if t is None:
         t = time.localtime()
     pen = _g.create_pen(*color) if color else _WHITE
@@ -216,6 +217,21 @@ def draw_clock(x, t=None, y=1, variant="big", color=None):
     if variant == "small":
         for i, digit in enumerate(digits):
             draw_custom_digit(digit, x + i * 4, y, pen)
+        return
+    if variant == "wide":
+        draw_custom_digit(digits[0], x,      y, pen)
+        draw_custom_digit(digits[1], x + 4,  y, pen)
+        _g.set_pen(pen)
+        _g.pixel(x + 7, y + 1)
+        _g.pixel(x + 7, y + 3)
+        draw_custom_digit(digits[2], x + 9,  y, pen)
+        draw_custom_digit(digits[3], x + 13, y, pen)
+        return
+    if variant == "stacked":
+        draw_big_custom_digit(digits[0], x,                  y,     pen)
+        draw_big_custom_digit(digits[1], x + BIG_DIGIT_STEP, y,     pen)
+        draw_big_custom_digit(digits[2], x,                  y + 8, pen)
+        draw_big_custom_digit(digits[3], x + BIG_DIGIT_STEP, y + 8, pen)
         return
     for i, digit in enumerate(digits):
         draw_big_custom_digit(digit, x + i * BIG_DIGIT_STEP, y, pen)
@@ -260,11 +276,12 @@ def draw_big_weekdays(current_day, x, y, active_colour, inactive_colour):
 
 
 def draw_display_sensors(display_sensors):
-    """Draw a 2x2 dot for each configured display sensor at its configured x/y position."""
+    """Draw a square dot (configurable size, default 2) for each display sensor at its x/y."""
     for sensor in display_sensors.values():
         rgb = sensor.get("on_rgb", (0, 255, 0)) if sensor.get("state") else sensor.get("off_rgb", (20, 20, 20))
+        sz = int(sensor.get("size", 2))
         _g.set_pen(_g.create_pen(*rgb))
-        _g.rectangle(sensor.get("x", 37), sensor.get("y", 1), 2, 2)
+        _g.rectangle(sensor.get("x", 37), sensor.get("y", 1), sz, sz)
 
 
 def draw_icon(icon_type, x, y):
