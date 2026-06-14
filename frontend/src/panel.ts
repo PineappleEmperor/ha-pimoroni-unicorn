@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
+type Rect = [number, number, number, number];
 interface CfgField { key: string; type: "select" | "rgb" | "number"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
 interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; }
 interface OverlayCap { id: string; label: string; }
@@ -68,6 +69,7 @@ export class PimoroniUnicornPanel extends LitElement {
     button[disabled] { opacity: .5; cursor: not-allowed; }
     button.secondary { background: var(--secondary-background-color, #e0e0e0); color: var(--primary-text-color, #111); }
     button.danger { background: var(--error-color, #db4437); }
+    button.zbtn { padding: 4px 9px; min-width: 28px; line-height: 1; }
     .stage { position: relative; display: inline-block; background: #000; line-height: 0; border: 1px solid var(--divider-color, #444); overflow: hidden; }
     .stage img { image-rendering: pixelated; display: block; }
     .grid, .boxes { position: absolute; inset: 0; pointer-events: none; }
@@ -163,10 +165,14 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private async selectMock(model: string): Promise<void> {
     this.entryId = "";
-    this.sensors = dummySensors();
+    this.sensors = [];
     this.selSensor = -1;
     await this.loadCaps({ model });
     this.loadLayout(this.defaultLayout);
+    for (const sn of dummySensors()) {
+      const [x, y] = this.freeSlot(sn.size ?? 2);
+      this.sensors = [...this.sensors, { ...sn, x_pos: x, y_pos: y }];
+    }
   }
 
   private renderSensors() {
@@ -217,6 +223,35 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private capFor(id: string): WidgetCap | undefined { return this.caps.find((c) => c.id === id); }
   private get scale(): number { return this.zoom || Math.max(4, Math.floor(PREVIEW_TARGET_PX / this.dims[0])); }
+  private zoomBy(delta: number): void {
+    this.zoom = Math.min(48, Math.max(4, this.scale + delta));
+  }
+  private onWheel(e: WheelEvent): void {
+    e.preventDefault();
+    this.zoomBy(e.deltaY < 0 ? 2 : -2);
+  }
+  // Rectangles already occupied by enabled widgets and existing sensors.
+  private occupiedRects(): Rect[] {
+    const rects: Rect[] = [];
+    this.layout.widgets.forEach((w, i) => {
+      if (w.enabled === false || !this.capFor(w.id)) return;
+      const [bw, bh] = this.boxDims(i);
+      rects.push([w.x, w.y, bw, bh]);
+    });
+    for (const sn of this.sensors) rects.push([sn.x_pos, sn.y_pos, sn.size ?? 2, sn.size ?? 2]);
+    return rects;
+  }
+  // First top-left cell where a size×size box clears all occupied rects.
+  private freeSlot(size: number): [number, number] {
+    const [W, H] = this.dims;
+    const taken = this.occupiedRects();
+    const hits = (x: number, y: number) =>
+      taken.some(([rx, ry, rw, rh]) => x < rx + rw && x + size > rx && y < ry + rh && y + size > ry);
+    for (let y = 0; y <= H - size; y++)
+      for (let x = 0; x <= W - size; x++)
+        if (!hits(x, y)) return [x, y];
+    return [0, 0];
+  }
   // Box dims come from the backend (computed by the real widget_box), so any
   // cfg-driven sizing (variant, size, digits…) is correct without client logic.
   private boxDims(i: number): Size {
@@ -310,9 +345,10 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private addSensor(): void {
+    const [x, y] = this.freeSlot(2);
     this.sensors.push({
       id: `sensor_${this.sensors.length + 1}`, entity_id: "", name: "Sensor",
-      on_color: "#00ff00", off_color: "#1a1a1a", x_pos: 0, y_pos: 0, size: 2,
+      on_color: "#00ff00", off_color: "#1a1a1a", x_pos: x, y_pos: y, size: 2,
     });
     this.selSensor = this.sensors.length - 1;
     this.edited();
@@ -427,15 +463,20 @@ export class PimoroniUnicornPanel extends LitElement {
             ${[1, 2, 4].map((n) => html`<option ?selected=${(this.layout.grid ?? 2) === n}>${n}</option>`)}
           </select>
         </label>
-        <label>Zoom <input type="range" min="4" max="48" .value=${String(this.scale)}
-          @input=${(e: Event) => (this.zoom = +(e.target as HTMLInputElement).value)} /></label>
+        <label>Zoom
+          <button class="zbtn" @click=${() => this.zoomBy(-2)} title="Zoom out">&minus;</button>
+          <input type="range" min="4" max="48" .value=${String(this.scale)}
+            @input=${(e: Event) => (this.zoom = +(e.target as HTMLInputElement).value)} />
+          <button class="zbtn" @click=${() => this.zoomBy(2)} title="Zoom in">+</button>
+        </label>
         <label><input type="checkbox" .checked=${this.wireframe} @change=${(e: Event) => (this.wireframe = (e.target as HTMLInputElement).checked)} /> wireframe</label>
         <label><input type="checkbox" .checked=${this.live} ?disabled=${!this.entryId} @change=${(e: Event) => (this.live = (e.target as HTMLInputElement).checked)} /> live push</label>
       </div>
 
       <div class="wrap">
         <div class="col">
-          <div class="stage" style=${`width:${this.dims[0] * s}px;height:${this.dims[1] * s}px`}>
+          <div class="stage" style=${`width:${this.dims[0] * s}px;height:${this.dims[1] * s}px`}
+            @wheel=${this.onWheel}>
             ${this.png ? html`<img src="data:image/png;base64,${this.png}" width=${this.dims[0] * s} height=${this.dims[1] * s} @load=${this.onImgLoad} />` : ""}
             <div class="grid" style=${gridStyle}></div>
             ${this.wireframe ? html`<div class="boxes">${this.layout.widgets.map((w, i) => {

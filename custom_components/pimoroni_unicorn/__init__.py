@@ -21,6 +21,7 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
 )
+from homeassistant.loader import async_get_integration
 
 from . import layout, websocket as ws_api
 from .const import (
@@ -135,11 +136,12 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
     await hass.http.async_register_static_paths([
         StaticPathConfig(PANEL_MODULE_URL, str(Path(__file__).parent / "panel" / "editor.js"), False),
     ])
+    integration = await async_get_integration(hass, DOMAIN)
     await panel_custom.async_register_panel(
         hass,
         frontend_url_path=PANEL_URL_PATH,
         webcomponent_name="pimoroni-unicorn-panel",
-        module_url=PANEL_MODULE_URL,
+        module_url=f"{PANEL_MODULE_URL}?v={integration.version}",
         sidebar_title="Unicorn Layout",
         sidebar_icon="mdi:dots-grid",
         require_admin=True,
