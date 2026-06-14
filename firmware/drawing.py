@@ -67,92 +67,53 @@ def soc_colour(soc_pct, is_charging):
     return lerp_colour((0, 200, 0), (0, 255, 0), (soc_pct - 60) / 40.0)
 
 
-def draw_solar_quadrant(
-    x, y, w, h,
-    solar=0.0, battery_soc=0, is_charging=False,
-    sun_below_horizon=False, mode="Net", consumption=0.0,
-    battery_animation=False,
-):
-    """Draw energy value, sun/moon icon, and battery indicator within an x/y/w/h box (anchored top-right)."""
+def _energy_colour(solar, consumption, mode, soc):
+    """Pick the energy value colour by mode, surplus/deficit and battery state."""
     net = solar - consumption
-    if solar <= 0.1 and consumption <= 0.1 and battery_soc == 0 and not sun_below_horizon:
-        return
-
-    right  = x + w
-    bottom = y + h
-    tr_x = right - 1
-    tr_y = y
-
-    if mode == "Consumption":
-        val = consumption
-    elif mode == "Net":
-        val = abs(net)
-    else:
-        val = solar
-    val_str = f"{val:.1f}"
-
-    surplus        = net > 0.1
-    surplus_colour = _SUN_YELLOW if battery_soc >= 100 else _ENERGY_CYAN
-    no_data        = solar <= 0.1 and consumption <= 0.1
-
+    surplus = net > 0.1
+    surplus_colour = _SUN_YELLOW if soc >= 100 else _ENERGY_CYAN
+    no_data = solar <= 0.1 and consumption <= 0.1
     if mode == "Solar":
-        text_colour = _CHARCOAL if solar <= 0.1 else (surplus_colour if surplus else _WHITE)
-    elif mode == "Consumption":
+        return _CHARCOAL if solar <= 0.1 else (surplus_colour if surplus else _WHITE)
+    if mode == "Consumption":
         if no_data:
-            text_colour = _CHARCOAL
-        elif surplus:
-            text_colour = surplus_colour
-        elif net >= -0.1:
-            text_colour = _WHITE
-        else:
-            text_colour = _ENERGY_RED
-    elif no_data:  # Net
-        text_colour = _CHARCOAL
-    elif surplus:
-        text_colour = surplus_colour
-    elif net < -0.1:
-        text_colour = _ENERGY_RED
-    else:
-        text_colour = _WHITE
+            return _CHARCOAL
+        if surplus:
+            return surplus_colour
+        return _WHITE if net >= -0.1 else _ENERGY_RED
+    if no_data:
+        return _CHARCOAL
+    if surplus:
+        return surplus_colour
+    if net < -0.1:
+        return _ENERGY_RED
+    return _WHITE
 
-    if solar >= 0.1:
-        _g.set_pen(_SUN_YELLOW)
-        _g.circle(tr_x, tr_y, 3)
-    elif sun_below_horizon:
-        _g.set_pen(_MOON_SILVER)
-        _g.circle(tr_x, tr_y, 3)
 
-    _g.set_pen(text_colour)
-    _bitfont.draw_text(val_str, right - 1, bottom - 5, font3x5, d=0)
-
-    text_width = (len(val_str) * 4) - 1
-    text_start = right - text_width
-    bw = 4
-    bx = text_start - bw - 1
-    by = bottom - 5
-
-    rgb        = soc_colour(battery_soc, is_charging)
-    exact_fill = (battery_soc / 100.0) * BATTERY_ROWS
+def draw_battery(x, y, soc, is_charging, battery_animation):
+    """Draw a 4x5 battery indicator with its top-left at (x, y)."""
+    rgb        = soc_colour(soc, is_charging)
+    exact_fill = (soc / 100.0) * BATTERY_ROWS
     full_rows  = int(exact_fill)
     frac       = exact_fill - full_rows
     tick       = time.ticks_ms()
 
     _g.set_pen(_DARK_GREY)
-    _g.rectangle(bx,     by + 1, 1, 4)
-    _g.rectangle(bx + 3, by + 1, 1, 4)
-    _g.rectangle(bx + 1, by,     2, 1)
+    _g.rectangle(x,     y + 1, 1, 4)
+    _g.rectangle(x + 3, y + 1, 1, 4)
+    _g.rectangle(x + 1, y,     2, 1)
 
     for row in range(BATTERY_ROWS):
-        py = (bottom - 1) - row
+        py = (y + 4) - row
         if row < full_rows:
             _g.set_pen(_g.create_pen(*rgb))
         elif row == full_rows and frac > 0.05:
             _g.set_pen(_g.create_pen(int(rgb[0] * frac), int(rgb[1] * frac), int(rgb[2] * frac)))
         else:
             _g.set_pen(_BLACK)
-        _g.rectangle(bx + 1, py, 2, 1)
+        _g.rectangle(x + 1, py, 2, 1)
 
-    if battery_animation and is_charging and battery_soc < 100:
+    if battery_animation and is_charging and soc < 100:
         active_rows = full_rows + (1 if frac > 0.05 else 0)
         next_row    = active_rows
         has_next    = frac <= 0.05 and next_row < BATTERY_ROWS
@@ -160,65 +121,67 @@ def draw_solar_quadrant(
         if cycle_rows > 0:
             pulse_row = (tick // 600) % cycle_rows
             for row in range(BATTERY_ROWS):
-                py          = (bottom - 1) - row
+                py          = (y + 4) - row
                 is_frac_row = row == full_rows and frac > 0.05
                 if row == pulse_row:
                     if row == next_row:
-                        _g.set_pen(_g.create_pen(
-                            max(0, rgb[0] - 120),
-                            max(0, rgb[1] - 120),
-                            max(0, rgb[2] - 120)))
+                        _g.set_pen(_g.create_pen(max(0, rgb[0] - 120), max(0, rgb[1] - 120), max(0, rgb[2] - 120)))
                     elif is_frac_row:
-                        _g.set_pen(_g.create_pen(
-                            min(255, int(rgb[0] * frac) + 60),
-                            min(255, int(rgb[1] * frac) + 60),
-                            min(255, int(rgb[2] * frac) + 60)))
+                        _g.set_pen(_g.create_pen(min(255, int(rgb[0] * frac) + 60), min(255, int(rgb[1] * frac) + 60), min(255, int(rgb[2] * frac) + 60)))
                     else:
-                        _g.set_pen(_g.create_pen(
-                            min(255, rgb[0] + 80),
-                            min(255, rgb[1] + 80),
-                            min(255, rgb[2] + 80)))
+                        _g.set_pen(_g.create_pen(min(255, rgb[0] + 80), min(255, rgb[1] + 80), min(255, rgb[2] + 80)))
                 elif row < full_rows:
-                    _g.set_pen(_g.create_pen(
-                        max(0, rgb[0] - 60),
-                        max(0, rgb[1] - 60),
-                        max(0, rgb[2] - 60)))
+                    _g.set_pen(_g.create_pen(max(0, rgb[0] - 60), max(0, rgb[1] - 60), max(0, rgb[2] - 60)))
                 elif is_frac_row:
-                    _g.set_pen(_g.create_pen(
-                        int(rgb[0] * frac), int(rgb[1] * frac), int(rgb[2] * frac)))
+                    _g.set_pen(_g.create_pen(int(rgb[0] * frac), int(rgb[1] * frac), int(rgb[2] * frac)))
                 else:
                     _g.set_pen(_BLACK)
-                _g.rectangle(bx + 1, py, 2, 1)
+                _g.rectangle(x + 1, py, 2, 1)
 
-    elif battery_animation and not is_charging and battery_soc > 0:
+    elif battery_animation and not is_charging and soc > 0:
         active_rows = full_rows + (1 if frac > 0.05 else 0)
         if active_rows > 0:
             pulse_row = (active_rows - 1) - (tick // 500) % active_rows
             for row in range(BATTERY_ROWS):
-                py          = (bottom - 1) - row
+                py          = (y + 4) - row
                 is_frac_row = row == full_rows and frac > 0.05
                 if row == pulse_row:
                     if is_frac_row:
-                        _g.set_pen(_g.create_pen(
-                            min(255, int(rgb[0] * frac) + 60),
-                            min(255, int(rgb[1] * frac) + 60),
-                            min(255, int(rgb[2] * frac) + 60)))
+                        _g.set_pen(_g.create_pen(min(255, int(rgb[0] * frac) + 60), min(255, int(rgb[1] * frac) + 60), min(255, int(rgb[2] * frac) + 60)))
                     else:
-                        _g.set_pen(_g.create_pen(
-                            min(255, rgb[0] + 80),
-                            min(255, rgb[1] + 80),
-                            min(255, rgb[2] + 80)))
+                        _g.set_pen(_g.create_pen(min(255, rgb[0] + 80), min(255, rgb[1] + 80), min(255, rgb[2] + 80)))
                 elif row < full_rows:
-                    _g.set_pen(_g.create_pen(
-                        max(0, rgb[0] - 60),
-                        max(0, rgb[1] - 60),
-                        max(0, rgb[2] - 60)))
+                    _g.set_pen(_g.create_pen(max(0, rgb[0] - 60), max(0, rgb[1] - 60), max(0, rgb[2] - 60)))
                 elif is_frac_row:
-                    _g.set_pen(_g.create_pen(
-                        int(rgb[0] * frac), int(rgb[1] * frac), int(rgb[2] * frac)))
+                    _g.set_pen(_g.create_pen(int(rgb[0] * frac), int(rgb[1] * frac), int(rgb[2] * frac)))
                 else:
                     _g.set_pen(_BLACK)
-                _g.rectangle(bx + 1, py, 2, 1)
+                _g.rectangle(x + 1, py, 2, 1)
+
+
+def draw_energy(x, y, w, h, solar=0.0, battery_soc=0, is_charging=False,
+                mode="Net", consumption=0.0, battery_animation=False):
+    """Battery indicator plus the left-aligned energy value, top-left at (x, y)."""
+    draw_battery(x, y, battery_soc, is_charging, battery_animation)
+    if mode == "Consumption":
+        val = consumption
+    elif mode == "Net":
+        val = abs(solar - consumption)
+    else:
+        val = solar
+    _g.set_pen(_energy_colour(solar, consumption, mode, battery_soc))
+    _bitfont.draw_text(f"{val:.1f}", x + 5, y, font3x5, d=1)
+
+
+def draw_sun_moon(x, y, w, h, solar=0.0, sun_below_horizon=False):
+    """Draw a sun (day) or moon (night) pip in a 7x7 box at (x, y)."""
+    if solar >= 0.1:
+        _g.set_pen(_SUN_YELLOW)
+    elif sun_below_horizon:
+        _g.set_pen(_MOON_SILVER)
+    else:
+        return
+    _g.circle(x + 3, y + 3, 3)
 
 
 def draw_custom_digit(digit_idx, x, y, colour, background=None):
