@@ -1,38 +1,14 @@
 send_notification:
-  name: Send notification
-  description: >
-    Send a notification to a Pimoroni Unicorn display.
-    Simple mode: icon+text or fullscreen animation. Advanced mode: full layout control.
   fields:
     device_id:
-      name: Device
-      description: The Pimoroni Unicorn device to notify.
       required: true
       selector:
         device:
           integration: pimoroni_unicorn
-    mode:
-      name: Mode
-      description: "simple: icon+text or fullscreen. advanced: explicit layout, entrance effects."
-      required: false
-      default: simple
-      selector:
-        select:
-          options:
-            - simple
-            - advanced
     message:
-      name: Message
-      description: Text to scroll or display on screen.
-      required: false
       selector:
         text: {}
     icon:
-      name: Icon
-      description: >
-        Named static icon or animation name to display in the left panel (simple mode)
-        or split panel (advanced mode). Animations scale to fit the panel.
-      required: false
       selector:
         select:
           custom_value: true
@@ -51,22 +27,7 @@ send_notification:
             - cloud
             - rain
             - check
-            - rainbow
-            - fire
-            - matrix
-            - scanner
-            - comet
-            - snow
-            - confetti
-            - flash
-            - pulse
-            - bounce
-            - supercomputer
-            - retroprompt
-    animation:
-      name: Animation
-      description: Background animation to play alongside or instead of text.
-      required: false
+    effect:
       selector:
         select:
           options:
@@ -83,103 +44,88 @@ send_notification:
             - supercomputer
             - retroprompt
     sound:
-      name: Sound
-      description: Sound effect to play.
-      required: false
       selector:
         select:
           options:
             - beep
             - chime
             - alert
-    color:
-      name: Text colour
-      description: RGB colour for message text (default white).
-      required: false
-      selector:
-        color_rgb: {}
-    bg_color:
-      name: Background colour
-      description: RGB background colour (default black).
-      required: false
-      selector:
-        color_rgb: {}
     duration:
-      name: Duration
-      description: How long to show the notification in seconds (default 3).
-      required: false
-      default: 3
       selector:
         number:
           min: 1
           max: 60
           step: 0.5
           unit_of_measurement: s
-    entrance:
-      name: Entrance effect
-      description: Transition effect when the notification appears (advanced mode only).
-      required: false
+    appearance:
+      collapsed: true
+      fields:
+        color:
+          selector:
+            color_rgb: {}
+        bg_color:
+          selector:
+            color_rgb: {}
+        outlined:
+          selector:
+            boolean: {}
+        entrance:
+          selector:
+            select:
+              options:
+                - none
+                - slide_left
+                - slide_right
+                - center_out
+                - fade
+        scroll_speed:
+          selector:
+            number:
+              min: 0.1
+              max: 5
+              step: 0.1
+        effect_speed:
+          selector:
+            number:
+              min: 0.1
+              max: 5
+              step: 0.1
+    behaviour:
+      collapsed: true
+      fields:
+        hold:
+          selector:
+            boolean: {}
+        repeat:
+          selector:
+            number:
+              min: 1
+              max: 10
+              step: 1
+        stack:
+          selector:
+            boolean: {}
+        wakeup:
+          selector:
+            boolean: {}
+
+dismiss_notification:
+  fields:
+    device_id:
+      required: true
       selector:
-        select:
-          options:
-            - none
-            - slide_left
-            - slide_right
-            - center_out
-            - fade
-    layout:
-      name: Layout
-      description: How animation/icon and text are arranged (advanced mode only).
-      required: false
-      selector:
-        select:
-          options:
-            - fullscreen
-            - split
-    split_width:
-      name: Animation panel width
-      description: Pixel width of the animation panel when layout is split.
-      required: false
-      selector:
-        number:
-          min: 1
-          max: 64
-          step: 1
-          unit_of_measurement: px
-    outlined:
-      name: Outlined text
-      description: Draw an outline around the message text.
-      required: false
+        device:
+          integration: pimoroni_unicorn
+    all:
       selector:
         boolean: {}
 
 generate_secrets:
-  name: Generate firmware secrets
-  description: >
-    Generates a secrets.py file for each configured Pimoroni Unicorn device,
-    pre-filled with the MQTT broker address, port, and username from your HA
-    MQTT config. WiFi credentials and MQTT password must be filled in manually.
-    Output is written to {config_dir}/pimoroni_unicorn/secrets_{device_id}.py
-    and a persistent notification is created with next steps.
   fields: {}
 
 push_firmware:
-  name: Push firmware to device
-  description: >
-    Stages firmware files and sends an OTA update command to the device over
-    MQTT. The device validates syntax, writes files, and reboots automatically.
-    If file_content is provided for a key, that content is used instead of
-    reading from disk. Source files must exist in
-    {config_dir}/pimoroni_unicorn/firmware/ when not using inline content.
   fields:
     files:
-      name: Files to push
-      description: >
-        Which firmware files to push. Defaults to main only. Common values:
-        main, bitfonts, monospace_digits, monospace_big_digits.
-        Any filename (with or without .py extension) is accepted — bare names
-        get .py appended automatically and are placed in the device root.
-      required: false
       default:
         - main
       selector:
@@ -197,10 +143,5 @@ push_firmware:
             - monospace_digits
             - monospace_big_digits
     file_content:
-      name: Inline file content
-      description: >
-        Optional map of file key to content string. Overrides disk files.
-        Example: {main: "# my main.py content"}
-      required: false
       selector:
         object: {}

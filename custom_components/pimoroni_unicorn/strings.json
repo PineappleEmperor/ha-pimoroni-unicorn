@@ -126,5 +126,117 @@
       "name_taken": "That name is already used by a built-in icon.",
       "invalid_layout": "Not a valid layout JSON (needs a \"widgets\" list)."
     }
+  },
+  "services": {
+    "send_notification": {
+      "name": "Send notification",
+      "description": "Show a notification on a Pimoroni Unicorn display.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The Pimoroni Unicorn device to notify."
+        },
+        "message": {
+          "name": "Message",
+          "description": "Text to show (scrolls if it does not fit)."
+        },
+        "icon": {
+          "name": "Icon",
+          "description": "Built-in icon name, an installed LaMetric icon name, or its gallery code."
+        },
+        "effect": {
+          "name": "Effect",
+          "description": "Full-screen background animation."
+        },
+        "sound": {
+          "name": "Sound",
+          "description": "Sound effect to play (audio models only)."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Minimum seconds to show (auto-extends to finish scrolling text)."
+        },
+        "color": {
+          "name": "Text colour",
+          "description": "RGB colour for the message text (default white)."
+        },
+        "bg_color": {
+          "name": "Background colour",
+          "description": "RGB background colour (default black)."
+        },
+        "outlined": {
+          "name": "Outlined text",
+          "description": "Draw a black outline around the text."
+        },
+        "entrance": {
+          "name": "Entrance effect",
+          "description": "Transition when the notification appears."
+        },
+        "scroll_speed": {
+          "name": "Scroll speed",
+          "description": "Text scroll speed multiplier (1 = default)."
+        },
+        "effect_speed": {
+          "name": "Effect speed",
+          "description": "Animation speed multiplier (1 = default)."
+        },
+        "hold": {
+          "name": "Hold",
+          "description": "Keep showing until dismissed or replaced."
+        },
+        "repeat": {
+          "name": "Repeat",
+          "description": "Number of full scroll passes for overflowing text."
+        },
+        "stack": {
+          "name": "Stack",
+          "description": "If off, replace the current notification immediately."
+        },
+        "wakeup": {
+          "name": "Wake up",
+          "description": "Show even while the display is asleep."
+        }
+      },
+      "sections": {
+        "appearance": {
+          "name": "Appearance"
+        },
+        "behaviour": {
+          "name": "Behaviour"
+        }
+      }
+    },
+    "dismiss_notification": {
+      "name": "Dismiss notification",
+      "description": "Dismiss the active notification on a Pimoroni Unicorn display.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The Pimoroni Unicorn device to dismiss on."
+        },
+        "all": {
+          "name": "Clear queue",
+          "description": "Also clear any queued notifications."
+        }
+      }
+    },
+    "generate_secrets": {
+      "name": "Generate firmware secrets",
+      "description": "Generate a secrets.py file for each configured device, pre-filled with MQTT broker details from your HA config. WiFi credentials and MQTT password must be filled in manually."
+    },
+    "push_firmware": {
+      "name": "Push firmware to device",
+      "description": "Stage firmware files and send an OTA update command over MQTT. The device validates, writes, and reboots automatically.",
+      "fields": {
+        "files": {
+          "name": "Files to push",
+          "description": "Which firmware files to push (defaults to main). Bare names get .py appended and land in the device root."
+        },
+        "file_content": {
+          "name": "Inline file content",
+          "description": "Optional map of file key to content string, used instead of reading from disk."
+        }
+      }
+    }
   }
 }

@@ -39,8 +39,10 @@ from .const import (
     UNICORN_MODEL_KEYS,
 )
 from .notify import (
+    DISMISS_SCHEMA,
     GENERIC_NOTIFY_SCHEMA,
     SERVICE_SCHEMA as NOTIFY_SERVICE_SCHEMA,
+    make_dismiss_handler,
     make_generic_notify_handler,
     make_notify_handler,
 )
@@ -51,6 +53,7 @@ SOLAR_INTERVAL        = timedelta(seconds=10)
 SERVICE_GENERATE_SECRETS  = "generate_secrets"
 SERVICE_PUSH_FIRMWARE     = "push_firmware"
 SERVICE_SEND_NOTIFICATION = "send_notification"
+SERVICE_DISMISS_NOTIFICATION = "dismiss_notification"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -63,6 +66,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _setup_publishers(hass, entry)
     await _async_subscribe_ha_config(hass, entry)
     await _async_subscribe_layout_caps(hass, entry)
+    await _async_subscribe_notify_caps(hass, entry)
     await _async_setup_display_sensors(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
@@ -89,6 +93,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_register(
             DOMAIN, SERVICE_SEND_NOTIFICATION, make_generic_notify_handler(hass), schema=GENERIC_NOTIFY_SCHEMA
         )
+    if not hass.services.has_service(DOMAIN, SERVICE_DISMISS_NOTIFICATION):
+        hass.services.async_register(
+            DOMAIN, SERVICE_DISMISS_NOTIFICATION, make_dismiss_handler(hass), schema=DISMISS_SCHEMA
+        )
 
     return True
 
@@ -109,6 +117,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_GENERATE_SECRETS)
         hass.services.async_remove(DOMAIN, SERVICE_PUSH_FIRMWARE)
         hass.services.async_remove(DOMAIN, SERVICE_SEND_NOTIFICATION)
+        hass.services.async_remove(DOMAIN, SERVICE_DISMISS_NOTIFICATION)
         if hass.data.pop(f"{DOMAIN}_panel_registered", False):
             frontend.async_remove_panel(hass, PANEL_URL_PATH)
 
@@ -177,6 +186,23 @@ async def _async_subscribe_layout_caps(hass: HomeAssistant, entry: ConfigEntry) 
             pass
 
     unsub = await async_subscribe(hass, f"{device_id}/layout/capabilities", _on_caps)
+    hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
+
+
+async def _async_subscribe_notify_caps(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Subscribe to retained notify/capabilities (used to downconvert for old firmware)."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+
+    @callback
+    def _on_caps(msg: Any) -> None:
+        try:
+            data = json.loads(msg.payload)
+            if isinstance(data, dict) and entry.entry_id in hass.data.get(DOMAIN, {}):
+                hass.data[DOMAIN][entry.entry_id]["notify_caps"] = data
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    unsub = await async_subscribe(hass, f"{device_id}/notify/capabilities", _on_caps)
     hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
 
 
