@@ -32,13 +32,17 @@ def _weekdays(g, x, y, w, h, cfg, state):
         drawing.draw_big_weekdays(state["time"][6], x, y, active, inactive)
 
 
-def _solar(g, x, y, w, h, cfg, state):
-    drawing.draw_solar_quadrant(
+def _energy(g, x, y, w, h, cfg, state):
+    drawing.draw_energy(
         x, y, w, h,
         solar=state["solar"], battery_soc=state["soc"], is_charging=state["charging"],
-        sun_below_horizon=state["sun_below"], mode=state["energy_mode"],
-        consumption=state["consumption"], battery_animation=state["battery_animation"],
+        mode=state["energy_mode"], consumption=state["consumption"],
+        battery_animation=state["battery_animation"],
     )
+
+
+def _sun_moon(g, x, y, w, h, cfg, state):
+    drawing.draw_sun_moon(x, y, w, h, solar=state["solar"], sun_below_horizon=state["sun_below"])
 
 
 def _weather(g, state):
@@ -79,10 +83,15 @@ WIDGET_REGISTRY = {
         ],
         "box": _weekdays_box, "render": _weekdays,
     },
-    "solar": {
-        "label": "Solar/Energy", "w": 20, "h": 11, "variants": [],
+    "energy": {
+        "label": "Energy (battery + value)", "w": 19, "h": 5, "variants": [],
         "default_cfg": {}, "cfg_fields": [],
-        "box": None, "render": _solar,
+        "box": None, "render": _energy,
+    },
+    "sun_moon": {
+        "label": "Sun / Moon", "w": 7, "h": 7, "variants": [],
+        "default_cfg": {}, "cfg_fields": [],
+        "box": None, "render": _sun_moon,
     },
 }
 
