@@ -276,6 +276,7 @@ export class PimoroniUnicornPanel extends LitElement {
           <select @change=${(e: Event) => this.selectMock((e.target as HTMLSelectElement).value)}>
             ${Object.keys(MODELS).map((m) => html`<option ?selected=${m === this.model}>${m}</option>`)}
           </select></label>` : html`<span class="hint">model: ${this.model}</span>`}
+        <span class="hint">${this.dims[0]}&times;${this.dims[1]} px</span>
         <label>Layout
           <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; this.loadLayout(v === "__new__" ? this.defaultLayout : this.stored[v]); }}>
             ${Object.keys(this.stored).map((n) => html`<option ?selected=${n === this.layoutName}>${n}</option>`)}
