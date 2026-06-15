@@ -31,14 +31,12 @@ from .const import (
     CONF_DEVICE_ID,
     CONF_DISPLAY_SENSORS,
     CONF_EXTRA_SENSORS,
-    CONF_MODEL,
     CONF_SHOW_PANEL,
     CONF_SOLAR_ENTITY,
     CONF_SUN_ENTITY,
     CONF_WEATHER_CODE_ENTITY,
     DOMAIN,
     OTA_SOURCE_FILES,
-    UNICORN_MODEL_KEYS,
 )
 from .notify import (
     DISMISS_SCHEMA,
@@ -52,7 +50,6 @@ from .notify import (
 _LOGGER = logging.getLogger(__name__)
 
 SOLAR_INTERVAL        = timedelta(seconds=10)
-SERVICE_GENERATE_SECRETS  = "generate_secrets"
 SERVICE_PUSH_FIRMWARE     = "push_firmware"
 SERVICE_SEND_NOTIFICATION = "send_notification"
 SERVICE_DISMISS_NOTIFICATION = "dismiss_notification"
@@ -80,10 +77,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[f"{DOMAIN}_ws_registered"] = True
     await _async_refresh_panel(hass)
 
-    if not hass.services.has_service(DOMAIN, SERVICE_GENERATE_SECRETS):
-        hass.services.async_register(
-            DOMAIN, SERVICE_GENERATE_SECRETS, _make_generate_secrets_handler(hass)
-        )
     if not hass.services.has_service(DOMAIN, SERVICE_PUSH_FIRMWARE):
         hass.services.async_register(
             DOMAIN, SERVICE_PUSH_FIRMWARE, _make_push_firmware_handler(hass)
@@ -117,7 +110,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(NOTIFY_DOMAIN, device_id)
 
     if not hass.data.get(DOMAIN):
-        hass.services.async_remove(DOMAIN, SERVICE_GENERATE_SECRETS)
         hass.services.async_remove(DOMAIN, SERVICE_PUSH_FIRMWARE)
         hass.services.async_remove(DOMAIN, SERVICE_SEND_NOTIFICATION)
         hass.services.async_remove(DOMAIN, SERVICE_DISMISS_NOTIFICATION)
@@ -402,62 +394,6 @@ def _setup_publishers(hass: HomeAssistant, entry: ConfigEntry) -> None:
         )
 
 
-def _make_generate_secrets_handler(
-    hass: HomeAssistant,
-) -> Callable[[ServiceCall], Coroutine[Any, Any, None]]:
-    async def _handle_generate_secrets(call: ServiceCall) -> None:
-        entries = hass.config_entries.async_entries(DOMAIN)
-        if not entries:
-            _LOGGER.error("Pimoroni Unicorn: no configured entries found")
-            return
-
-        mqtt_broker   = ""
-        mqtt_port     = 1883
-        mqtt_username = ""
-        mqtt_entries  = hass.config_entries.async_entries("mqtt")
-        if mqtt_entries:
-            mqtt_data     = mqtt_entries[0].data
-            mqtt_broker   = mqtt_data.get("broker", "")
-            mqtt_port     = int(mqtt_data.get("port", 1883))
-            mqtt_username = mqtt_data.get("username", "")
-
-        out_dir = Path(hass.config.config_dir) / "pimoroni_unicorn"
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        generated: list[str] = []
-        for entry in entries:
-            opts      = _merged_opts(entry)
-            device_id = opts[CONF_DEVICE_ID]
-            file_path = out_dir / f"secrets_{device_id}.py"
-            model_key    = UNICORN_MODEL_KEYS.get(opts.get(CONF_MODEL, ""), "galactic")
-            entity_opts  = {k: (opts.get(k) or "") for k in (
-                CONF_SOLAR_ENTITY, CONF_CONSUMPTION_ENTITY, CONF_BATTERY_SOC_ENTITY,
-                CONF_BATTERY_CHARGING_ENTITY, CONF_SUN_ENTITY, CONF_WEATHER_CODE_ENTITY,
-            )}
-            content = _render_secrets(device_id, mqtt_broker, mqtt_port, mqtt_username, model_key, entity_opts)
-
-            await hass.async_add_executor_job(file_path.write_text, content)
-
-            generated.append(f"`{file_path}`")
-            _LOGGER.info("Pimoroni Unicorn: wrote %s", file_path)
-
-        files_list = "\n".join(f"- {p}" for p in generated)
-        notify_create(
-            hass,
-            title="Pimoroni Unicorn firmware config generated",
-            message=(
-                f"Generated secrets file(s):\n\n{files_list}\n\n"
-                "**Next steps:**\n"
-                "1. Open the file and fill in `SSID`, `PASSWORD`, and `MQTT_PASSWORD`\n"
-                "2. Rename to `secrets.py`\n"
-                "3. Copy `secrets.py`, `main.py`, and `hardware.py` to the root of your Pimoroni Unicorn"
-            ),
-            notification_id="pimoroni_unicorn_secrets_generated",
-        )
-
-    return _handle_generate_secrets
-
-
 def _make_push_firmware_handler(
     hass: HomeAssistant,
 ) -> Callable[[ServiceCall], Coroutine[Any, Any, None]]:
@@ -581,36 +517,6 @@ def _make_push_firmware_handler(
         )
 
     return _handle_push_firmware
-
-
-def _render_secrets(
-    device_id: str,
-    mqtt_broker: str,
-    mqtt_port: int,
-    mqtt_username: str,
-    model_key: str,
-    entity_opts: dict[str, str],
-) -> str:
-    sun = entity_opts.get(CONF_SUN_ENTITY) or "sun.sun"
-    return (
-        f'SSID          = ""\n'
-        f'PASSWORD      = ""\n'
-        f'MQTT_SERVER   = "{mqtt_broker or ""}"\n'
-        f'MQTT_PORT     = {mqtt_port}\n'
-        f'MQTT_USER     = "{mqtt_username or ""}"\n'
-        f'MQTT_PASSWORD = ""\n'
-        f'DEVICE_ID     = "{device_id}"\n'
-        f'NTP_HOST      = "{mqtt_broker or ""}"  # defaults to MQTT_SERVER if omitted\n'
-        f'MODEL         = "{model_key}"\n'
-        f'\n'
-        f'# Optional: pre-configure HA entity IDs so the integration auto-fills on first setup\n'
-        f'HA_SOLAR_ENTITY            = "{entity_opts.get(CONF_SOLAR_ENTITY, "")}"\n'
-        f'HA_CONSUMPTION_ENTITY      = "{entity_opts.get(CONF_CONSUMPTION_ENTITY, "")}"\n'
-        f'HA_BATTERY_SOC_ENTITY      = "{entity_opts.get(CONF_BATTERY_SOC_ENTITY, "")}"\n'
-        f'HA_BATTERY_CHARGING_ENTITY = "{entity_opts.get(CONF_BATTERY_CHARGING_ENTITY, "")}"\n'
-        f'HA_SUN_ENTITY              = "{sun}"\n'
-        f'HA_WEATHER_CODE_ENTITY     = "{entity_opts.get(CONF_WEATHER_CODE_ENTITY, "")}"\n'
-    )
 
 
 def _resolve_ota_key(key: str) -> tuple[str, str]:

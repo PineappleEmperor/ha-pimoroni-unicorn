@@ -222,10 +222,6 @@
         }
       }
     },
-    "generate_secrets": {
-      "name": "Generate firmware secrets",
-      "description": "Generate a secrets.py file for each configured device, pre-filled with MQTT broker details from your HA config. WiFi credentials and MQTT password must be filled in manually."
-    },
     "push_firmware": {
       "name": "Push firmware to device",
       "description": "Stage firmware files and send an OTA update command over MQTT. The device validates, writes, and reboots automatically.",

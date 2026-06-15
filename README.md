@@ -57,16 +57,16 @@ After setup, open **Configure** to set optional data sources, currently these co
 
 ## Firmware setup
 
-### 1. Generate secrets
+### 1. Fill in secrets
 
-Call **Developer Tools → Services → `pimoroni_unicorn.generate_secrets`**.
-
-A `secrets_<device_id>.py` file is written to `<config>/pimoroni_unicorn/`. Open it and fill in `SSID`, `PASSWORD`, and `MQTT_PASSWORD`, then rename to `secrets.py`.
+Copy `firmware/secrets.example.py` to `firmware/secrets.py` and fill in your Wi-Fi
+credentials, MQTT broker details, `DEVICE_ID`, and `MODEL` (`galactic`/`cosmic`/`stellar`).
+`secrets.py` is gitignored and stays on your machine/device only.
 
 ### 2. First flash (once, over USB)
 
 A blank Pico has no network, so the first load must be physical. Copy every `.py`
-from `firmware/` plus your `secrets.py` to the root of the Pico W using Thonny or
+from `firmware/` (including your `secrets.py`) to the root of the Pico W using Thonny or
 similar. This is the only manual flash — everything after is over-the-air.
 
 ### 3. Boot, then manage over the air
@@ -92,7 +92,7 @@ marketplace* below.
 
 ### Notifications
 
-Use the **`pimoroni_unicorn.send_notification`** action (sectioned UI: basics, plus collapsed Appearance and Behaviour), the `notify.pimoroni_unicorn_<device_id>` entity, or the MQTT topic `<device_id>/notify`. **`pimoroni_unicorn.dismiss_notification`** clears the active notification (`all: true` also empties the queue).
+Send a notification with the **`pimoroni_unicorn.send_notification`** action — a sectioned UI (basics, plus collapsed Appearance and Behaviour) exposing every field below. (The standard `notify.pimoroni_unicorn_<device_id>` entity also works for plain message-only notifications from automations.) To clear the current notification, call **`pimoroni_unicorn.dismiss_notification`**; pass `all: true` to also empty the queue.
 
 A notification with an `icon` shows it in a left panel beside the text; an `effect` plays a full-screen background animation.
 
@@ -128,10 +128,6 @@ Engine modules and the shipped catalogue are kept byte-identical to `firmware/` 
 Cycle display between **Solar**, **Consumption**, and **Net** via the `<device_id>/energy_mode/set` MQTT topic or HA select entity.
 
 ## Services
-
-### `pimoroni_unicorn.generate_secrets`
-
-Writes pre-filled `secrets_<device_id>.py` files to `<config>/pimoroni_unicorn/` for each configured device. Pulls broker address and credentials from the HA MQTT integration automatically.
 
 ### `pimoroni_unicorn.push_firmware`
 
