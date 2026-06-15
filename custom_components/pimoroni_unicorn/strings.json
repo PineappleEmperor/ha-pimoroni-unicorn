@@ -131,8 +131,8 @@
   },
   "services": {
     "send_notification": {
-      "name": "Send notification",
-      "description": "Show a notification on a Pimoroni Unicorn display.",
+      "name": "Send notification (guided builder)",
+      "description": "Build and send a notification with a guided form. Equivalent to the notify.pimoroni_unicorn_<device_id> entity with the same options under data:.",
       "fields": {
         "device_id": {
           "name": "Device",

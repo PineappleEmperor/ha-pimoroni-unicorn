@@ -13,6 +13,8 @@ Unofficial Home Assistant integration for [Pimoroni Unicorn](https://shop.pimoro
 
 Includes MicroPython firmware for the Pico W and a HA config flow for device setup, live data publishing, and over-the-air firmware updates.
 
+The notification system is heavily inspired by [AWTRIX](https://github.com/Blueforcer/awtrix3) — its payload model (text, icon, effect, colour, duration, stacking) shaped this integration's `notify` schema. Credit and thanks to the AWTRIX project.
+
 ## Supported hardware
 
 | Model | Resolution |
@@ -92,14 +94,32 @@ marketplace* below.
 
 ### Notifications
 
-Send a notification with the **`pimoroni_unicorn.send_notification`** action — a sectioned UI (basics, plus collapsed Appearance and Behaviour) exposing every field below. (The standard `notify.pimoroni_unicorn_<device_id>` entity also works for plain message-only notifications from automations.) To clear the current notification, call **`pimoroni_unicorn.dismiss_notification`**; pass `all: true` to also empty the queue.
+Two front doors to the same notification:
+
+- **`notify.pimoroni_unicorn_<device_id>`** — the canonical surface. Standard HA notify, works with `notify.*` blueprints/scripts. Pass the message directly and the rich options under `data:` (see fields below).
+- **`pimoroni_unicorn.send_notification`** — a guided builder with a sectioned form (basics, plus collapsed Appearance and Behaviour) and a device picker. Same result as the entity; exists because HA can only render a form for a custom action, not for an entity's free-form `data:`.
+
+To clear the current notification, call **`pimoroni_unicorn.dismiss_notification`**; pass `all: true` to also empty the queue.
+
+```yaml
+action: notify.send_message
+target:
+  entity_id: notify.pimoroni_unicorn_studio
+data:
+  message: "Garage open"
+  data:
+    icon: home
+    effect: rainbow
+    color: [0, 255, 0]
+    duration: 8
+```
 
 A notification with an `icon` shows it in a left panel beside the text; an `effect` plays a full-screen background animation.
 
 **Effects:** `rainbow`, `fire`, `matrix`, `scanner`, `comet`, `snow`, `confetti`, `flash`, `pulse`, `bounce`, `supercomputer`, `retroprompt`
 **Sounds** (Galactic/Cosmic only): `beep`, `chime`, `alert`
 
-Fields: `message`, `icon`, `effect`, `effect_speed`, `sound`, `color`, `bg_color`, `duration`, `scroll_speed`, `entrance`, `outlined`, plus behaviour — `hold` (stay until dismissed/replaced), `repeat` (full scroll passes), `stack` (off = replace immediately), `wakeup` (show while asleep). Duration auto-extends so overflowing text completes its scroll. Old `mode`/`animation`/`layout` payloads still render (legacy compatibility), and v2 calls auto-downconvert for pre-1.4.0 firmware.
+`data:` fields: `icon`, `effect`, `effect_speed`, `sound`, `color`, `bg_color`, `duration`, `scroll_speed`, `entrance`, `outlined`, plus behaviour — `hold` (stay until dismissed/replaced), `repeat` (full scroll passes), `stack` (off = replace immediately), `wakeup` (show while asleep). Duration auto-extends so overflowing text completes its scroll.
 
 ### Icons
 
