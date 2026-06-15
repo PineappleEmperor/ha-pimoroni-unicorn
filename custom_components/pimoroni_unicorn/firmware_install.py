@@ -25,7 +25,8 @@ def _device_files(hass: HomeAssistant, entry) -> dict:
 async def async_install_widget(hass: HomeAssistant, entry, widget_id: str) -> bool:
     """Stage the widget (+ missing font deps) and trigger an OTA download."""
     device_id = _device_id(entry)
-    files = marketplace.resolve_install(widget_id, _device_files(hass, entry))
+    files = marketplace.resolve_install(
+        widget_id, _device_files(hass, entry), marketplace.widgets_dir(hass.config.config_dir))
     if not files:
         return False
     base_url = hass.config.internal_url or hass.config.external_url

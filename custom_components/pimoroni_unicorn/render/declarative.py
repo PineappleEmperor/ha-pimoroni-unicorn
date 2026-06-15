@@ -17,9 +17,11 @@ def box(spec, cfg=None):
 
 def _value_text(op, state):
     val = state.get(op.get("bind"))
+    if val is None:
+        return ""
     try:
         return op.get("fmt", "{}").format(val)
-    except (ValueError, KeyError, IndexError):
+    except (ValueError, KeyError, IndexError, TypeError):
         return str(val)
 
 

@@ -17,6 +17,15 @@ const sw = (s: Sensor): number => s.width ?? s.size ?? 2;
 const sh = (s: Sensor): number => s.height ?? s.size ?? 2;
 
 const PREVIEW_TARGET_PX = 560;
+
+const SAMPLE_SPEC = JSON.stringify({
+  id: "my_widget", label: "My Widget", w: 16, h: 7,
+  default_cfg: { color: [0, 255, 0] },
+  draw: [
+    { op: "value", x: 0, y: 1, bind: "solar", fmt: "{:.1f}" },
+    { op: "bar", x: 0, y: 6, w: 16, h: 1, bind: "soc", max: 100, color: [0, 120, 255], bg: [30, 30, 30] },
+  ],
+}, null, 2);
 const MODELS: Record<string, Size> = { galactic: [53, 11], cosmic: [32, 32], stellar: [16, 16] };
 const MOCK = "__mock__";
 
@@ -57,9 +66,13 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private live = false;
   @state() private wireframe = true;
   @state() private status = "";
-  @state() private tab: "layout" | "market" = "layout";
+  @state() private tab: "layout" | "market" | "edit" = "layout";
   @state() private catalog: CatalogWidget[] = [];
   @state() private fwManifest: FwManifest | null = null;
+  @state() private specText = SAMPLE_SPEC;
+  @state() private specPng = "";
+  @state() private specError = "";
+  private specTimer = 0;
 
   private renderTimer?: number;
   private pushTimer?: number;
@@ -104,6 +117,9 @@ export class PimoroniUnicornPanel extends LitElement {
     .badge { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--secondary-background-color, #444); color: var(--secondary-text-color, #ccc); }
     .badge.ok { background: var(--success-color, #43a047); color: #fff; }
     .badge.warn { background: var(--warning-color, #ffa600); color: #000; }
+    .spec { width: 380px; height: 320px; font: 13px monospace; resize: vertical;
+      border: 1px solid var(--divider-color, #ccc); border-radius: 6px; padding: 8px;
+      background: var(--card-background-color, #fff); color: var(--primary-text-color, #111); }
   `;
 
   protected firstUpdated(): void { this.loadDevices(); }
@@ -449,8 +465,11 @@ export class PimoroniUnicornPanel extends LitElement {
       <div class="tabs">
         <button class="tab ${this.tab === "layout" ? "on" : ""}" @click=${() => (this.tab = "layout")}>Layout</button>
         <button class="tab ${this.tab === "market" ? "on" : ""}" @click=${() => { this.tab = "market"; this.loadCatalog(); }}>Marketplace</button>
+        <button class="tab ${this.tab === "edit" ? "on" : ""}" @click=${() => { this.tab = "edit"; this.previewSpec(); }}>Widget editor</button>
       </div>
-      ${this.tab === "market" ? this._marketplaceView() : this._layoutView()}
+      ${this.tab === "market" ? this._marketplaceView()
+        : this.tab === "edit" ? this._editorView()
+        : this._layoutView()}
     `;
   }
 
@@ -600,6 +619,63 @@ export class PimoroniUnicornPanel extends LitElement {
         </li>`)}
       </ul>
       <p class="hint">Install pulls the widget (and any fonts it needs) to the device over the air; the device reboots and the widget becomes available on the Layout tab.</p>
+    `;
+  }
+
+  private onSpecInput(text: string) {
+    this.specText = text;
+    clearTimeout(this.specTimer);
+    this.specTimer = window.setTimeout(() => this.previewSpec(), 400);
+  }
+
+  private async previewSpec() {
+    let spec: unknown;
+    try { spec = JSON.parse(this.specText); }
+    catch (e) { this.specError = `JSON: ${(e as Error).message}`; return; }
+    try {
+      const r = await this.hass.callWS({ type: "pimoroni_unicorn/widget_preview", model: this.model, spec });
+      this.specPng = r.png; this.specError = "";
+    } catch (err: any) { this.specError = err?.message ?? String(err); }
+  }
+
+  private async importSpec(text: string) {
+    try {
+      const r = await this.hass.callWS({ type: "pimoroni_unicorn/widget_import", text });
+      this.specText = JSON.stringify(r.spec, null, 2);
+      this.specError = ""; this.previewSpec();
+    } catch (err: any) { this.specError = err?.message ?? String(err); }
+  }
+
+  private async saveSpec() {
+    let spec: unknown;
+    try { spec = JSON.parse(this.specText); }
+    catch (e) { this.specError = `JSON: ${(e as Error).message}`; return; }
+    try {
+      const r = await this.hass.callWS({ type: "pimoroni_unicorn/widget_save", spec });
+      this.specError = ""; this.status = `Saved custom widget "${r.id}". Install it from the Marketplace tab.`;
+    } catch (err: any) { this.specError = err?.message ?? String(err); }
+  }
+
+  private _editorView() {
+    const sc = Math.max(6, Math.floor(PREVIEW_TARGET_PX / this.dims[0]));
+    return html`
+      <div class="bar"><span class="hint">declarative widget — JSON spec, previewed on ${this.model}</span></div>
+      <div class="wrap">
+        <div class="col">
+          <textarea class="spec" .value=${this.specText}
+            @input=${(e: Event) => this.onSpecInput((e.target as HTMLTextAreaElement).value)}></textarea>
+          <div class="panelrow">
+            <button @click=${this.saveSpec}>Save custom</button>
+            <button class="secondary" @click=${() => { const t = prompt("Paste YAML or JSON widget spec:"); if (t) this.importSpec(t); }}>Import…</button>
+          </div>
+          ${this.specError ? html`<div class="status err">${this.specError}</div>` : html`<div class="hint">binds: solar, soc, consumption, co2… (unknown binds preview as 123)</div>`}
+        </div>
+        <div class="col">
+          <div class="stage" style=${`width:${this.dims[0] * sc}px;height:${this.dims[1] * sc}px`}>
+            ${this.specPng ? html`<img src="data:image/png;base64,${this.specPng}" width=${this.dims[0] * sc} height=${this.dims[1] * sc} />` : ""}
+          </div>
+        </div>
+      </div>
     `;
   }
 }

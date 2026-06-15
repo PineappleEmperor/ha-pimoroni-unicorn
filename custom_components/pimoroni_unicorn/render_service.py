@@ -41,22 +41,22 @@ def _modules():
     global _loaded
     if _loaded is None:
         _install_mocks()
-        from .render import bitfonts, drawing, layouts, weather_fx, widgets
+        from .render import bitfonts, declarative, drawing, layouts, weather_fx, widgets
         from .render.shim import PicoGraphics
-        _loaded = (PicoGraphics, bitfonts, drawing, weather_fx, widgets, layouts)
+        _loaded = types.SimpleNamespace(
+            PicoGraphics=PicoGraphics, bitfonts=bitfonts, drawing=drawing,
+            weather_fx=weather_fx, widgets=widgets, layouts=layouts, declarative=declarative)
     return _loaded
 
 
 def default_layout(model: str) -> dict:
     """Return the firmware default layout for a model."""
-    _, _, _, _, _, layouts = _modules()
-    return layouts.default_layout(model)
+    return _modules().layouts.default_layout(model)
 
 
 def layout_capabilities() -> dict:
     """Return the widget catalogue from the render package."""
-    *_, widgets, _ = _modules()
-    return widgets.LAYOUT_CAPABILITIES
+    return _modules().widgets.LAYOUT_CAPABILITIES
 
 
 def _sensors_dict(sensors):
@@ -77,7 +77,7 @@ def _sensors_dict(sensors):
 
 def layout_boxes(layout: dict) -> list:
     """Per-widget [w, h] boxes for the layout, computed by the real widget_box."""
-    *_, widgets, _ = _modules()
+    widgets = _modules().widgets
     out = []
     for entry in layout.get("widgets", []):
         meta = widgets.WIDGET_REGISTRY.get(entry.get("id"))
@@ -89,25 +89,44 @@ def layout_boxes(layout: dict) -> list:
     return out
 
 
-def render_layout_png(model: str, layout: dict, sensors=None) -> str:
-    """Render a layout (and any display sensors) for a model; return a base64 PNG."""
-    from PIL import Image
-
-    PicoGraphics, bitfonts, drawing, weather_fx, widgets, _ = _modules()
+def _new_graphics(model: str):
+    m = _modules()
     width, height = MODEL_DIMS.get(model, MODEL_DIMS["galactic"])
-
-    g = PicoGraphics(width, height)
-    drawing.init(g, bitfonts.BitFont(g), width, height)
-    weather_fx.init(g, width, height)
-
-    state = {**SAMPLE_STATE, "time": time.localtime()}
+    g = m.PicoGraphics(width, height)
+    m.drawing.init(g, m.bitfonts.BitFont(g), width, height)
+    m.weather_fx.init(g, width, height)
     g.set_pen(g.create_pen(0, 0, 0))
     g.clear()
-    widgets.render_layout(g, layout, state)
-    drawing.draw_display_sensors(_sensors_dict(sensors))
+    return m, g, width, height
+
+
+def _encode(g, width, height) -> str:
+    from PIL import Image
 
     img = Image.new("RGB", (width, height))
     img.putdata(g.buffer)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode()
+
+
+def render_layout_png(model: str, layout: dict, sensors=None) -> str:
+    """Render a layout (and any display sensors) for a model; return a base64 PNG."""
+    m, g, width, height = _new_graphics(model)
+    state = {**SAMPLE_STATE, "time": time.localtime()}
+    m.widgets.render_layout(g, layout, state)
+    m.drawing.draw_display_sensors(_sensors_dict(sensors))
+    return _encode(g, width, height)
+
+
+def render_widget_png(model: str, spec: dict, cfg=None, state=None) -> str:
+    """Render a single declarative widget spec to a base64 PNG for authoring preview."""
+    m, g, width, height = _new_graphics(model)
+    full = {**SAMPLE_STATE, "time": time.localtime(), **(state or {})}
+    for op in spec.get("draw", []):
+        bind = op.get("bind")
+        if bind and bind not in full:
+            full[bind] = 123  # sample value so unknown bindings still preview
+    cfg = {**spec.get("default_cfg", {}), **(cfg or {})}
+    m.declarative.render(g, spec, 0, 0, spec.get("w", width), spec.get("h", height), cfg, full)
+    return _encode(g, width, height)
