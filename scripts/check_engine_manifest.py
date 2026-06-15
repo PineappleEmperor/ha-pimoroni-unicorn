@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""CI guard: every firmware engine module is in OTA_SOURCE_FILES.
-
-A forgotten module means a device push can't fully sync a unit (the bug that
-left widgets.py/layouts.py/fonts unshipped). secrets.py is device-private and
-__init__.py is a package marker, so both are excluded.
-"""
+"""CI guard: every firmware engine module is in OTA_SOURCE_FILES (excl. secrets/__init__)."""
 
 import ast
 from pathlib import Path

@@ -1,10 +1,4 @@
-"""Widget loader: assembles the registry from widget_<id> unit modules.
-
-Each unit exposes WIDGET (descriptor), an optional box(cfg), and
-render(g, x, y, w, h, cfg, state). Built-in units are imported statically here;
-the loader exposes the same registry/capabilities API the engine and the
-emulator already use. Overlays (e.g. weather) render full-screen after widgets.
-"""
+"""Widget loader: assembles the registry/capabilities API from widget_<id> units."""
 
 import weather_fx
 
@@ -31,11 +25,7 @@ WIDGET_REGISTRY = {mod.WIDGET["id"]: _meta(mod) for mod in _UNITS}
 
 
 def _discover_installed():
-    """On-device: register any installed widget_<id>.py beyond the built-ins.
-
-    No-op off-device (the emulator/HA render path has no uos), so those see only
-    the statically-imported built-ins.
-    """
+    """Find widget_<id>.py units installed on the device and add them to the registry."""
     try:
         import uos  # type: ignore  # noqa: PLC0415
         names = uos.listdir("/")

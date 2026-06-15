@@ -18,7 +18,20 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
-RENDER_DIR = ROOT / "custom_components" / "pimoroni_unicorn" / "render"
+PKG = ROOT / "custom_components" / "pimoroni_unicorn"
+RENDER_DIR = PKG / "render"
+CATALOG_DIR = PKG / "catalog"
+
+# Verbatim (untransformed) device-installable units shipped for the marketplace.
+# Byte-identical to firmware/ so the device manifest hash matches.
+CATALOG_WIDGETS = [
+    "widget_clock.py", "widget_calendar.py", "widget_weekdays.py",
+    "widget_energy.py", "widget_sun_moon.py",
+]
+CATALOG_FONTS = [
+    "monospace_digits.py", "monospace_big_digits.py",
+    "monospace_blocky.py", "monospace_tall.py", "monospace_humanist.py",
+]
 
 # Synced firmware render modules -> render/ (transformed).
 FIRMWARE_MODULES = [
@@ -53,11 +66,22 @@ def _pairs():
         yield ROOT / "firmware" / name, RENDER_DIR / name
 
 
+def _catalog_pairs():
+    for name in CATALOG_WIDGETS:
+        yield ROOT / "firmware" / name, CATALOG_DIR / "widgets" / name
+    for name in CATALOG_FONTS:
+        yield ROOT / "firmware" / name, CATALOG_DIR / "fonts" / name
+
+
 def do_sync() -> None:
     RENDER_DIR.mkdir(parents=True, exist_ok=True)
     for src, dst in _pairs():
         dst.write_text(transform(src.read_text()))
         print(f"synced {dst.relative_to(ROOT)}")
+    for src, dst in _catalog_pairs():
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(src.read_text())  # verbatim — device-installable + hash-matching
+        print(f"catalog {dst.relative_to(ROOT)}")
 
 
 def do_check() -> int:
@@ -66,12 +90,15 @@ def do_check() -> int:
         expected = transform(src.read_text())
         if not dst.is_file() or dst.read_text() != expected:
             stale.append(str(dst.relative_to(ROOT)))
+    for src, dst in _catalog_pairs():
+        if not dst.is_file() or dst.read_text() != src.read_text():
+            stale.append(str(dst.relative_to(ROOT)))
     if stale:
-        print("render/ out of sync with firmware/ (run scripts/sync_render.py sync):")
+        print("render/ or catalog/ out of sync with firmware/ (run scripts/sync_render.py sync):")
         for s in stale:
             print(f"  - {s}")
         return 1
-    print("render/ in sync with firmware/")
+    print("render/ + catalog/ in sync with firmware/")
     return 0
 
 
