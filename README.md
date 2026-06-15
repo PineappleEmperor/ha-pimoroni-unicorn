@@ -63,19 +63,23 @@ Call **Developer Tools → Services → `pimoroni_unicorn.generate_secrets`**.
 
 A `secrets_<device_id>.py` file is written to `<config>/pimoroni_unicorn/`. Open it and fill in `SSID`, `PASSWORD`, and `MQTT_PASSWORD`, then rename to `secrets.py`.
 
-### 2. Copy firmware to the Pico W
+### 2. First flash (once, over USB)
 
-Copy to the root of your Pico W using Thonny or similar:
-- `secrets.py`
-- `main.py`
-- `hardware.py`
-- all other `.py` files from `firmware/`
+A blank Pico has no network, so the first load must be physical. Copy every `.py`
+from `firmware/` plus your `secrets.py` to the root of the Pico W using Thonny or
+similar. This is the only manual flash — everything after is over-the-air.
 
-After the first version of the firmware is deployed you can use **`pimoroni_unicorn.push_firmware`** to push files over-the-air once the device is already running.
+### 3. Boot, then manage over the air
 
-### 3. Boot
+The Pico W connects to Wi-Fi, syncs NTP, connects to MQTT, starts displaying, and
+publishes its firmware version + a file manifest (`<device_id>/fw/manifest`). From then
+on the integration owns updates: **`pimoroni_unicorn.push_firmware`** pushes the complete
+engine file set (download-and-reboot, no reflash), and widgets are installed/removed
+independently from the panel's Marketplace tab.
 
-The Pico W connects to Wi-Fi, syncs NTP, connects to MQTT, and starts displaying.
+The firmware is split into a stable **engine** (the runtime/loader, rarely updated) and
+**content** — widgets, fonts and layout — which are managed separately. See *Widgets &
+marketplace* below.
 
 ## Features
 
@@ -105,9 +109,19 @@ For bulk preview or generating firmware built-ins there is a dev-side helper: `p
 
 ### Layout editor
 
-Each Unicorn model has a configurable display layout (which widgets — clock, calendar, weekday bars, solar/energy — sit where, with per-widget variant and colour). Edit it visually from the **Unicorn Layout** panel in the HA sidebar: pick a device, drag widgets on a pixel-accurate preview (rendered by the device's own code in the backend), then **Save & Push** to store the named layout and send it to the device over MQTT — no reflash. Layouts can also be authored in the terminal emulator (`scripts/emulate.py layout`) and imported under **Configure → Import layout**.
+Each Unicorn model has a configurable display layout (which widgets — clock, calendar, weekday bars, solar/energy — sit where, with per-widget variant and colour). Edit it visually from the **Unicorn Layout** panel in the HA sidebar (**Layout** tab): pick a device, drag widgets on a pixel-accurate preview (rendered by the device's own code in the backend), then **Save & Push** to store the named layout and send it to the device over MQTT — no reflash. Layouts can also be authored in the terminal emulator (`scripts/emulate.py layout`) and imported under **Configure → Import layout**.
 
 The panel frontend is a Lit/TypeScript bundle built from `frontend/` (`npm run build`) into `custom_components/pimoroni_unicorn/panel/editor.js`.
+
+### Widgets & marketplace
+
+Widgets are decoupled from the engine and managed like a small marketplace, from the panel's **Marketplace** and **Widget editor** tabs.
+
+- **Marketplace tab** — lists the widget catalogue (built-ins + your custom widgets) with per-device install status and the device's engine version. Install/Update/Remove a widget over the air; installing also pulls any fonts the widget needs (declared via `requires: ["font:<name>"]`) and the device reboots into the new set.
+- **Two widget kinds** — *code* widgets are MicroPython modules (`widget_<id>.py`); *declarative* widgets are a safe JSON/YAML spec (`widget_<id>.json`) interpreted on-device, with no code execution — the preferred format to author, import and share.
+- **Widget editor tab** — write a declarative spec with a live, device-faithful preview (rendered through the same code the device runs), **Import** a pasted YAML/JSON spec, and **Save** it to your custom catalogue (under `<config>/pimoroni_unicorn/widgets/`). Saved widgets appear in the Marketplace for install. Draw ops: `value`, `bar`, `rect`, `pixel`, `icon`, with state binding + `fmt` (binds: `solar`, `soc`, `consumption`, …).
+
+Engine modules and the shipped catalogue are kept byte-identical to `firmware/` by `scripts/sync_render.py`, guarded in CI (`check_render_sync.py`, `check_engine_manifest.py`).
 
 ### Energy mode
 
