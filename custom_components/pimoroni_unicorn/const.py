@@ -38,6 +38,7 @@ OTA_SOURCE_FILES = {
     "version":             ("version.py",              "/version.py"),
     "drawing":             ("drawing.py",              "/drawing.py"),
     "widgets":             ("widgets.py",              "/widgets.py"),
+    "declarative":         ("declarative.py",          "/declarative.py"),
     "widget_clock":        ("widget_clock.py",         "/widget_clock.py"),
     "widget_calendar":     ("widget_calendar.py",      "/widget_calendar.py"),
     "widget_weekdays":     ("widget_weekdays.py",      "/widget_weekdays.py"),
