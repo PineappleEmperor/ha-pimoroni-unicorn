@@ -35,7 +35,10 @@ CONF_SHOW_PANEL                 = "show_panel"
 OTA_SOURCE_FILES = {
     "main":                ("main.py",                 "/main.py"),
     "hardware":            ("hardware.py",             "/hardware.py"),
+    "version":             ("version.py",              "/version.py"),
     "drawing":             ("drawing.py",              "/drawing.py"),
+    "widgets":             ("widgets.py",              "/widgets.py"),
+    "layouts":             ("layouts.py",              "/layouts.py"),
     "notify_animations":   ("notify_animations.py",    "/notify_animations.py"),
     "icons":               ("icons.py",                "/icons.py"),
     "sounds":              ("sounds.py",               "/sounds.py"),
@@ -43,7 +46,14 @@ OTA_SOURCE_FILES = {
     "bitfonts":            ("bitfonts.py",             "/bitfonts.py"),
     "monospace_digits":    ("monospace_digits.py",     "/monospace_digits.py"),
     "monospace_big_digits":("monospace_big_digits.py", "/monospace_big_digits.py"),
+    "monospace_blocky":    ("monospace_blocky.py",     "/monospace_blocky.py"),
+    "monospace_tall":      ("monospace_tall.py",       "/monospace_tall.py"),
+    "monospace_humanist":  ("monospace_humanist.py",   "/monospace_humanist.py"),
 }
+
+# Engine modules every device must have (push set when syncing a unit).
+# Excludes secrets.py (device-private) and __init__.py.
+ENGINE_FILE_KEYS = list(OTA_SOURCE_FILES)
 
 NOTIFY_ANIMATIONS = [
     "rainbow",

@@ -69,6 +69,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _async_subscribe_ha_config(hass, entry)
     await _async_subscribe_layout_caps(hass, entry)
     await _async_subscribe_notify_caps(hass, entry)
+    await _async_subscribe_fw_manifest(hass, entry)
     await _async_setup_display_sensors(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
@@ -215,6 +216,23 @@ async def _async_subscribe_layout_caps(hass: HomeAssistant, entry: ConfigEntry) 
             pass
 
     unsub = await async_subscribe(hass, f"{device_id}/layout/capabilities", _on_caps)
+    hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
+
+
+async def _async_subscribe_fw_manifest(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Subscribe to the retained fw/manifest and cache engine version + file hashes."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+
+    @callback
+    def _on_manifest(msg: Any) -> None:
+        try:
+            data = json.loads(msg.payload)
+            if isinstance(data, dict) and entry.entry_id in hass.data.get(DOMAIN, {}):
+                hass.data[DOMAIN][entry.entry_id]["fw_manifest"] = data
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    unsub = await async_subscribe(hass, f"{device_id}/fw/manifest", _on_manifest)
     hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
 
 

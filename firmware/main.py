@@ -22,6 +22,8 @@ import machine
 import network
 import ntptime
 import uasyncio as asyncio
+import ubinascii
+import uhashlib
 import uos
 from hardware import (
     DISPLAY, HAS_AUDIO, MODEL, MODEL_NAME,
@@ -40,6 +42,7 @@ import notify_animations
 import sounds
 import weather_fx
 import widgets
+from version import ENGINE_VERSION
 from drawing import draw_display_sensors, draw_icon
 from notify_animations import (
     NOTIFY_ANIMATIONS, NOTIFY_CAPABILITIES, _draw_notification, compute_duration_ms,
@@ -79,6 +82,7 @@ TOPIC_NOTIFY_DISMISS    = f"{DEVICE_ID}/notify/dismiss"
 TOPIC_ICONS_CMD         = f"{DEVICE_ID}/icons/cmd"
 TOPIC_LAYOUT            = f"{DEVICE_ID}/layout"
 TOPIC_OTA               = f"{DEVICE_ID}/ota"
+TOPIC_FW_MANIFEST       = f"{DEVICE_ID}/fw/manifest"
 
 # --- HA Device details ---
 DEVICE_INFO = {
@@ -240,6 +244,29 @@ def _run_ota(payload):
             except Exception:
                 pass
     _show_ota_screen(f"Done {succeeded}/{total}", total, total)
+
+
+def _file_hash(path):
+    h = uhashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(512)
+            if not chunk:
+                break
+            h.update(chunk)
+    return ubinascii.hexlify(h.digest()).decode()[:16]
+
+
+def _fw_manifest():
+    """Engine version + short per-file hash of every root module (excl. secrets)."""
+    files = {}
+    for name in uos.listdir("/"):
+        if name.endswith(".py") and name != "secrets.py":
+            try:
+                files[name] = _file_hash("/" + name)
+            except Exception:
+                pass
+    return {"engine_version": ENGINE_VERSION, "files": files}
     time.sleep(2)
     machine.reset()
 
@@ -488,6 +515,7 @@ async def mqtt_task():
                 f"{DEVICE_ID}/layout/capabilities",
                 json.dumps(widgets.LAYOUT_CAPABILITIES), retain=True,
             )
+            mqtt_client.publish(TOPIC_FW_MANIFEST, json.dumps(_fw_manifest()), retain=True)
             _ha_config = {
                 k: v for k, v in (
                     ("solar_entity",            HA_SOLAR_ENTITY),

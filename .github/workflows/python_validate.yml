@@ -33,3 +33,6 @@ jobs:
 
       - name: Check widget boxes match rendered output
         run: python scripts/check_widget_boxes.py
+
+      - name: Check engine file manifest is complete
+        run: python scripts/check_engine_manifest.py
