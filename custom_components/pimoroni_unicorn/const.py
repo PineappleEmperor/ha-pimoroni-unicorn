@@ -30,6 +30,7 @@ CONF_SUN_ENTITY                 = "sun_entity"
 CONF_WEATHER_CODE_ENTITY        = "weather_code_entity"
 CONF_EXTRA_SENSORS              = "extra_sensors"
 CONF_DISPLAY_SENSORS            = "display_sensors"
+CONF_SHOW_PANEL                 = "show_panel"
 
 OTA_SOURCE_FILES = {
     "main":                ("main.py",                 "/main.py"),

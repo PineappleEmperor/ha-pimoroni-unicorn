@@ -3,7 +3,18 @@ import time
 
 from bitfonts import font3x5
 from monospace_big_digits import BIG_DIGITS
+from monospace_blocky import BLOCKY
 from monospace_digits import DIGITS
+from monospace_humanist import HUMANIST
+from monospace_tall import TALL
+
+# Single-row clock faces: (glyph table, glyph width).
+_CLOCK_FONTS = {
+    "wide":     (DIGITS, 3),
+    "blocky":   (BLOCKY, 4),
+    "tall":     (TALL, 3),
+    "humanist": (HUMANIST, 4),
+}
 
 BATTERY_ROWS = 4
 
@@ -215,6 +226,16 @@ def draw_big_custom_digit(digit, x, y, colour, background=None):
         _g.pixel(x + i % 5, y + i // 5)
 
 
+def _draw_font_digit(font, w, digit, x, y, pen):
+    """Draw one lit-pixel digit from a w-wide bitmask table (no background)."""
+    if 0 <= digit <= 9:
+        _g.set_pen(pen)
+        mask = font[digit]
+        for i in range(len(mask)):
+            if mask[i]:
+                _g.pixel(x + i % w, y + i // w)
+
+
 BIG_DIGIT_W = 5
 BIG_DIGIT_STEP = BIG_DIGIT_W + 1
 
@@ -229,14 +250,11 @@ def draw_clock(x, t=None, y=1, variant="big", color=None):
         for i, digit in enumerate(digits):
             draw_custom_digit(digit, x + i * 4, y, pen)
         return
-    if variant == "wide":
-        draw_custom_digit(digits[0], x,      y, pen)
-        draw_custom_digit(digits[1], x + 4,  y, pen)
-        _g.set_pen(pen)
-        _g.pixel(x + 7, y + 1)
-        _g.pixel(x + 7, y + 3)
-        draw_custom_digit(digits[2], x + 9,  y, pen)
-        draw_custom_digit(digits[3], x + 13, y, pen)
+    if variant in _CLOCK_FONTS:
+        font, w = _CLOCK_FONTS[variant]
+        offsets = (0, w + 1, 2 * w + 3, 3 * w + 4)
+        for i in range(4):
+            _draw_font_digit(font, w, digits[i], x + offsets[i], y, pen)
         return
     if variant == "stacked":
         draw_big_custom_digit(digits[0], x,                  y,     pen)
