@@ -30,6 +30,33 @@ def _meta(mod):
 WIDGET_REGISTRY = {mod.WIDGET["id"]: _meta(mod) for mod in _UNITS}
 
 
+def _discover_installed():
+    """On-device: register any installed widget_<id>.py beyond the built-ins.
+
+    No-op off-device (the emulator/HA render path has no uos), so those see only
+    the statically-imported built-ins.
+    """
+    try:
+        import uos  # type: ignore  # noqa: PLC0415
+        names = uos.listdir("/")
+    except Exception:
+        return
+    for fn in names:
+        if fn.startswith("widget_") and fn.endswith(".py"):
+            wid = fn[7:-3]
+            if wid in WIDGET_REGISTRY:
+                continue
+            try:
+                mod = __import__(fn[:-3])
+                if hasattr(mod, "WIDGET") and hasattr(mod, "render"):
+                    WIDGET_REGISTRY[wid] = _meta(mod)
+            except Exception:
+                pass
+
+
+_discover_installed()
+
+
 def _weather(g, state):
     weather_fx.weather_overlay(state["weather"])
 

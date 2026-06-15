@@ -83,6 +83,7 @@ TOPIC_ICONS_CMD         = f"{DEVICE_ID}/icons/cmd"
 TOPIC_LAYOUT            = f"{DEVICE_ID}/layout"
 TOPIC_OTA               = f"{DEVICE_ID}/ota"
 TOPIC_FW_MANIFEST       = f"{DEVICE_ID}/fw/manifest"
+TOPIC_FW_REMOVE         = f"{DEVICE_ID}/fw/remove"
 
 # --- HA Device details ---
 DEVICE_INFO = {
@@ -386,6 +387,20 @@ def on_message(topic, message):
                 pass
             return
 
+        if topic_str == TOPIC_FW_REMOVE:
+            try:
+                data = json.loads(message)
+                for path in data.get("files", []):
+                    try:
+                        uos.remove(path)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            time.sleep(1)
+            machine.reset()
+            return
+
         data = json.loads(message)
         state_changed = False
 
@@ -503,6 +518,7 @@ async def mqtt_task():
                 TOPIC_COMMAND, TOPIC_SOLAR, TOPIC_WEATHER,
                 TOPIC_ANIM_CMD, TOPIC_ENERGY_MODE_CMD, TOPIC_NOTIFY,
                 TOPIC_NOTIFY_DISMISS, TOPIC_ICONS_CMD, TOPIC_LAYOUT, TOPIC_OTA,
+                TOPIC_FW_REMOVE,
             ):
                 mqtt_client.subscribe(topic.encode())
 
