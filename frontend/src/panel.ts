@@ -10,6 +10,8 @@ interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
 interface Layout { name?: string; model?: string; grid?: number; widgets: WidgetEntry[]; overlays?: string[]; }
 interface Device { entry_id: string; device_id: string; model: string; name: string; active_layout?: string; }
+interface CatalogWidget { id: string; label: string; kind: string; requires: string[]; device_file: string; hash: string; status: string; }
+interface FwManifest { engine_version?: string; files?: Record<string, string>; }
 interface Sensor { id: string; entity_id: string; name: string; on_color: string; off_color: string; x_pos: number; y_pos: number; width?: number; height?: number; size?: number; spacing?: number; }
 const sw = (s: Sensor): number => s.width ?? s.size ?? 2;
 const sh = (s: Sensor): number => s.height ?? s.size ?? 2;
@@ -55,6 +57,9 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private live = false;
   @state() private wireframe = true;
   @state() private status = "";
+  @state() private tab: "layout" | "market" = "layout";
+  @state() private catalog: CatalogWidget[] = [];
+  @state() private fwManifest: FwManifest | null = null;
 
   private renderTimer?: number;
   private pushTimer?: number;
@@ -90,6 +95,15 @@ export class PimoroniUnicornPanel extends LitElement {
     .status { margin-top: 12px; font: 13px monospace; color: var(--secondary-text-color, #888); min-height: 18px; }
     .status.err { color: var(--error-color, #db4437); }
     .hint { color: var(--secondary-text-color, #888); font-size: 13px; }
+    .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+    .tab { background: var(--secondary-background-color, #e0e0e0); color: var(--primary-text-color, #111); }
+    .tab.on { background: var(--primary-color, #03a9f4); color: #fff; }
+    .catalog { list-style: none; padding: 0; margin: 0; max-width: 640px; }
+    .catalog li { display: flex; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--divider-color, #333); }
+    .catalog li .grow { flex: 1; }
+    .badge { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--secondary-background-color, #444); color: var(--secondary-text-color, #ccc); }
+    .badge.ok { background: var(--success-color, #43a047); color: #fff; }
+    .badge.warn { background: var(--warning-color, #ffa600); color: #000; }
   `;
 
   protected firstUpdated(): void { this.loadDevices(); }
@@ -431,6 +445,16 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   render() {
+    return html`
+      <div class="tabs">
+        <button class="tab ${this.tab === "layout" ? "on" : ""}" @click=${() => (this.tab = "layout")}>Layout</button>
+        <button class="tab ${this.tab === "market" ? "on" : ""}" @click=${() => { this.tab = "market"; this.loadCatalog(); }}>Marketplace</button>
+      </div>
+      ${this.tab === "market" ? this._marketplaceView() : this._layoutView()}
+    `;
+  }
+
+  private _layoutView() {
     const s = this.scale;
     const present = new Set(this.layout.widgets.map((w) => w.id));
     const addable = this.caps.filter((c) => !present.has(c.id));
@@ -535,6 +559,47 @@ export class PimoroniUnicornPanel extends LitElement {
           </div>
         </div>
       </div>
+    `;
+  }
+
+  private async loadCatalog() {
+    if (!this.entryId) { this.catalog = []; this.fwManifest = null; return; }
+    const c = await this.hass.callWS({ type: "pimoroni_unicorn/catalog", entry_id: this.entryId });
+    this.catalog = c.widgets ?? [];
+    const m = await this.hass.callWS({ type: "pimoroni_unicorn/fw_manifest", entry_id: this.entryId });
+    this.fwManifest = m.manifest ?? null;
+  }
+
+  private async installWidget(id: string) {
+    await this.hass.callWS({ type: "pimoroni_unicorn/fw_install", entry_id: this.entryId, widget_id: id });
+    this.status = `Installing ${id}… device will reboot.`;
+    setTimeout(() => this.loadCatalog(), 8000);
+  }
+
+  private async removeWidgetUnit(id: string) {
+    await this.hass.callWS({ type: "pimoroni_unicorn/fw_remove", entry_id: this.entryId, widget_id: id });
+    this.status = `Removing ${id}… device will reboot.`;
+    setTimeout(() => this.loadCatalog(), 8000);
+  }
+
+  private _marketplaceView() {
+    if (!this.entryId) return html`<p class="hint">Select a device on the Layout tab to manage installed widgets.</p>`;
+    const ev = this.fwManifest?.engine_version ?? "?";
+    const cls: Record<string, string> = { installed: "ok", outdated: "warn", not_installed: "" };
+    const lbl: Record<string, string> = { installed: "installed", outdated: "update available", not_installed: "not installed" };
+    return html`
+      <div class="bar"><span class="hint">engine v${ev}</span>
+        <button class="secondary" @click=${this.loadCatalog}>Refresh</button></div>
+      <ul class="catalog">
+        ${this.catalog.map((w) => html`<li>
+          <span class="grow">${w.label} <span class="badge ${cls[w.status] ?? ""}">${lbl[w.status] ?? w.status}</span></span>
+          ${w.requires?.length ? html`<span class="hint">needs ${w.requires.join(", ")}</span>` : ""}
+          ${w.status === "installed"
+            ? html`<button class="danger" @click=${() => this.removeWidgetUnit(w.id)}>Remove</button>`
+            : html`<button @click=${() => this.installWidget(w.id)}>${w.status === "outdated" ? "Update" : "Install"}</button>`}
+        </li>`)}
+      </ul>
+      <p class="hint">Install pulls the widget (and any fonts it needs) to the device over the air; the device reboots and the widget becomes available on the Layout tab.</p>
     `;
   }
 }
