@@ -232,9 +232,6 @@ def draw_clock(x, t=None, y=1, variant="big", color=None):
     if variant == "wide":
         draw_custom_digit(digits[0], x,      y, pen)
         draw_custom_digit(digits[1], x + 4,  y, pen)
-        _g.set_pen(pen)
-        _g.pixel(x + 7, y + 1)
-        _g.pixel(x + 7, y + 3)
         draw_custom_digit(digits[2], x + 9,  y, pen)
         draw_custom_digit(digits[3], x + 13, y, pen)
         return
