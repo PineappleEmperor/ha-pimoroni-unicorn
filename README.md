@@ -13,6 +13,10 @@ Unofficial Home Assistant integration for [Pimoroni Unicorn](https://shop.pimoro
 
 Includes MicroPython firmware for the Pico W and a HA config flow for device setup, live data publishing, and over-the-air firmware updates.
 
+The notification system is heavily inspired by [AWTRIX](https://github.com/Blueforcer/awtrix3) — its payload model (text, icon, effect, colour, duration, stacking) shaped this integration's `notify` schema. Credit and thanks to the AWTRIX project.
+
+> **AI assistance:** I'm a programmer; this project is built with AI (Claude, via Claude Code) for implementation, code review, and QA — under human direction. We challenge each other's choices: I review and push back on the AI's output, and it questions my decisions and flags trade-offs. Architecture and final review are mine; every change is human-reviewed before it merges.
+
 ## Supported hardware
 
 | Model | Resolution |
@@ -57,16 +61,16 @@ After setup, open **Configure** to set optional data sources, currently these co
 
 ## Firmware setup
 
-### 1. Generate secrets
+### 1. Fill in secrets
 
-Call **Developer Tools → Services → `pimoroni_unicorn.generate_secrets`**.
-
-A `secrets_<device_id>.py` file is written to `<config>/pimoroni_unicorn/`. Open it and fill in `SSID`, `PASSWORD`, and `MQTT_PASSWORD`, then rename to `secrets.py`.
+Copy `firmware/secrets.example.py` to `firmware/secrets.py` and fill in your Wi-Fi
+credentials, MQTT broker details, `DEVICE_ID`, and `MODEL` (`galactic`/`cosmic`/`stellar`).
+`secrets.py` is gitignored and stays on your machine/device only.
 
 ### 2. First flash (once, over USB)
 
 A blank Pico has no network, so the first load must be physical. Copy every `.py`
-from `firmware/` plus your `secrets.py` to the root of the Pico W using Thonny or
+from `firmware/` (including your `secrets.py`) to the root of the Pico W using Thonny or
 similar. This is the only manual flash — everything after is over-the-air.
 
 ### 3. Boot, then manage over the air
@@ -92,14 +96,32 @@ marketplace* below.
 
 ### Notifications
 
-Use the **`pimoroni_unicorn.send_notification`** action (sectioned UI: basics, plus collapsed Appearance and Behaviour), the `notify.pimoroni_unicorn_<device_id>` entity, or the MQTT topic `<device_id>/notify`. **`pimoroni_unicorn.dismiss_notification`** clears the active notification (`all: true` also empties the queue).
+Two front doors to the same notification:
+
+- **`notify.pimoroni_unicorn_<device_id>`** — the canonical surface. Standard HA notify, works with `notify.*` blueprints/scripts. Pass the message directly and the rich options under `data:` (see fields below).
+- **`pimoroni_unicorn.send_notification`** — a guided builder with a sectioned form (basics, plus collapsed Appearance and Behaviour) and a device picker. Same result as the entity; exists because HA can only render a form for a custom action, not for an entity's free-form `data:`.
+
+To clear the current notification, call **`pimoroni_unicorn.dismiss_notification`**; pass `all: true` to also empty the queue.
+
+```yaml
+action: notify.send_message
+target:
+  entity_id: notify.pimoroni_unicorn_studio
+data:
+  message: "Garage open"
+  data:
+    icon: home
+    effect: rainbow
+    color: [0, 255, 0]
+    duration: 8
+```
 
 A notification with an `icon` shows it in a left panel beside the text; an `effect` plays a full-screen background animation.
 
 **Effects:** `rainbow`, `fire`, `matrix`, `scanner`, `comet`, `snow`, `confetti`, `flash`, `pulse`, `bounce`, `supercomputer`, `retroprompt`
 **Sounds** (Galactic/Cosmic only): `beep`, `chime`, `alert`
 
-Fields: `message`, `icon`, `effect`, `effect_speed`, `sound`, `color`, `bg_color`, `duration`, `scroll_speed`, `entrance`, `outlined`, plus behaviour — `hold` (stay until dismissed/replaced), `repeat` (full scroll passes), `stack` (off = replace immediately), `wakeup` (show while asleep). Duration auto-extends so overflowing text completes its scroll. Old `mode`/`animation`/`layout` payloads still render (legacy compatibility), and v2 calls auto-downconvert for pre-1.4.0 firmware.
+`data:` fields: `icon`, `effect`, `effect_speed`, `sound`, `color`, `bg_color`, `duration`, `scroll_speed`, `entrance`, `outlined`, plus behaviour — `hold` (stay until dismissed/replaced), `repeat` (full scroll passes), `stack` (off = replace immediately), `wakeup` (show while asleep). Duration auto-extends so overflowing text completes its scroll.
 
 ### Icons
 
@@ -128,10 +150,6 @@ Engine modules and the shipped catalogue are kept byte-identical to `firmware/` 
 Cycle display between **Solar**, **Consumption**, and **Net** via the `<device_id>/energy_mode/set` MQTT topic or HA select entity.
 
 ## Services
-
-### `pimoroni_unicorn.generate_secrets`
-
-Writes pre-filled `secrets_<device_id>.py` files to `<config>/pimoroni_unicorn/` for each configured device. Pulls broker address and credentials from the HA MQTT integration automatically.
 
 ### `pimoroni_unicorn.push_firmware`
 

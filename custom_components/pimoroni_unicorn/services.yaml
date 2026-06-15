@@ -120,9 +120,6 @@ dismiss_notification:
       selector:
         boolean: {}
 
-generate_secrets:
-  fields: {}
-
 push_firmware:
   fields:
     files:
