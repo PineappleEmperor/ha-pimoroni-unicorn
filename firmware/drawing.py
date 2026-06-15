@@ -297,12 +297,16 @@ def draw_big_weekdays(current_day, x, y, active_colour, inactive_colour):
 
 
 def draw_display_sensors(display_sensors):
-    """Draw a square dot (configurable size, default 2) for each display sensor at its x/y."""
+    """Draw a width×height block for each display sensor at its x/y.
+
+    Falls back to the legacy square 'size' when width/height are absent.
+    """
     for sensor in display_sensors.values():
         rgb = sensor.get("on_rgb", (0, 255, 0)) if sensor.get("state") else sensor.get("off_rgb", (20, 20, 20))
-        sz = int(sensor.get("size", 2))
+        w = int(sensor.get("width",  sensor.get("size", 2)))
+        h = int(sensor.get("height", sensor.get("size", 2)))
         _g.set_pen(_g.create_pen(*rgb))
-        _g.rectangle(sensor.get("x", 37), sensor.get("y", 1), sz, sz)
+        _g.rectangle(sensor.get("x", 37), sensor.get("y", 1), w, h)
 
 
 def draw_icon(icon_type, x, y):

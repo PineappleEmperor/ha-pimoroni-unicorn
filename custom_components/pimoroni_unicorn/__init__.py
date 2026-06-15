@@ -69,6 +69,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _async_subscribe_ha_config(hass, entry)
     await _async_subscribe_layout_caps(hass, entry)
     await _async_subscribe_notify_caps(hass, entry)
+    await _async_subscribe_fw_manifest(hass, entry)
     await _async_setup_display_sensors(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
@@ -218,6 +219,23 @@ async def _async_subscribe_layout_caps(hass: HomeAssistant, entry: ConfigEntry) 
     hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
 
 
+async def _async_subscribe_fw_manifest(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Subscribe to the retained fw/manifest and cache engine version + file hashes."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+
+    @callback
+    def _on_manifest(msg: Any) -> None:
+        try:
+            data = json.loads(msg.payload)
+            if isinstance(data, dict) and entry.entry_id in hass.data.get(DOMAIN, {}):
+                hass.data[DOMAIN][entry.entry_id]["fw_manifest"] = data
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    unsub = await async_subscribe(hass, f"{device_id}/fw/manifest", _on_manifest)
+    hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
+
+
 async def _async_subscribe_notify_caps(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Subscribe to retained notify/capabilities (used to downconvert for old firmware)."""
     device_id = _merged_opts(entry)[CONF_DEVICE_ID]
@@ -273,6 +291,8 @@ async def _async_setup_display_sensors(hass: HomeAssistant, entry: ConfigEntry) 
             "off_rgb": _hex_to_rgb(sensor.get("off_color", "1A1A1A")),
             "x":       sensor.get("x_pos",  37),
             "y":       sensor.get("y_pos",   1),
+            "width":   sensor.get("width",  sensor.get("size", 2)),
+            "height":  sensor.get("height", sensor.get("size", 2)),
             "spacing": sensor.get("spacing", 4),
         })
         await async_publish(hass, f"{device_id}/display/{sensor_id}/config", config_payload, retain=True)

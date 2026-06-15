@@ -335,8 +335,8 @@ max-line-length-suggestions = 72
 
 [tool.ruff]
 required-version = ">=0.12.1"
-# render/ holds auto-generated firmware copies (see scripts/sync_render.py); lint the source in firmware/.
-extend-exclude = ["custom_components/pimoroni_unicorn/render"]
+# render/ + catalog/ hold auto-generated firmware copies (see scripts/sync_render.py); lint the source in firmware/.
+extend-exclude = ["custom_components/pimoroni_unicorn/render", "custom_components/pimoroni_unicorn/catalog"]
 
 [tool.ruff.lint]
 select = [

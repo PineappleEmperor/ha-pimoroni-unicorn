@@ -1,128 +1,82 @@
-"""Widget registry mapping layout entries to drawing primitives.
+"""Widget loader: assembles the registry/capabilities API from widget_<id> units."""
 
-Each widget render has the uniform signature render(g, x, y, w, h, cfg, state).
-state is a per-frame dict; cfg is per-instance config (variant, colours).
-Overlays (e.g. weather) render full-screen after positioned widgets.
-"""
+import json
 
-import drawing
 import weather_fx
 
+import declarative
+import widget_calendar
+import widget_clock
+import widget_energy
+import widget_sun_moon
+import widget_weekdays
 
-def _pen(g, rgb, default):
-    return g.create_pen(*(rgb or default))
-
-
-def _clock(g, x, y, w, h, cfg, state):
-    drawing.draw_clock(x, state["time"], y=y, variant=cfg.get("variant", "big"),
-                       color=cfg.get("color"))
-
-
-def _calendar(g, x, y, w, h, cfg, state):
-    drawing.draw_calendar(state["time"][2], x, y, _pen(g, cfg.get("header_color"), (200, 0, 0)))
+_UNITS = [widget_clock, widget_calendar, widget_weekdays, widget_energy, widget_sun_moon]
 
 
-def _weekdays(g, x, y, w, h, cfg, state):
-    active   = _pen(g, cfg.get("active"),   (0, 0, 128))
-    inactive = _pen(g, cfg.get("inactive"), (60, 60, 60))
-    if cfg.get("variant", "big") == "small":
-        drawing.draw_weekdays(state["time"][6], x, y, active, inactive)
-    else:
-        drawing.draw_big_weekdays(state["time"][6], x, y, active, inactive)
+def _meta(mod):
+    w = mod.WIDGET
+    return {
+        "label": w["label"], "w": w["w"], "h": w["h"],
+        "variants": w.get("variants", []), "default_cfg": w["default_cfg"],
+        "cfg_fields": w.get("cfg_fields", []),
+        "box": getattr(mod, "box", None), "render": mod.render,
+    }
 
 
-def _energy(g, x, y, w, h, cfg, state):
-    drawing.draw_energy(
-        x, y, w, h,
-        solar=state["solar"], battery_soc=state["soc"], is_charging=state["charging"],
-        mode=state["energy_mode"], consumption=state["consumption"],
-        battery_animation=state["battery_animation"], decimals=int(cfg.get("decimals", 1)),
-    )
+WIDGET_REGISTRY = {mod.WIDGET["id"]: _meta(mod) for mod in _UNITS}
 
 
-def _sun_moon(g, x, y, w, h, cfg, state):
-    drawing.draw_sun_moon(x, y, w, h, solar=state["solar"], sun_below_horizon=state["sun_below"])
+def _declarative_meta(spec):
+    def _render(g, x, y, w, h, cfg, state, _spec=spec):
+        declarative.render(g, _spec, x, y, w, h, cfg, state)
+
+    def _box(cfg, _spec=spec):
+        return declarative.box(_spec, cfg)
+
+    return {
+        "label": spec.get("label", spec.get("id", "")),
+        "w": spec.get("w", 8), "h": spec.get("h", 8),
+        "variants": [], "default_cfg": spec.get("default_cfg", {}),
+        "cfg_fields": spec.get("cfg_fields", []), "box": _box, "render": _render,
+    }
+
+
+def _discover_installed():
+    """Find widget_<id> units (.py or declarative .json) on the device and register them."""
+    try:
+        import uos  # type: ignore  # noqa: PLC0415
+        names = uos.listdir("/")
+    except Exception:
+        return
+    for fn in names:
+        if not fn.startswith("widget_"):
+            continue
+        if fn.endswith(".py"):
+            wid = fn[7:-3]
+            if wid not in WIDGET_REGISTRY:
+                try:
+                    mod = __import__(fn[:-3])
+                    if hasattr(mod, "WIDGET") and hasattr(mod, "render"):
+                        WIDGET_REGISTRY[wid] = _meta(mod)
+                except Exception:
+                    pass
+        elif fn.endswith(".json"):
+            wid = fn[7:-5]
+            if wid not in WIDGET_REGISTRY:
+                try:
+                    with open("/" + fn) as f:
+                        WIDGET_REGISTRY[wid] = _declarative_meta(json.load(f))
+                except Exception:
+                    pass
+
+
+_discover_installed()
 
 
 def _weather(g, state):
     weather_fx.weather_overlay(state["weather"])
 
-
-_CLOCK_BOXES = {
-    "small":    (15, 5),
-    "wide":     (16, 5),
-    "blocky":   (20, 5),
-    "tall":     (16, 7),
-    "humanist": (20, 7),
-    "stacked":  (11, 15),
-}
-
-
-def _clock_box(cfg):
-    return _CLOCK_BOXES.get(cfg.get("variant"), (23, 7))
-
-
-def _sun_moon_box(cfg):
-    s = int(cfg.get("size", 7))
-    return (s, s)
-
-
-def _energy_box(cfg):
-    # battery(4)+gap(1) + value field. integer digit = 4px, decimal point = 2px, each dp = 4px.
-    d = max(1, int(cfg.get("digits", 1)))
-    k = max(0, int(cfg.get("decimals", 1)))
-    value = d * 4 + (2 + k * 4 if k > 0 else 0) - 1
-    return (5 + value, 5)
-
-
-def _weekdays_box(cfg):
-    return (13, 2) if cfg.get("variant") == "small" else (20, 1)
-
-
-WIDGET_REGISTRY = {
-    "clock": {
-        "label": "Clock", "w": 23, "h": 7,
-        "variants": ["big", "small", "wide", "blocky", "tall", "humanist", "stacked"],
-        "default_cfg": {"variant": "big", "color": [255, 255, 255]},
-        "cfg_fields": [
-            {"key": "variant", "type": "select",
-             "options": ["big", "small", "wide", "blocky", "tall", "humanist", "stacked"]},
-            {"key": "color", "type": "rgb", "label": "Colour"},
-        ],
-        "box": _clock_box, "render": _clock,
-    },
-    "calendar": {
-        "label": "Calendar", "w": 9, "h": 10, "variants": [],
-        "default_cfg": {"header_color": [200, 0, 0]},
-        "cfg_fields": [{"key": "header_color", "type": "rgb", "label": "Header"}],
-        "box": None, "render": _calendar,
-    },
-    "weekdays": {
-        "label": "Weekdays", "w": 20, "h": 1, "variants": ["big", "small"],
-        "default_cfg": {"variant": "big", "active": [0, 0, 128], "inactive": [60, 60, 60]},
-        "cfg_fields": [
-            {"key": "variant", "type": "select", "options": ["big", "small"]},
-            {"key": "active", "type": "rgb", "label": "Active"},
-            {"key": "inactive", "type": "rgb", "label": "Inactive"},
-        ],
-        "box": _weekdays_box, "render": _weekdays,
-    },
-    "energy": {
-        "label": "Energy (battery + value)", "w": 14, "h": 5, "variants": [],
-        "default_cfg": {"digits": 1, "decimals": 1},
-        "cfg_fields": [
-            {"key": "digits", "type": "number", "min": 1, "max": 3, "step": 1, "label": "Range (int digits)"},
-            {"key": "decimals", "type": "number", "min": 0, "max": 2, "step": 1, "label": "Decimals"},
-        ],
-        "box": _energy_box, "render": _energy,
-    },
-    "sun_moon": {
-        "label": "Sun / Moon", "w": 7, "h": 7, "variants": [],
-        "default_cfg": {"size": 7},
-        "cfg_fields": [{"key": "size", "type": "number", "min": 3, "max": 31, "step": 2, "label": "Size"}],
-        "box": _sun_moon_box, "render": _sun_moon,
-    },
-}
 
 OVERLAY_REGISTRY = {
     "weather": {"label": "Weather", "render": _weather},
