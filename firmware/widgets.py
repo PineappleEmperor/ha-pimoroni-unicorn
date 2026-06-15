@@ -48,15 +48,18 @@ def _weather(g, state):
     weather_fx.weather_overlay(state["weather"])
 
 
+_CLOCK_BOXES = {
+    "small":    (15, 5),
+    "wide":     (16, 5),
+    "blocky":   (20, 5),
+    "tall":     (16, 7),
+    "humanist": (20, 7),
+    "stacked":  (11, 15),
+}
+
+
 def _clock_box(cfg):
-    variant = cfg.get("variant")
-    if variant == "small":
-        return (15, 5)
-    if variant == "wide":
-        return (16, 5)
-    if variant == "stacked":
-        return (11, 15)
-    return (23, 7)
+    return _CLOCK_BOXES.get(cfg.get("variant"), (23, 7))
 
 
 def _sun_moon_box(cfg):
@@ -78,10 +81,12 @@ def _weekdays_box(cfg):
 
 WIDGET_REGISTRY = {
     "clock": {
-        "label": "Clock", "w": 23, "h": 7, "variants": ["big", "small", "wide", "stacked"],
+        "label": "Clock", "w": 23, "h": 7,
+        "variants": ["big", "small", "wide", "blocky", "tall", "humanist", "stacked"],
         "default_cfg": {"variant": "big", "color": [255, 255, 255]},
         "cfg_fields": [
-            {"key": "variant", "type": "select", "options": ["big", "small", "wide", "stacked"]},
+            {"key": "variant", "type": "select",
+             "options": ["big", "small", "wide", "blocky", "tall", "humanist", "stacked"]},
             {"key": "color", "type": "rgb", "label": "Colour"},
         ],
         "box": _clock_box, "render": _clock,

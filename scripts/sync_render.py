@@ -24,9 +24,11 @@ RENDER_DIR = ROOT / "custom_components" / "pimoroni_unicorn" / "render"
 FIRMWARE_MODULES = [
     "widgets.py", "drawing.py", "layouts.py", "bitfonts.py",
     "weather_fx.py", "monospace_digits.py", "monospace_big_digits.py",
+    "monospace_blocky.py", "monospace_tall.py", "monospace_humanist.py",
 ]
 
-_LOCAL = "drawing|weather_fx|bitfonts|layouts|widgets|icons|sounds|monospace_digits|monospace_big_digits"
+_LOCAL = ("drawing|weather_fx|bitfonts|layouts|widgets|icons|sounds|"
+          "monospace_digits|monospace_big_digits|monospace_blocky|monospace_tall|monospace_humanist")
 _TRANSFORMS = [
     (re.compile(rf"^import ({_LOCAL})$", re.MULTILINE), r"from . import \1"),
     (re.compile(rf"^import ({_LOCAL}) as (\w+)$", re.MULTILINE), r"from . import \1 as \2"),
