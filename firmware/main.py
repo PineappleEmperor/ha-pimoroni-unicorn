@@ -272,6 +272,8 @@ def on_message(topic, message):
                                 "off_rgb": tuple(data.get("off_rgb", [20, 20, 20])),
                                 "x":       data.get("x",        37),
                                 "y":       data.get("y",         1),
+                                "width":   data.get("width",  data.get("size", 2)),
+                                "height":  data.get("height", data.get("size", 2)),
                                 "spacing": data.get("spacing",   4),
                             })
                         else:
