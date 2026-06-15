@@ -32,6 +32,7 @@ from .const import (
     CONF_DISPLAY_SENSORS,
     CONF_EXTRA_SENSORS,
     CONF_MODEL,
+    CONF_SHOW_PANEL,
     CONF_SOLAR_ENTITY,
     CONF_SUN_ENTITY,
     CONF_WEATHER_CODE_ENTITY,
@@ -76,7 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.data.get(f"{DOMAIN}_ws_registered"):
         ws_api.async_register(hass)
         hass.data[f"{DOMAIN}_ws_registered"] = True
-    await _async_register_panel(hass)
+    await _async_refresh_panel(hass)
 
     if not hass.services.has_service(DOMAIN, SERVICE_GENERATE_SECRETS):
         hass.services.async_register(
@@ -129,24 +130,38 @@ PANEL_URL_PATH    = "pimoroni-unicorn"
 PANEL_MODULE_URL  = "/pimoroni_unicorn_panel/editor.js"
 
 
-async def _async_register_panel(hass: HomeAssistant) -> None:
-    """Serve the editor bundle and register the sidebar panel (once)."""
-    if hass.data.get(f"{DOMAIN}_panel_registered"):
-        return
-    await hass.http.async_register_static_paths([
-        StaticPathConfig(PANEL_MODULE_URL, str(Path(__file__).parent / "panel" / "editor.js"), False),
-    ])
-    integration = await async_get_integration(hass, DOMAIN)
-    await panel_custom.async_register_panel(
-        hass,
-        frontend_url_path=PANEL_URL_PATH,
-        webcomponent_name="pimoroni-unicorn-panel",
-        module_url=f"{PANEL_MODULE_URL}?v={integration.version}",
-        sidebar_title="Unicorn Layout",
-        sidebar_icon="mdi:dots-grid",
-        require_admin=True,
+def _panel_wanted(hass: HomeAssistant) -> bool:
+    """True if any configured device opts into the layout panel (default on)."""
+    return any(
+        _merged_opts(entry).get(CONF_SHOW_PANEL, True)
+        for entry in hass.config_entries.async_entries(DOMAIN)
     )
-    hass.data[f"{DOMAIN}_panel_registered"] = True
+
+
+async def _async_refresh_panel(hass: HomeAssistant) -> None:
+    """Register or remove the sidebar panel to match the show_panel option."""
+    want = _panel_wanted(hass)
+    registered = hass.data.get(f"{DOMAIN}_panel_registered", False)
+    if want and not registered:
+        if not hass.data.get(f"{DOMAIN}_panel_static"):
+            await hass.http.async_register_static_paths([
+                StaticPathConfig(PANEL_MODULE_URL, str(Path(__file__).parent / "panel" / "editor.js"), False),
+            ])
+            hass.data[f"{DOMAIN}_panel_static"] = True
+        integration = await async_get_integration(hass, DOMAIN)
+        await panel_custom.async_register_panel(
+            hass,
+            frontend_url_path=PANEL_URL_PATH,
+            webcomponent_name="pimoroni-unicorn-panel",
+            module_url=f"{PANEL_MODULE_URL}?v={integration.version}",
+            sidebar_title="Unicorn Layout",
+            sidebar_icon="mdi:dots-grid",
+            require_admin=True,
+        )
+        hass.data[f"{DOMAIN}_panel_registered"] = True
+    elif registered and not want:
+        frontend.async_remove_panel(hass, PANEL_URL_PATH)
+        hass.data[f"{DOMAIN}_panel_registered"] = False
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -155,6 +170,7 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     await _async_publish_ha_config(hass, entry)
     await _async_setup_display_sensors(hass, entry)
     await layout.async_push_active(hass, entry)
+    await _async_refresh_panel(hass)
 
 
 async def _async_subscribe_ha_config(hass: HomeAssistant, entry: ConfigEntry) -> None:

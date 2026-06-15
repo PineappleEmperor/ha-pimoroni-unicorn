@@ -5,6 +5,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
     NumberSelector,
@@ -27,6 +28,7 @@ from .const import (
     CONF_DISPLAY_SENSORS,
     CONF_EXTRA_SENSORS,
     CONF_MODEL,
+    CONF_SHOW_PANEL,
     CONF_SOLAR_ENTITY,
     CONF_SUN_ENTITY,
     CONF_WEATHER_CODE_ENTITY,
@@ -59,6 +61,7 @@ def _options_schema(current: dict) -> vol.Schema:
         vol.Optional(CONF_SUN_ENTITY,              default=_d(CONF_SUN_ENTITY, "sun.sun")):   EntitySelector(EntitySelectorConfig(domain="sun")),
         vol.Optional(CONF_WEATHER_CODE_ENTITY,     default=_d(CONF_WEATHER_CODE_ENTITY)):     EntitySelector(EntitySelectorConfig(domain="sensor")),
         vol.Optional(CONF_EXTRA_SENSORS,           default=_d(CONF_EXTRA_SENSORS)):           TextSelector(TextSelectorConfig(multiline=True)),
+        vol.Optional(CONF_SHOW_PANEL,              default=current.get(CONF_SHOW_PANEL, True)): BooleanSelector(),
     })
 
 
