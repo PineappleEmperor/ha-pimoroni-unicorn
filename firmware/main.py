@@ -149,17 +149,21 @@ _screens, _screen_dwell_ms, _screen_transition = _load_screens()
 _screen_idx = 0
 _screen_pinned = False
 _screen_switch_ms = 0
+_fade_left = 0
+FADE_FRAMES = 12
 
 
 def _advance_screen():
     """Advance to the next screen when its dwell elapses (multi-screen, not pinned)."""
-    global _screen_idx, _screen_switch_ms
+    global _screen_idx, _screen_switch_ms, _fade_left
     if _screen_pinned or _screen_dwell_ms <= 0 or len(_screens) <= 1:
         return
     now = time.ticks_ms()
     if _screen_switch_ms == 0 or time.ticks_diff(now, _screen_switch_ms) >= _screen_dwell_ms:
         if _screen_switch_ms:
             _screen_idx = (_screen_idx + 1) % len(_screens)
+            if _screen_transition == "fade":
+                _fade_left = FADE_FRAMES
         _screen_switch_ms = now
 
 display_sensors: dict = {}  # populated via MQTT {device_id}/display/{id}/config and state
@@ -661,7 +665,7 @@ async def mqtt_task():
 
 async def main_loop():
     """Handle button presses, draw each frame, and sleep; runs as the main display loop."""
-    global brightness, system_state, msg, icon_type
+    global brightness, system_state, msg, icon_type, _fade_left
     global _notify_active, _notify_start_ms, _notify_end_ms, _ota_pending
 
     last_button_time = 0
@@ -730,7 +734,6 @@ async def main_loop():
             if SWITCH_BRIGHTNESS_DOWN is not None and unicorn.is_pressed(SWITCH_BRIGHTNESS_DOWN):
                 brightness -= 0.01
             brightness = max(0.0, min(1.0, brightness))
-            unicorn.set_brightness(brightness)
 
             # Normal display — render the active layout (widgets + overlays)
             state = {
@@ -741,6 +744,11 @@ async def main_loop():
                 "battery_animation": battery_animation,
             }
             _advance_screen()
+            if _fade_left > 0:
+                unicorn.set_brightness(brightness * (1.0 - _fade_left / FADE_FRAMES))
+                _fade_left -= 1
+            else:
+                unicorn.set_brightness(brightness)
             widgets.render_layout(graphics, _screens[_screen_idx], state)
 
             if icon_type != "none":
