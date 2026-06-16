@@ -231,6 +231,7 @@ def _run_ota(payload):
     files     = payload.get("files", [])
     total     = len(files)
     succeeded = 0
+    written   = []
     for i, item in enumerate(files):
         url  = item.get("url", "")
         path = item.get("path", "")
@@ -263,7 +264,16 @@ def _run_ota(payload):
                     except MemoryError:
                         print("OTA: low RAM, skipping validation:", path)
                 if valid:
+                    try:
+                        uos.remove(path + ".bak")
+                    except OSError:
+                        pass
+                    try:
+                        uos.rename(path, path + ".bak")  # keep old for rollback
+                    except OSError:
+                        pass
                     uos.rename(tmp, path)
+                    written.append(path)
                     succeeded += 1
                 else:
                     uos.remove(tmp)
@@ -276,6 +286,33 @@ def _run_ota(payload):
             except Exception:
                 pass
     _show_ota_screen(f"Done {succeeded}/{total}", total, total)
+    if written:
+        try:
+            with open("/ota_pending", "w") as f:
+                json.dump(written, f)
+        except OSError:
+            pass
+        time.sleep(1)
+        machine.reset()
+
+
+def _ota_commit():
+    """Healthy boot: drop the OTA .bak backups and clear the boot-attempt counter."""
+    try:
+        with open("/ota_pending") as f:
+            pending = json.load(f)
+    except (OSError, ValueError):
+        return
+    for p in pending:
+        try:
+            uos.remove(p + ".bak")
+        except OSError:
+            pass
+    for f in ("/ota_pending", "/boot_attempts"):
+        try:
+            uos.remove(f)
+        except OSError:
+            pass
 
 
 def _file_hash(path):
@@ -299,8 +336,6 @@ def _fw_manifest():
             except Exception:
                 pass
     return {"engine_version": ENGINE_VERSION, "files": files}
-    time.sleep(2)
-    machine.reset()
 
 
 # --- MQTT ---
@@ -597,6 +632,7 @@ async def mqtt_task():
                 json.dumps(widgets.LAYOUT_CAPABILITIES), retain=True,
             )
             mqtt_client.publish(TOPIC_FW_MANIFEST, json.dumps(_fw_manifest()), retain=True)
+            _ota_commit()  # booted healthy — drop OTA backups/rollback counter
             _ha_config = {
                 k: v for k, v in (
                     ("solar_entity",            HA_SOLAR_ENTITY),

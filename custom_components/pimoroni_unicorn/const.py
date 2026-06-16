@@ -33,6 +33,7 @@ CONF_SHOW_PANEL                 = "show_panel"
 
 OTA_SOURCE_FILES = {
     "main":                ("main.py",                 "/main.py"),
+    "boot":                ("boot.py",                 "/boot.py"),
     "hardware":            ("hardware.py",             "/hardware.py"),
     "version":             ("version.py",              "/version.py"),
     "drawing":             ("drawing.py",              "/drawing.py"),
