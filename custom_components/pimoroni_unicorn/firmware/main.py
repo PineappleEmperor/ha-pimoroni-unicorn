@@ -81,6 +81,8 @@ TOPIC_NOTIFY            = f"{DEVICE_ID}/notify"
 TOPIC_NOTIFY_DISMISS    = f"{DEVICE_ID}/notify/dismiss"
 TOPIC_ICONS_CMD         = f"{DEVICE_ID}/icons/cmd"
 TOPIC_LAYOUT            = f"{DEVICE_ID}/layout"
+TOPIC_SCREENS           = f"{DEVICE_ID}/screens"
+TOPIC_SCREEN_SHOW       = f"{DEVICE_ID}/screen/show"
 TOPIC_OTA               = f"{DEVICE_ID}/ota"
 TOPIC_FW_MANIFEST       = f"{DEVICE_ID}/fw/manifest"
 TOPIC_FW_REMOVE         = f"{DEVICE_ID}/fw/remove"
@@ -115,21 +117,50 @@ _notify_end_ms   = 0
 _ota_pending     = None
 
 LAYOUT_PATH = "/layout.json"
+SCREENS_PATH = "/screens.json"
 
 
-def _load_layout():
-    """Return the active layout: pushed /layout.json if valid, else model default."""
+def _valid_layout(d):
+    return isinstance(d, dict) and d.get("widgets") is not None
+
+
+def _load_screens():
+    """Return (screens, dwell_ms, transition): a screen set from /screens.json, a single
+    /layout.json, or the model default."""
+    try:
+        with open(SCREENS_PATH) as f:
+            data = json.load(f)
+        screens = [s for s in data.get("screens", []) if _valid_layout(s)]
+        if screens:
+            return screens, int(data.get("dwell", 0)) * 1000, data.get("transition", "none")
+    except (OSError, ValueError):
+        pass
     try:
         with open(LAYOUT_PATH) as f:
             data = json.load(f)
-        if isinstance(data, dict) and data.get("widgets") is not None:
-            return data
+        if _valid_layout(data):
+            return [data], 0, "none"
     except (OSError, ValueError):
         pass
-    return layouts.default_layout(MODEL)
+    return [layouts.default_layout(MODEL)], 0, "none"
 
 
-_active_layout = _load_layout()
+_screens, _screen_dwell_ms, _screen_transition = _load_screens()
+_screen_idx = 0
+_screen_pinned = False
+_screen_switch_ms = 0
+
+
+def _advance_screen():
+    """Advance to the next screen when its dwell elapses (multi-screen, not pinned)."""
+    global _screen_idx, _screen_switch_ms
+    if _screen_pinned or _screen_dwell_ms <= 0 or len(_screens) <= 1:
+        return
+    now = time.ticks_ms()
+    if _screen_switch_ms == 0 or time.ticks_diff(now, _screen_switch_ms) >= _screen_dwell_ms:
+        if _screen_switch_ms:
+            _screen_idx = (_screen_idx + 1) % len(_screens)
+        _screen_switch_ms = now
 
 display_sensors: dict = {}  # populated via MQTT {device_id}/display/{id}/config and state
 TOPIC_DISPLAY_PREFIX = f"{DEVICE_ID}/display/"
@@ -279,7 +310,8 @@ def on_message(topic, message):
     global msg, system_state, icon_type, brightness
     global solar_power, battery_soc, battery_charging, battery_animation
     global sun_below_horizon, weather_condition, energy_mode, consumption_power
-    global _ota_pending, _notify_active, _active_layout
+    global _ota_pending, _notify_active
+    global _screens, _screen_dwell_ms, _screen_transition, _screen_idx, _screen_pinned, _screen_switch_ms
     try:
         topic_str = topic.decode()
 
@@ -372,12 +404,45 @@ def on_message(topic, message):
         if topic_str == TOPIC_LAYOUT:
             try:
                 data = json.loads(message)
-                if isinstance(data, dict) and data.get("widgets") is not None:
+                if _valid_layout(data):
                     with open(LAYOUT_PATH, "w") as f:
                         json.dump(data, f)
-                    _active_layout = data
+                    _screens, _screen_dwell_ms, _screen_idx, _screen_pinned = [data], 0, 0, False
             except Exception as e:
                 print("Layout cmd failed:", e)
+            return
+
+        if topic_str == TOPIC_SCREENS:
+            try:
+                data = json.loads(message)
+                screens = [s for s in data.get("screens", []) if _valid_layout(s)]
+                if screens:
+                    with open(SCREENS_PATH, "w") as f:
+                        json.dump(data, f)
+                    _screens = screens
+                    _screen_dwell_ms = int(data.get("dwell", 0)) * 1000
+                    _screen_transition = data.get("transition", "none")
+                    _screen_idx, _screen_pinned = 0, False
+            except Exception as e:
+                print("Screens cmd failed:", e)
+            return
+
+        if topic_str == TOPIC_SCREEN_SHOW:
+            try:
+                data = json.loads(message)
+                if data.get("clear"):
+                    _screen_pinned = False
+                else:
+                    idx = data.get("index")
+                    if idx is None and "name" in data:
+                        for i, s in enumerate(_screens):
+                            if s.get("name") == data["name"]:
+                                idx = i
+                                break
+                    if idx is not None and 0 <= int(idx) < len(_screens):
+                        _screen_idx, _screen_pinned = int(idx), True
+            except Exception as e:
+                print("Screen show cmd failed:", e)
             return
 
         if topic_str == TOPIC_OTA:
@@ -518,7 +583,7 @@ async def mqtt_task():
                 TOPIC_COMMAND, TOPIC_SOLAR, TOPIC_WEATHER,
                 TOPIC_ANIM_CMD, TOPIC_ENERGY_MODE_CMD, TOPIC_NOTIFY,
                 TOPIC_NOTIFY_DISMISS, TOPIC_ICONS_CMD, TOPIC_LAYOUT, TOPIC_OTA,
-                TOPIC_FW_REMOVE,
+                TOPIC_SCREENS, TOPIC_SCREEN_SHOW, TOPIC_FW_REMOVE,
             ):
                 mqtt_client.subscribe(topic.encode())
 
@@ -639,7 +704,8 @@ async def main_loop():
                 "weather": weather_condition, "display_sensors": display_sensors,
                 "battery_animation": battery_animation,
             }
-            widgets.render_layout(graphics, _active_layout, state)
+            _advance_screen()
+            widgets.render_layout(graphics, _screens[_screen_idx], state)
 
             if icon_type != "none":
                 draw_icon(icon_type, 2, 2)
