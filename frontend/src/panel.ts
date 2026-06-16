@@ -1,5 +1,5 @@
 import { LitElement, html, css } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { property, state } from "lit/decorators.js";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
@@ -43,7 +43,6 @@ const dummySensors = (): Sensor[] => [
   { id: "demo_b", entity_id: "", name: "Sensor B", on_color: "#f7be12", off_color: "#3e3005", x_pos: 3, y_pos: 0 },
 ];
 
-@customElement("pimoroni-unicorn-panel")
 export class PimoroniUnicornPanel extends LitElement {
   @property({ attribute: false }) hass!: any;
 
@@ -681,3 +680,7 @@ export class PimoroniUnicornPanel extends LitElement {
 }
 
 declare global { interface HTMLElementTagNameMap { "pimoroni-unicorn-panel": PimoroniUnicornPanel; } }
+
+if (!customElements.get("pimoroni-unicorn-panel")) {
+  customElements.define("pimoroni-unicorn-panel", PimoroniUnicornPanel);
+}
