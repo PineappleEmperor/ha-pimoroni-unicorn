@@ -8,6 +8,7 @@ states; variable ones (solar) must merely fit inside their declared box.
 Run in CI so a draw change can't silently drift the editor's hit-boxes.
 """
 
+import binascii
 import builtins
 from pathlib import Path
 import sys
@@ -24,8 +25,11 @@ if not hasattr(time, "ticks_ms"):
 if not hasattr(builtins, "micropython"):
     builtins.micropython = types.SimpleNamespace(  # type: ignore[attr-defined]
         native=lambda f: f, viper=lambda f: f, const=lambda x: x)
+sys.modules.setdefault("ubinascii", binascii)
+sys.modules.setdefault("uos", types.SimpleNamespace(
+    listdir=lambda *_a: [], mkdir=lambda *_a: None, remove=lambda *_a: None))
 
-from render import bitfonts, drawing, weather_fx, widgets
+from render import bitfonts, drawing, icons, weather_fx, widgets
 from render.shim import PicoGraphics
 
 # A few states that exercise the widest output of each widget.
@@ -63,6 +67,7 @@ def main():
                 g = PicoGraphics(64, 32)
                 drawing.init(g, bitfonts.BitFont(g), 64, 32)
                 weather_fx.init(g, 64, 32)
+                icons.init(g)
                 meta["render"](g, 0, 0, decl[0], decl[1], cfg, {**BASE, "time": t})
                 bb = _bbox(g.buffer, 64, 32)
                 worst = (max(worst[0], bb[0]), max(worst[1], bb[1]))

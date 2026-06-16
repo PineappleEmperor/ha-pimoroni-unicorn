@@ -6,8 +6,10 @@ is the device's own render path — no JS re-implementation.
 """
 
 import base64
+import binascii
 import builtins
 import io
+import sys
 import time
 import types
 
@@ -35,16 +37,29 @@ def _install_mocks() -> None:
         builtins.micropython = types.SimpleNamespace(  # type: ignore[attr-defined]
             native=lambda f: f, viper=lambda f: f, const=lambda x: x
         )
+    # icons.py imports uos/ubinascii at module top; neither is touched when
+    # drawing built-in icons, so a thin shim is enough for the preview.
+    sys.modules.setdefault("ubinascii", binascii)  # type: ignore[arg-type]
+    sys.modules.setdefault("uos", types.SimpleNamespace(  # type: ignore[arg-type]
+        listdir=lambda *_a: [], mkdir=lambda *_a: None, remove=lambda *_a: None))
 
 
 def _modules():
     global _loaded
     if _loaded is None:
         _install_mocks()
-        from .render import bitfonts, declarative, drawing, layouts, weather_fx, widgets
+        from .render import (
+            bitfonts,
+            declarative,
+            drawing,
+            icons,
+            layouts,
+            weather_fx,
+            widgets,
+        )
         from .render.shim import PicoGraphics
         _loaded = types.SimpleNamespace(
-            PicoGraphics=PicoGraphics, bitfonts=bitfonts, drawing=drawing,
+            PicoGraphics=PicoGraphics, bitfonts=bitfonts, drawing=drawing, icons=icons,
             weather_fx=weather_fx, widgets=widgets, layouts=layouts, declarative=declarative)
     return _loaded
 
@@ -80,6 +95,7 @@ def _new_graphics(model: str):
     g = m.PicoGraphics(width, height)
     m.drawing.init(g, m.bitfonts.BitFont(g), width, height)
     m.weather_fx.init(g, width, height)
+    m.icons.init(g)
     g.set_pen(g.create_pen(0, 0, 0))
     g.clear()
     return m, g, width, height

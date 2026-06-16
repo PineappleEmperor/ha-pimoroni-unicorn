@@ -46,6 +46,7 @@ OTA_SOURCE_FILES = {
     "widget_energy":       ("widget_energy.py",        "/widget_energy.py"),
     "widget_sun_moon":     ("widget_sun_moon.py",      "/widget_sun_moon.py"),
     "widget_sensor":       ("widget_sensor.py",        "/widget_sensor.py"),
+    "widget_icon":         ("widget_icon.py",          "/widget_icon.py"),
     "layouts":             ("layouts.py",              "/layouts.py"),
     "notify_animations":   ("notify_animations.py",    "/notify_animations.py"),
     "icons":               ("icons.py",                "/icons.py"),
