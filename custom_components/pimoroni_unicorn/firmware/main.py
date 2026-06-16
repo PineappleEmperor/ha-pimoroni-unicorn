@@ -151,6 +151,8 @@ _screen_pinned = False
 _screen_switch_ms = 0
 _fade_left = 0
 FADE_FRAMES = 12
+_wdt = None
+WDT_TIMEOUT_MS = 8000
 
 
 def _advance_screen():
@@ -241,6 +243,8 @@ def _run_ota(payload):
         path = item.get("path", "")
         if not url or not path:
             continue
+        if _wdt is not None:
+            _wdt.feed()
         _show_ota_screen(path.lstrip("/"), i + 1, total)
         parent = path.rsplit("/", 1)[0]
         if parent:
@@ -250,7 +254,7 @@ def _run_ota(payload):
                 pass
         tmp = path + ".tmp"
         try:
-            r = urequests.get(url, timeout=30)
+            r = urequests.get(url, timeout=5)  # keep < WDT_TIMEOUT_MS
             if r.status_code == 200:
                 with open(tmp, "wb") as f:
                     f.write(r.content)
@@ -554,7 +558,7 @@ def on_message(topic, message):
 
 async def mqtt_task():
     """Manage MQTT connection, HA discovery publishing, and message polling."""
-    global mqtt_client
+    global mqtt_client, _wdt
     mqtt_client = MQTTClient(
         DEVICE_ID, MQTT_BROKER,
         port=MQTT_PORT, user=MQTT_USER, password=MQTT_PASSWORD, keepalive=45,
@@ -637,6 +641,8 @@ async def mqtt_task():
             )
             mqtt_client.publish(TOPIC_FW_MANIFEST, json.dumps(_fw_manifest()), retain=True)
             _ota_commit()  # booted healthy — drop OTA backups/rollback counter
+            if _wdt is None:  # arm watchdog once up; main loop + OTA feed it
+                _wdt = machine.WDT(timeout=WDT_TIMEOUT_MS)
             _ha_config = {
                 k: v for k, v in (
                     ("solar_entity",            HA_SOLAR_ENTITY),
@@ -671,6 +677,8 @@ async def main_loop():
     last_button_time = 0
 
     while True:
+        if _wdt is not None:
+            _wdt.feed()
         if _ota_pending is not None:
             _run_ota(_ota_pending)
 
