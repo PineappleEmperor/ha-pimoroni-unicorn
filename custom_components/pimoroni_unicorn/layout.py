@@ -70,14 +70,17 @@ def entry_device_id(entry) -> str:
     return {**entry.data, **entry.options}.get(CONF_DEVICE_ID, "")
 
 
-async def async_push_active(hass: HomeAssistant, entry) -> None:
-    """Push the entry's active named layout to its device, if set and known."""
+async def async_get_active(hass: HomeAssistant, entry) -> dict[str, Any] | None:
+    """Return the entry's active named layout dict, if set and known."""
     name = {**entry.data, **entry.options}.get(CONF_ACTIVE_LAYOUT)
     if not name:
-        return
-    registry = await async_get_registry(hass)
-    layout = registry.get(name)
+        return None
+    return (await async_get_registry(hass)).get(name)
+
+
+async def async_push_active(hass: HomeAssistant, entry) -> None:
+    """Push the entry's active named layout to its device, if set and known."""
+    layout = await async_get_active(hass, entry)
     if layout is None:
-        _LOGGER.warning("Active layout %r not in registry", name)
         return
     await async_push_layout(hass, entry_device_id(entry), layout)

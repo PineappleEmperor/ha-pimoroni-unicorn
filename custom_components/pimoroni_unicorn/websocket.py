@@ -9,7 +9,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from . import firmware_install, layout, marketplace, render_service
-from .const import CONF_DEVICE_ID, CONF_DISPLAY_SENSORS, CONF_MODEL, DOMAIN
+from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN
 
 WS_DEVICES        = "pimoroni_unicorn/devices"
 WS_CAPABILITIES   = "pimoroni_unicorn/capabilities"
@@ -18,8 +18,6 @@ WS_RENDER         = "pimoroni_unicorn/render"
 WS_SAVE_LAYOUT    = "pimoroni_unicorn/save_layout"
 WS_PUSH_LAYOUT    = "pimoroni_unicorn/push_layout"
 WS_DELETE_LAYOUT  = "pimoroni_unicorn/delete_layout"
-WS_SENSORS        = "pimoroni_unicorn/display_sensors"
-WS_SET_SENSORS    = "pimoroni_unicorn/set_display_sensors"
 WS_CATALOG        = "pimoroni_unicorn/catalog"
 WS_FW_MANIFEST    = "pimoroni_unicorn/fw_manifest"
 WS_FW_INSTALL     = "pimoroni_unicorn/fw_install"
@@ -35,7 +33,6 @@ def async_register(hass: HomeAssistant) -> None:
     """Register all layout-editor websocket commands (once)."""
     for handler in (ws_devices, ws_capabilities, ws_layouts, ws_render,
                     ws_save_layout, ws_push_layout, ws_delete_layout,
-                    ws_display_sensors, ws_set_display_sensors,
                     ws_catalog, ws_fw_manifest, ws_fw_install, ws_fw_remove,
                     ws_widget_preview, ws_widget_save, ws_widget_import, ws_widget_delete):
         websocket_api.async_register_command(hass, handler)
@@ -104,44 +101,14 @@ async def ws_layouts(hass, connection, msg):
     vol.Required("type"): WS_RENDER,
     vol.Required("model"): vol.In(list(render_service.MODEL_DIMS)),
     vol.Required("layout"): dict,
-    vol.Optional("sensors"): list,
 })
 @websocket_api.async_response
 async def ws_render(hass, connection, msg):
     """Render a layout to a base64 PNG using the device's own render code."""
     png = await hass.async_add_executor_job(
-        render_service.render_layout_png, msg["model"], msg["layout"], msg.get("sensors"))
+        render_service.render_layout_png, msg["model"], msg["layout"])
     boxes = render_service.layout_boxes(msg["layout"])
     connection.send_result(msg["id"], {"png": png, "boxes": boxes})
-
-
-@websocket_api.websocket_command({
-    vol.Required("type"): WS_SENSORS,
-    vol.Required("entry_id"): str,
-})
-@callback
-def ws_display_sensors(hass, connection, msg):
-    """Return a device's configured display sensors."""
-    entry = _entry(hass, msg["entry_id"])
-    sensors = {**entry.data, **entry.options}.get(CONF_DISPLAY_SENSORS, []) if entry else []
-    connection.send_result(msg["id"], {"sensors": sensors})
-
-
-@websocket_api.websocket_command({
-    vol.Required("type"): WS_SET_SENSORS,
-    vol.Required("entry_id"): str,
-    vol.Required("sensors"): list,
-})
-@websocket_api.async_response
-async def ws_set_display_sensors(hass, connection, msg):
-    """Replace a device's display sensors (re-published by the options listener)."""
-    entry = _entry(hass, msg["entry_id"])
-    if entry is None:
-        connection.send_error(msg["id"], "not_found", "Unknown device")
-        return
-    hass.config_entries.async_update_entry(
-        entry, options={**entry.options, CONF_DISPLAY_SENSORS: msg["sensors"]})
-    connection.send_result(msg["id"], {"ok": True})
 
 
 @websocket_api.websocket_command({

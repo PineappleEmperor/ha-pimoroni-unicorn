@@ -25,7 +25,6 @@ from .const import (
     CONF_BATTERY_SOC_ENTITY,
     CONF_CONSUMPTION_ENTITY,
     CONF_DEVICE_ID,
-    CONF_DISPLAY_SENSORS,
     CONF_EXTRA_SENSORS,
     CONF_MODEL,
     CONF_SHOW_PANEL,
@@ -62,30 +61,6 @@ def _options_schema(current: dict) -> vol.Schema:
         vol.Optional(CONF_WEATHER_CODE_ENTITY,     default=_d(CONF_WEATHER_CODE_ENTITY)):     EntitySelector(EntitySelectorConfig(domain="sensor")),
         vol.Optional(CONF_EXTRA_SENSORS,           default=_d(CONF_EXTRA_SENSORS)):           TextSelector(TextSelectorConfig(multiline=True)),
         vol.Optional(CONF_SHOW_PANEL,              default=current.get(CONF_SHOW_PANEL, True)): BooleanSelector(),
-    })
-
-
-def _display_sensor_schema(current: dict) -> vol.Schema:
-    def _d(key, default=""):
-        return current.get(key) or default
-
-    return vol.Schema({
-        vol.Required("entity_id",  default=_d("entity_id")):           EntitySelector(EntitySelectorConfig()),
-        vol.Optional("name",       default=_d("name")):                TextSelector(TextSelectorConfig()),
-        vol.Optional("on_color",   default=_d("on_color",  "00FF00")):  TextSelector(TextSelectorConfig()),
-        vol.Optional("off_color",  default=_d("off_color", "1A1A1A")):  TextSelector(TextSelectorConfig()),
-        vol.Optional("x_pos",      default=current.get("x_pos", 37)):  NumberSelector(NumberSelectorConfig(min=0, max=64, step=1, mode=NumberSelectorMode.BOX)),
-        vol.Optional("y_pos",      default=current.get("y_pos",  1)):  NumberSelector(NumberSelectorConfig(min=0, max=16, step=1, mode=NumberSelectorMode.BOX)),
-        vol.Optional("spacing",    default=current.get("spacing",  4)): NumberSelector(NumberSelectorConfig(min=1, max=32, step=1, mode=NumberSelectorMode.BOX)),
-    })
-
-
-def _select_sensor_schema(sensors: dict) -> vol.Schema:
-    return vol.Schema({
-        vol.Required("sensor_id"): SelectSelector(SelectSelectorConfig(
-            options=[{"value": s["id"], "label": s.get("name", s["id"])} for s in sensors.values()],
-            mode=SelectSelectorMode.DROPDOWN,
-        ))
     })
 
 
@@ -126,8 +101,6 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         """Initialise options flow."""
         self._config_entry = config_entry
         self._settings: dict = {}
-        self._display_sensors: dict = {}
-        self._edit_sensor_id: str | None = None
         self._pending_icon: dict | None = None
         self._initialized = False
 
@@ -138,8 +111,6 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         store      = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
         ha_config  = store.get("ha_config", {})
         merged     = {**ha_config, **self._config_entry.data, **self._config_entry.options}
-        sensors    = merged.pop(CONF_DISPLAY_SENSORS, [])
-        self._display_sensors = {s["id"]: s for s in sensors}
         self._settings = merged
 
     async def async_step_init(self, user_input=None):
@@ -148,9 +119,7 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         registry = await lametric.async_get_registry(self.hass)
         layouts = await layout.async_get_registry(self.hass)
         active  = self._settings.get(layout.CONF_ACTIVE_LAYOUT)
-        menu_options = ["settings", "add_display_sensor"]
-        if self._display_sensors:
-            menu_options += ["edit_display_sensor", "remove_display_sensor"]
+        menu_options = ["settings"]
         menu_options.append("add_icon")
         if registry:
             menu_options.append("remove_icon")
@@ -160,11 +129,6 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         if active and active in layouts:
             menu_options.append("toggle_widgets")
         menu_options.append("save")
-
-        sensor_list = "\n".join(
-            f"- {s.get('name', s['id'])} ({s['entity_id']})"
-            for s in self._display_sensors.values()
-        ) if self._display_sensors else "None configured"
 
         icon_list = "\n".join(
             f"- {name} (code {icon.get('code', '?')}, {len(icon.get('frames', []))} frame(s))"
@@ -178,7 +142,7 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_menu(
             step_id="init",
             menu_options=menu_options,
-            description_placeholders={"sensors": sensor_list, "icons": icon_list, "layouts": layout_list},
+            description_placeholders={"icons": icon_list, "layouts": layout_list},
         )
 
     async def async_step_settings(self, user_input=None):
@@ -190,76 +154,6 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="settings",
             data_schema=_options_schema(self._settings),
-        )
-
-    async def async_step_add_display_sensor(self, user_input=None):
-        """Handle adding a new display sensor."""
-        if user_input is not None:
-            entity_id = user_input["entity_id"]
-            sensor_id = entity_id.replace(".", "_")
-            self._display_sensors[sensor_id] = {
-                "id":        sensor_id,
-                "entity_id": entity_id,
-                "name":      user_input.get("name") or entity_id.split(".")[-1],
-                "on_color":  (user_input.get("on_color") or "00FF00").lstrip("#").upper(),
-                "off_color": (user_input.get("off_color") or "1A1A1A").lstrip("#").upper(),
-                "x_pos":     int(user_input.get("x_pos") or 37),
-                "y_pos":     int(user_input.get("y_pos") or 1),
-                "spacing":   int(user_input.get("spacing") or 4),
-            }
-            return await self.async_step_init()
-
-        defaults: dict = {}
-        if self._display_sensors:
-            rightmost = max(self._display_sensors.values(), key=lambda s: s.get("x_pos", 37))
-            defaults["x_pos"] = rightmost.get("x_pos", 37) + rightmost.get("spacing", 4)
-
-        return self.async_show_form(
-            step_id="add_display_sensor",
-            data_schema=_display_sensor_schema(defaults),
-        )
-
-    async def async_step_edit_display_sensor(self, user_input=None):
-        """Handle editing an existing display sensor (two-phase: select then edit)."""
-        if self._edit_sensor_id is None:
-            if user_input is not None and "sensor_id" in user_input:
-                self._edit_sensor_id = user_input["sensor_id"]
-                user_input = None
-            else:
-                return self.async_show_form(
-                    step_id="edit_display_sensor",
-                    data_schema=_select_sensor_schema(self._display_sensors),
-                )
-
-        if user_input is not None:
-            sensor = self._display_sensors[self._edit_sensor_id]
-            sensor.update({
-                "entity_id": user_input["entity_id"],
-                "name":      user_input.get("name") or user_input["entity_id"].split(".")[-1],
-                "on_color":  (user_input.get("on_color") or "00FF00").lstrip("#").upper(),
-                "off_color": (user_input.get("off_color") or "1A1A1A").lstrip("#").upper(),
-                "x_pos":     int(user_input.get("x_pos") or 37),
-                "y_pos":     int(user_input.get("y_pos") or 1),
-                "spacing":   int(user_input.get("spacing") or 4),
-            })
-            self._edit_sensor_id = None
-            return await self.async_step_init()
-
-        current = self._display_sensors[self._edit_sensor_id]
-        return self.async_show_form(
-            step_id="edit_display_sensor",
-            data_schema=_display_sensor_schema(current),
-        )
-
-    async def async_step_remove_display_sensor(self, user_input=None):
-        """Handle removing a display sensor."""
-        if user_input is not None:
-            self._display_sensors.pop(user_input["sensor_id"], None)
-            return await self.async_step_init()
-
-        return self.async_show_form(
-            step_id="remove_display_sensor",
-            data_schema=_select_sensor_schema(self._display_sensors),
         )
 
     async def async_step_add_icon(self, user_input=None):
@@ -400,7 +294,4 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_save(self, user_input=None):
         """Save all options and close."""
-        return self.async_create_entry(
-            title="",
-            data={**self._settings, CONF_DISPLAY_SENSORS: list(self._display_sensors.values())},
-        )
+        return self.async_create_entry(title="", data={**self._settings})

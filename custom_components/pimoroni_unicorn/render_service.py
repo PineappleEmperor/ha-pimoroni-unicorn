@@ -59,22 +59,6 @@ def layout_capabilities() -> dict:
     return _modules().widgets.LAYOUT_CAPABILITIES
 
 
-def _sensors_dict(sensors):
-    """Convert a list of render-shape sensors to the draw_display_sensors dict."""
-    out = {}
-    for i, s in enumerate(sensors or []):
-        out[str(i)] = {
-            "state":   bool(s.get("state")),
-            "on_rgb":  tuple(s.get("on_rgb", [0, 255, 0])),
-            "off_rgb": tuple(s.get("off_rgb", [20, 20, 20])),
-            "x":       int(s.get("x", 0)),
-            "y":       int(s.get("y", 0)),
-            "width":   int(s.get("width",  s.get("size", 2))),
-            "height":  int(s.get("height", s.get("size", 2))),
-        }
-    return out
-
-
 def layout_boxes(layout: dict) -> list:
     """Per-widget [w, h] boxes for the layout, computed by the real widget_box."""
     widgets = _modules().widgets
@@ -110,18 +94,17 @@ def _encode(g, width, height) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
-def render_layout_png(model: str, layout: dict, sensors=None) -> str:
-    """Render a layout (and any display sensors) for a model; return a base64 PNG."""
+def render_layout_png(model: str, layout: dict) -> str:
+    """Render a layout for a model; return a base64 PNG."""
     m, g, width, height = _new_graphics(model)
     state = {**SAMPLE_STATE, "time": time.localtime()}
     ds = dict(state.get("display_sensors") or {})
     for entry in layout.get("widgets", []):
-        bind = (entry.get("cfg") or {}).get("bind")
-        if bind:
-            ds.setdefault(bind, {"state": True})  # mock 'on' so sensor widgets preview
+        ent = (entry.get("cfg") or {}).get("entity")
+        if ent:
+            ds.setdefault(ent, {"state": True})  # mock 'on' so sensor widgets preview
     state["display_sensors"] = ds
     m.widgets.render_layout(g, layout, state)
-    m.drawing.draw_display_sensors(_sensors_dict(sensors))
     return _encode(g, width, height)
 
 

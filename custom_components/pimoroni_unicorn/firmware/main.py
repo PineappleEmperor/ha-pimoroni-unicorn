@@ -43,7 +43,7 @@ import sounds
 import weather_fx
 import widgets
 from version import ENGINE_VERSION
-from drawing import draw_display_sensors, draw_icon
+from drawing import draw_icon
 from notify_animations import (
     NOTIFY_ANIMATIONS, NOTIFY_CAPABILITIES, _draw_notification, compute_duration_ms,
     reset_fire_heat,
@@ -640,7 +640,6 @@ async def main_loop():
                 "battery_animation": battery_animation,
             }
             widgets.render_layout(graphics, _active_layout, state)
-            draw_display_sensors(display_sensors)
 
             if icon_type != "none":
                 draw_icon(icon_type, 2, 2)
