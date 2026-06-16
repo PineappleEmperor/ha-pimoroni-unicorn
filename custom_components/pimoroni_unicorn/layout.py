@@ -7,7 +7,6 @@ registry pattern in lametric.py.
 """
 
 import json
-import logging
 from typing import Any
 
 from homeassistant.components.mqtt import async_publish
@@ -15,8 +14,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .const import CONF_DEVICE_ID, DOMAIN
-
-_LOGGER = logging.getLogger(__name__)
 
 STORAGE_KEY     = f"{DOMAIN}_layouts"
 STORAGE_VERSION = 1
@@ -63,6 +60,12 @@ async def async_push_layout(hass: HomeAssistant, device_id: str, layout: dict[st
     """Publish a layout to a device's layout topic."""
     if device_id:
         await async_publish(hass, f"{device_id}/layout", json.dumps(layout))
+
+
+async def async_push_screens(hass: HomeAssistant, device_id: str, payload: dict[str, Any]) -> None:
+    """Publish a screen set (screens + dwell + transition) to a device."""
+    if device_id:
+        await async_publish(hass, f"{device_id}/screens", json.dumps(payload))
 
 
 def entry_device_id(entry) -> str:

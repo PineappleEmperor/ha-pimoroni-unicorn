@@ -55,9 +55,16 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private live = false;
   @state() private wireframe = true;
   @state() private status = "";
-  @state() private tab: "layout" | "market" | "edit" = "layout";
+  @state() private tab: "layout" | "market" | "edit" | "screens" = "layout";
   @state() private catalog: CatalogWidget[] = [];
   @state() private fwManifest: FwManifest | null = null;
+  @state() private screenLayouts: string[] = [];
+  @state() private screenDwell = 10;
+  @state() private screenTransition: "none" | "fade" = "none";
+  @state() private screenPngs: Record<string, string> = {};
+  @state() private screenIdx = 0;
+  @state() private screenOpacity = 1;
+  private screenTimer = 0;
   @state() private specText = SAMPLE_SPEC;
   @state() private specPng = "";
   @state() private specError = "";
@@ -356,9 +363,11 @@ export class PimoroniUnicornPanel extends LitElement {
         <button class="tab ${this.tab === "layout" ? "on" : ""}" @click=${() => (this.tab = "layout")}>Layout</button>
         <button class="tab ${this.tab === "market" ? "on" : ""}" @click=${() => { this.tab = "market"; this.loadCatalog(); }}>Marketplace</button>
         <button class="tab ${this.tab === "edit" ? "on" : ""}" @click=${() => { this.tab = "edit"; this.previewSpec(); }}>Widget editor</button>
+        <button class="tab ${this.tab === "screens" ? "on" : ""}" @click=${() => { this.tab = "screens"; this.buildScreenPreview(); }}>Screens</button>
       </div>
       ${this.tab === "market" ? this._marketplaceView()
         : this.tab === "edit" ? this._editorView()
+        : this.tab === "screens" ? this._screensView()
         : this._layoutView()}
     `;
   }
@@ -541,6 +550,87 @@ export class PimoroniUnicornPanel extends LitElement {
           <div class="stage" style=${`width:${this.dims[0] * sc}px;height:${this.dims[1] * sc}px`}>
             ${this.specPng ? html`<img src="data:image/png;base64,${this.specPng}" width=${this.dims[0] * sc} height=${this.dims[1] * sc} />` : ""}
           </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private toggleScreen(name: string, on: boolean) {
+    this.screenLayouts = on
+      ? [...this.screenLayouts, name]
+      : this.screenLayouts.filter((n) => n !== name);
+    this.buildScreenPreview();
+  }
+
+  private async buildScreenPreview() {
+    clearInterval(this.screenTimer);
+    const pngs: Record<string, string> = {};
+    for (const name of this.screenLayouts) {
+      const lay = this.stored[name];
+      if (!lay) continue;
+      try {
+        const r = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: lay });
+        pngs[name] = r.png;
+      } catch { /* skip unrenderable */ }
+    }
+    this.screenPngs = pngs;
+    this.screenIdx = 0;
+    this.screenOpacity = 1;
+    if (this.screenLayouts.length > 1 && this.screenDwell > 0) {
+      this.screenTimer = window.setInterval(() => this._advancePreview(), this.screenDwell * 1000);
+    }
+  }
+
+  private _advancePreview() {
+    const next = (this.screenIdx + 1) % this.screenLayouts.length;
+    if (this.screenTransition === "fade") {
+      this.screenOpacity = 0;
+      setTimeout(() => { this.screenIdx = next; this.screenOpacity = 1; }, 280);
+    } else {
+      this.screenIdx = next;
+    }
+  }
+
+  private async pushScreens() {
+    if (!this.entryId || !this.screenLayouts.length) return;
+    await this.hass.callWS({
+      type: "pimoroni_unicorn/push_screens", entry_id: this.entryId,
+      layouts: this.screenLayouts, dwell: this.screenDwell, transition: this.screenTransition,
+    });
+    this.status = `Pushed ${this.screenLayouts.length} screen(s) to device.`;
+  }
+
+  private _screensView() {
+    const sc = Math.max(6, Math.floor(PREVIEW_TARGET_PX / this.dims[0]));
+    const names = Object.keys(this.stored);
+    const cur = this.screenLayouts[this.screenIdx];
+    const png = cur ? this.screenPngs[cur] : "";
+    return html`
+      <div class="bar"><span class="hint">compose a screen rotation — mock preview on ${this.model}</span></div>
+      <div class="wrap">
+        <div class="col">
+          <h3>Screens (rotation order)</h3>
+          ${names.length ? names.map((n) => html`<div class="panelrow"><label>
+            <input type="checkbox" ?checked=${this.screenLayouts.includes(n)}
+              @change=${(e: Event) => this.toggleScreen(n, (e.target as HTMLInputElement).checked)} /> ${n}</label></div>`)
+            : html`<p class="hint">No saved layouts yet — create them on the Layout tab.</p>`}
+          <div class="panelrow"><label>Dwell (s)
+            <input type="number" style="width:60px" min="1" max="600" .value=${String(this.screenDwell)}
+              @change=${(e: Event) => { this.screenDwell = +(e.target as HTMLInputElement).value; this.buildScreenPreview(); }} /></label></div>
+          <div class="panelrow"><label>Transition
+            <select @change=${(e: Event) => { this.screenTransition = (e.target as HTMLSelectElement).value as "none" | "fade"; this.buildScreenPreview(); }}>
+              ${["none", "fade"].map((t) => html`<option ?selected=${t === this.screenTransition}>${t}</option>`)}
+            </select></label></div>
+          <div class="panelrow">
+            <button @click=${this.pushScreens} ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to push"}>Push to device</button>
+          </div>
+        </div>
+        <div class="col">
+          <div class="stage" style=${`width:${this.dims[0] * sc}px;height:${this.dims[1] * sc}px`}>
+            ${png ? html`<img src="data:image/png;base64,${png}" width=${this.dims[0] * sc} height=${this.dims[1] * sc}
+              style=${`opacity:${this.screenOpacity};transition:opacity 280ms`} />` : ""}
+          </div>
+          <div class="hint">${this.screenLayouts.length > 1 ? `rotating ${this.screenIdx + 1}/${this.screenLayouts.length}: ${cur ?? ""}` : (cur ?? "select layouts to preview")}</div>
         </div>
       </div>
     `;

@@ -18,6 +18,7 @@ WS_RENDER         = "pimoroni_unicorn/render"
 WS_SAVE_LAYOUT    = "pimoroni_unicorn/save_layout"
 WS_PUSH_LAYOUT    = "pimoroni_unicorn/push_layout"
 WS_DELETE_LAYOUT  = "pimoroni_unicorn/delete_layout"
+WS_PUSH_SCREENS   = "pimoroni_unicorn/push_screens"
 WS_CATALOG        = "pimoroni_unicorn/catalog"
 WS_FW_MANIFEST    = "pimoroni_unicorn/fw_manifest"
 WS_FW_INSTALL     = "pimoroni_unicorn/fw_install"
@@ -32,7 +33,7 @@ WS_WIDGET_DELETE  = "pimoroni_unicorn/widget_delete"
 def async_register(hass: HomeAssistant) -> None:
     """Register all layout-editor websocket commands (once)."""
     for handler in (ws_devices, ws_capabilities, ws_layouts, ws_render,
-                    ws_save_layout, ws_push_layout, ws_delete_layout,
+                    ws_save_layout, ws_push_layout, ws_delete_layout, ws_push_screens,
                     ws_catalog, ws_fw_manifest, ws_fw_install, ws_fw_remove,
                     ws_widget_preview, ws_widget_save, ws_widget_import, ws_widget_delete):
         websocket_api.async_register_command(hass, handler)
@@ -156,6 +157,30 @@ async def ws_push_layout(hass, connection, msg):
 async def ws_delete_layout(hass, connection, msg):
     """Remove a stored named layout."""
     await layout.async_remove_layout(hass, msg["name"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_PUSH_SCREENS,
+    vol.Required("entry_id"): str,
+    vol.Required("layouts"): [str],
+    vol.Optional("dwell", default=10): int,
+    vol.Optional("transition", default="none"): str,
+})
+@websocket_api.async_response
+async def ws_push_screens(hass, connection, msg):
+    """Push a screen set (named layouts + rotation) to a device."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown device")
+        return
+    registry = await layout.async_get_registry(hass)
+    screens = [registry[n] for n in msg["layouts"] if n in registry]
+    if not screens:
+        connection.send_error(msg["id"], "empty", "No known layouts selected")
+        return
+    payload = {"screens": screens, "dwell": msg["dwell"], "transition": msg["transition"]}
+    await layout.async_push_screens(hass, layout.entry_device_id(entry), payload)
     connection.send_result(msg["id"], {"ok": True})
 
 
