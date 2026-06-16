@@ -71,6 +71,9 @@ model is heavily inspired by AWTRIX.
   padded docstrings. No inline comments unless the *why* is non-obvious.
 - **Commits:** Conventional Commits (`feat`/`fix`/`docs`/`refactor`/`chore`…). `feat!` or a
   `BREAKING CHANGE:` footer for breaking changes. PR title drives the squash-merge subject.
+  Keep them terse — subject ≤72 chars, **no narrative body** (put detail in the PR / release
+  notes); bodies are for trailers or a `BREAKING CHANGE:` footer only. Enforced by a hook —
+  enable it once per clone: `git config core.hooksPath .githooks`.
 - **Versioning:** bump `manifest.json` once per PR. `git fetch origin` first, compare to
   `origin/main`, and match the bump to the PR type (feat→minor, fix/chore→patch, breaking→
   major). Don't bump per commit. Check the branch isn't already merged before adding to it.
