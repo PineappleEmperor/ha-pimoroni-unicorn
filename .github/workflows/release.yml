@@ -25,9 +25,9 @@ jobs:
       - name: Create firmware ZIP
         run: |
           cd firmware
-          zip -r ../firmware.zip . -x 'secrets.py'
+          zip -r ../pimoroni_unicorn_firmware.zip . -x 'secrets.py'
           cd ..
-          ls -la firmware.zip
+          ls -la pimoroni_unicorn_firmware.zip
 
       - name: Upload integration asset
         uses: actions/upload-release-asset@v1
@@ -45,6 +45,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./firmware.zip
-          asset_name: firmware.zip
+          asset_path: ./pimoroni_unicorn_firmware.zip
+          asset_name: pimoroni_unicorn_firmware.zip
           asset_content_type: application/zip
