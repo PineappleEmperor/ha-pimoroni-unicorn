@@ -332,13 +332,38 @@ async def ws_content_catalog(hass, connection, msg):
         if entry is not None:
             model = _model_key(entry)
 
-    def _tag(units):
-        return [{**u, "compatible": marketplace.compatible(u["compat"], model)} for u in units]
+    # Thumbnail every published page + the first page of each screenset.
+    installed_icons = await lametric.async_get_registry(hass)
+    thumb_names = set(published) | {
+        ss["layouts"][0] for ss in screensets.values() if ss.get("layouts")}
+
+    def _thumbs():
+        out = {}
+        for name in thumb_names:
+            lay = all_layouts.get(name)
+            if not lay:
+                continue
+            try:  # noqa: SIM105 — no contextlib (MicroPython parity); a bad page mustn't break the catalogue
+                out[name] = render_service.render_layout_png(
+                    lay.get("model", "galactic"), lay, installed_icons)
+            except Exception:  # noqa: BLE001
+                pass
+        return out
+
+    thumbs = await hass.async_add_executor_job(_thumbs)
+
+    def _tag(units, first_key=None):
+        out = []
+        for u in units:
+            key = u["id"] if first_key is None else (u.get(first_key) or [None])[0]
+            out.append({**u, "compatible": marketplace.compatible(u["compat"], model),
+                        "thumb": thumbs.get(key)})
+        return out
 
     connection.send_result(msg["id"], {
         "model": model,
         "layouts": _tag(marketplace.layout_units(published, custom)),
-        "screensets": _tag(marketplace.screenset_units(screensets, all_layouts)),
+        "screensets": _tag(marketplace.screenset_units(screensets, all_layouts), first_key="layouts"),
     })
 
 

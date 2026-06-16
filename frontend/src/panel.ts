@@ -10,7 +10,7 @@ interface WidgetEntry { id: string; type?: string; name?: string; x: number; y: 
 interface Layout { name?: string; model?: string; grid?: number; widgets: WidgetEntry[]; overlays?: string[]; }
 interface Device { entry_id: string; device_id: string; model: string; name: string; active_layout?: string; }
 interface CatalogWidget { id: string; label: string; kind: string; requires: string[]; device_file: string; hash: string; status: string; }
-interface ContentUnit { id: string; label: string; kind: string; compat: string[]; requires: string[]; screens: number; compatible: boolean; }
+interface ContentUnit { id: string; label: string; kind: string; compat: string[]; requires: string[]; screens: number; compatible: boolean; thumb?: string; }
 interface FwManifest { engine_version?: string; files?: Record<string, string>; }
 
 const PREVIEW_TARGET_PX = 560;
@@ -63,6 +63,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private contentScreensets: ContentUnit[] = [];
   @state() private showAllContent = false;
   @state() private iconNames: string[] = [];
+  @state() private dirty = false;
   @state() private screenLayouts: string[] = [];
   @state() private screenDwell = 10;
   @state() private screenTransition: "none" | "fade" = "none";
@@ -79,47 +80,107 @@ export class PimoroniUnicornPanel extends LitElement {
   private pushTimer?: number;
 
   static styles = css`
-    :host { display: block; padding: 16px; color: var(--primary-text-color, #111); }
-    .wrap { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
-    .col { min-width: 280px; }
-    .bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
-    select, input, button { font: inherit; padding: 6px 8px; border-radius: 6px;
-      border: 1px solid var(--divider-color, #ccc); background: var(--card-background-color, #fff); color: var(--primary-text-color, #111); }
-    input[type="color"] { padding: 0; width: 34px; height: 28px; }
-    button { cursor: pointer; background: var(--primary-color, #03a9f4); color: #fff; border: none; }
-    button[disabled] { opacity: .5; cursor: not-allowed; }
-    button.secondary { background: var(--secondary-background-color, #e0e0e0); color: var(--primary-text-color, #111); }
-    button.danger { background: var(--error-color, #db4437); }
-    button.zbtn { padding: 4px 9px; min-width: 28px; line-height: 1; }
-    .stage { position: relative; display: inline-block; background: #000; line-height: 0; border: 1px solid var(--divider-color, #444); overflow: hidden; }
+    :host {
+      display: block; padding: 24px;
+      color: var(--primary-text-color, #1c1b1f);
+      font-family: var(--paper-font-body1_-_font-family, Roboto, system-ui, sans-serif);
+      --pu-radius: 12px;
+      --pu-surface: var(--card-background-color, #fff);
+      --pu-outline: var(--divider-color, #c8c5ca);
+      --pu-primary: var(--primary-color, #6750a4);
+      --pu-on-primary: var(--text-primary-color, #fff);
+    }
+    .wrap { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+    .col {
+      min-width: 300px; flex: 1; box-sizing: border-box;
+      background: var(--pu-surface); border-radius: var(--pu-radius);
+      padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08);
+    }
+    .bar {
+      display: flex; gap: 12px 16px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 20px; padding: 14px 16px; border-radius: var(--pu-radius);
+      background: var(--pu-surface); box-shadow: 0 1px 2px rgba(0,0,0,.08);
+    }
+    .group { display: inline-flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .group + .group { padding-left: 16px; border-left: 1px solid var(--pu-outline); }
+    .appbar {
+      display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+      padding: 12px 18px; margin-bottom: 16px; border-radius: var(--pu-radius);
+      background: var(--pu-surface); box-shadow: 0 1px 3px rgba(0,0,0,.12);
+    }
+    .brand { font-size: 16px; font-weight: 600; letter-spacing: .2px; margin-right: 4px; }
+    .grow { flex: 1; }
+    .chip {
+      font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 14px;
+      background: color-mix(in srgb, var(--pu-primary) 12%, transparent); color: var(--pu-primary);
+    }
+    .chip.dim { background: color-mix(in srgb, var(--secondary-text-color, #79747e) 14%, transparent); color: var(--secondary-text-color, #49454f); }
+    .chip.warn { background: color-mix(in srgb, var(--warning-color, #ed6c02) 20%, transparent); color: var(--warning-color, #ed6c02); }
+    label { font-size: 13px; display: inline-flex; gap: 6px; align-items: center; color: var(--secondary-text-color, #49454f); }
+    select, input, .spec {
+      font: inherit; font-size: 14px; padding: 9px 12px; border-radius: 8px;
+      border: 1px solid var(--pu-outline); background: var(--pu-surface);
+      color: var(--primary-text-color, #1c1b1f); outline: none; transition: border-color .15s, box-shadow .15s;
+    }
+    select:focus, input:focus, .spec:focus { border-color: var(--pu-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--pu-primary) 30%, transparent); }
+    input[type="color"] { padding: 0; width: 38px; height: 34px; cursor: pointer; }
+    input[type="range"] { padding: 0; border: none; box-shadow: none; accent-color: var(--pu-primary); }
+    input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--pu-primary); }
+    button {
+      font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
+      padding: 9px 20px; border-radius: 20px; border: none;
+      background: var(--pu-primary); color: var(--pu-on-primary);
+      transition: filter .15s, box-shadow .15s; box-shadow: 0 1px 2px rgba(0,0,0,.15);
+    }
+    button:hover:not([disabled]) { filter: brightness(1.08); box-shadow: 0 2px 5px rgba(0,0,0,.2); }
+    button:active:not([disabled]) { filter: brightness(.95); }
+    button[disabled] { opacity: .38; cursor: not-allowed; box-shadow: none; }
+    button.secondary { background: color-mix(in srgb, var(--pu-primary) 14%, var(--pu-surface)); color: var(--pu-primary); box-shadow: none; }
+    button.danger { background: var(--error-color, #ba1a1a); color: #fff; }
+    button.zbtn { padding: 6px 11px; min-width: 30px; line-height: 1; border-radius: 10px; }
+    .stage { position: relative; display: inline-block; background: #000; line-height: 0; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); overflow: hidden; }
     .stage img { image-rendering: pixelated; display: block; }
     .grid, .boxes { position: absolute; inset: 0; pointer-events: none; }
-    .boxes { pointer-events: none; }
-    .box { position: absolute; box-sizing: border-box; border: 1px solid rgba(255,255,255,.35); cursor: grab; touch-action: none; pointer-events: auto; }
-    .box.sel { border: 2px solid var(--primary-color, #03a9f4); background: rgba(3,169,244,.10); }
-    .box .tag { position: absolute; top: -16px; left: 0; font: 11px monospace; color: #ccc; white-space: nowrap; }
+    .box { position: absolute; box-sizing: border-box; border: 1px solid rgba(255,255,255,.35); cursor: grab; touch-action: none; pointer-events: auto; border-radius: 2px; }
+    .box.sel { border: 2px solid var(--pu-primary); background: color-mix(in srgb, var(--pu-primary) 14%, transparent); }
+    .box .tag { position: absolute; top: -17px; left: 0; font: 11px ui-monospace, monospace; color: #ddd; white-space: nowrap; }
     .wlist { list-style: none; padding: 0; margin: 0 0 12px; }
-    .wlist li { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
-    .wlist li.sel { background: var(--secondary-background-color, #eef); }
+    .wlist li { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: background .12s; }
+    .wlist li:hover { background: color-mix(in srgb, var(--pu-primary) 7%, transparent); }
+    .wlist li.sel { background: color-mix(in srgb, var(--pu-primary) 14%, transparent); box-shadow: inset 3px 0 0 var(--pu-primary); }
     .wlist li .grow { flex: 1; }
-    .panelrow { display: flex; gap: 8px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
-    .panelrow label { font-size: 13px; min-width: 64px; }
-    h3 { margin: 4px 0 8px; }
-    .status { margin-top: 12px; font: 13px monospace; color: var(--secondary-text-color, #888); min-height: 18px; }
-    .status.err { color: var(--error-color, #db4437); }
-    .hint { color: var(--secondary-text-color, #888); font-size: 13px; }
-    .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
-    .tab { background: var(--secondary-background-color, #e0e0e0); color: var(--primary-text-color, #111); }
-    .tab.on { background: var(--primary-color, #03a9f4); color: #fff; }
-    .catalog { list-style: none; padding: 0; margin: 0; max-width: 640px; }
-    .catalog li { display: flex; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--divider-color, #333); }
+    .panelrow { display: flex; gap: 10px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
+    .panelrow > label:first-child { min-width: 64px; }
+    h3 { margin: 4px 0 14px; font-size: 16px; font-weight: 500; letter-spacing: .1px; }
+    .status { margin-top: 16px; font: 13px ui-monospace, monospace; color: var(--secondary-text-color, #49454f); min-height: 18px; }
+    .status.err { color: var(--error-color, #ba1a1a); }
+    .hint { color: var(--secondary-text-color, #79747e); font-size: 13px; }
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--pu-outline); }
+    .tab {
+      background: none; color: var(--secondary-text-color, #49454f); border: none; box-shadow: none;
+      border-radius: 8px 8px 0 0; padding: 12px 20px; font-weight: 500;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+    }
+    .tab:hover:not(.on) { background: color-mix(in srgb, var(--pu-primary) 7%, transparent); filter: none; }
+    .tab.on { color: var(--pu-primary); border-bottom-color: var(--pu-primary); }
+    .mtable { max-width: 780px; margin-bottom: 8px; }
+    .mhead, .mrow { display: grid; grid-template-columns: 56px minmax(120px,1fr) minmax(80px,0.9fr) 120px 110px; gap: 12px; align-items: center; }
+    .mtable.compact .mhead, .mtable.compact .mrow { grid-template-columns: minmax(120px,1fr) minmax(80px,0.9fr) 120px 110px; }
+    .mhead { font-size: 12px; font-weight: 600; color: var(--secondary-text-color, #79747e); padding: 0 14px 6px; }
+    .mrow { border: 1px solid var(--pu-outline); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+    .cell-name { font-weight: 500; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .cell-action { display: flex; justify-content: flex-end; }
+    .thumb { width: 48px; height: 48px; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .catalog { list-style: none; padding: 0; margin: 0; max-width: 680px; }
+    .catalog li {
+      display: flex; gap: 12px; align-items: center; padding: 12px 14px;
+      border: 1px solid var(--pu-outline); border-radius: 10px; margin-bottom: 8px;
+    }
     .catalog li .grow { flex: 1; }
-    .badge { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--secondary-background-color, #444); color: var(--secondary-text-color, #ccc); }
-    .badge.ok { background: var(--success-color, #43a047); color: #fff; }
-    .badge.warn { background: var(--warning-color, #ffa600); color: #000; }
-    .spec { width: 380px; height: 320px; font: 13px monospace; resize: vertical;
-      border: 1px solid var(--divider-color, #ccc); border-radius: 6px; padding: 8px;
-      background: var(--card-background-color, #fff); color: var(--primary-text-color, #111); }
+    .badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 12px; background: color-mix(in srgb, var(--pu-primary) 12%, transparent); color: var(--pu-primary); }
+    .badge.ok { background: color-mix(in srgb, var(--success-color, #2e7d32) 18%, transparent); color: var(--success-color, #2e7d32); }
+    .badge.warn { background: color-mix(in srgb, var(--warning-color, #ed6c02) 20%, transparent); color: var(--warning-color, #ed6c02); }
+    .spec { width: 380px; height: 320px; font: 13px ui-monospace, monospace; resize: vertical; }
   `;
 
   protected firstUpdated(): void { this.loadDevices(); this.loadIcons(); }
@@ -182,7 +243,7 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private async selectDevice(entryId: string): Promise<void> {
     const dev = this.devices.find((d) => d.entry_id === entryId);
-    if (!dev) return;
+    if (!dev || !this.guardDiscard()) return;
     this.entryId = entryId;
     await this.loadCaps({ entry_id: entryId });
     const active = dev.active_layout ? this.stored[dev.active_layout] : undefined;
@@ -190,6 +251,7 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private async selectMock(model: string): Promise<void> {
+    if (!this.guardDiscard()) return;
     this.entryId = "";
     await this.loadCaps({ model });
     this.loadLayout(this.defaultLayout);
@@ -204,7 +266,13 @@ export class PimoroniUnicornPanel extends LitElement {
     this.layout = JSON.parse(JSON.stringify(src));
     this.layoutName = this.layout.name ?? "default";
     this.selected = -1;
+    this.dirty = false;
     this.renderPreview();
+  }
+
+  // True if it's safe to discard the current page (not dirty, or user confirms).
+  private guardDiscard(): boolean {
+    return !this.dirty || confirm("Discard unsaved changes to this page?");
   }
 
   private async renderPreview(): Promise<void> {
@@ -220,6 +288,7 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private edited(): void {
+    this.dirty = true;
     this.requestUpdate();
     if (this.renderTimer) clearTimeout(this.renderTimer);
     this.renderTimer = window.setTimeout(() => this.renderPreview(), 80);
@@ -338,10 +407,12 @@ export class PimoroniUnicornPanel extends LitElement {
     this.layout.name = this.layoutName;
     await this.hass.callWS({ type: "pimoroni_unicorn/save_layout", entry_id: this.entryId, name: this.layoutName, layout: this.layout });
     await this.refreshStored();
+    this.dirty = false;
     this.status = `Saved "${this.layoutName}" and pushed to device.`;
   }
   private async deleteLayout(): Promise<void> {
     if (!this.stored[this.layoutName]) return;
+    if (!confirm(`Delete page "${this.layoutName}"? This can't be undone.`)) return;
     await this.hass.callWS({ type: "pimoroni_unicorn/delete_layout", name: this.layoutName });
     await this.refreshStored();
     this.status = `Deleted "${this.layoutName}".`;
@@ -405,13 +476,45 @@ export class PimoroniUnicornPanel extends LitElement {
     `;
   }
 
+  private switchTab(tab: "layout" | "market" | "edit" | "screens"): void {
+    this.tab = tab;
+    if (tab === "market") this.loadCatalog();
+    else if (tab === "edit") this.previewSpec();
+    else if (tab === "screens") this.buildScreenPreview();
+  }
+
+  private _appBar() {
+    const dev = this.devices.find((d) => d.entry_id === this.entryId);
+    return html`
+      <div class="appbar">
+        <span class="brand">Pimoroni Unicorn</span>
+        <label>Device
+          <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; v === MOCK ? this.selectMock(this.model) : this.selectDevice(v); }}>
+            <option value=${MOCK} ?selected=${!this.entryId}>Mock (preview only)</option>
+            ${this.devices.map((d) => html`<option value=${d.entry_id} ?selected=${d.entry_id === this.entryId}>${d.name}</option>`)}
+          </select>
+        </label>
+        ${!this.entryId
+          ? html`<label>Model
+              <select @change=${(e: Event) => this.selectMock((e.target as HTMLSelectElement).value)}>
+                ${Object.keys(MODELS).map((m) => html`<option ?selected=${m === this.model}>${m}</option>`)}
+              </select></label>`
+          : html`<span class="chip">${dev?.model ?? this.model}</span>`}
+        <span class="chip dim">${this.dims[0]}&times;${this.dims[1]} px</span>
+        <span class="grow"></span>
+        ${this.dirty ? html`<span class="chip warn">unsaved changes</span>` : ""}
+        ${this.fwManifest?.engine_version ? html`<span class="hint">engine v${this.fwManifest.engine_version}</span>` : ""}
+      </div>`;
+  }
+
   render() {
     return html`
+      ${this._appBar()}
       <div class="tabs">
-        <button class="tab ${this.tab === "layout" ? "on" : ""}" @click=${() => (this.tab = "layout")}>Layout</button>
-        <button class="tab ${this.tab === "market" ? "on" : ""}" @click=${() => { this.tab = "market"; this.loadCatalog(); }}>Marketplace</button>
-        <button class="tab ${this.tab === "edit" ? "on" : ""}" @click=${() => { this.tab = "edit"; this.previewSpec(); }}>Widget editor</button>
-        <button class="tab ${this.tab === "screens" ? "on" : ""}" @click=${() => { this.tab = "screens"; this.buildScreenPreview(); }}>Screens</button>
+        <button class="tab ${this.tab === "layout" ? "on" : ""}" @click=${() => this.switchTab("layout")}>Designer</button>
+        <button class="tab ${this.tab === "market" ? "on" : ""}" @click=${() => this.switchTab("market")}>Marketplace</button>
+        <button class="tab ${this.tab === "edit" ? "on" : ""}" @click=${() => this.switchTab("edit")}>Widget editor</button>
+        <button class="tab ${this.tab === "screens" ? "on" : ""}" @click=${() => this.switchTab("screens")}>Playlists</button>
       </div>
       ${this.tab === "market" ? this._marketplaceView()
         : this.tab === "edit" ? this._editorView()
@@ -428,40 +531,35 @@ export class PimoroniUnicornPanel extends LitElement {
     const gridStyle = `background-image:linear-gradient(to right,rgba(255,255,255,.10) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.10) 1px,transparent 1px);background-size:${s}px ${s}px`;
     return html`
       <div class="bar">
-        <label>Device
-          <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; v === MOCK ? this.selectMock(this.model) : this.selectDevice(v); }}>
-            <option value=${MOCK} ?selected=${!this.entryId}>(mock — preview only)</option>
-            ${this.devices.map((d) => html`<option value=${d.entry_id} ?selected=${d.entry_id === this.entryId}>${d.name} (${d.model})</option>`)}
-          </select>
-        </label>
-        ${!this.entryId ? html`<label>Model
-          <select @change=${(e: Event) => this.selectMock((e.target as HTMLSelectElement).value)}>
-            ${Object.keys(MODELS).map((m) => html`<option ?selected=${m === this.model}>${m}</option>`)}
-          </select></label>` : html`<span class="hint">model: ${this.model}</span>`}
-        <span class="hint">${this.dims[0]}&times;${this.dims[1]} px</span>
-        <label>Layout
-          <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; this.loadLayout(v === "__new__" ? this.defaultLayout : this.stored[v]); }}>
-            ${Object.keys(this.stored).map((n) => html`<option ?selected=${n === this.layoutName}>${n}</option>`)}
-            <option value="__new__">— new —</option>
-          </select>
-        </label>
-        <label>Name <input .value=${this.layoutName} @input=${(e: Event) => (this.layoutName = (e.target as HTMLInputElement).value)} /></label>
-        <button @click=${this.save} ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to save/push"}>Save &amp; Push</button>
-        ${this.stored[this.layoutName] ? html`<button class="danger" @click=${this.deleteLayout}>Delete</button>` : ""}
-        ${this.stored[this.layoutName] ? html`<button class="secondary" @click=${() => this.publishLayout(true)} title="List this app in the marketplace">Publish</button>` : ""}
-        <label>Snap
-          <select @change=${(e: Event) => { this.layout.grid = +(e.target as HTMLSelectElement).value; this.edited(); }}>
-            ${[1, 2, 4].map((n) => html`<option ?selected=${(this.layout.grid ?? 2) === n}>${n}</option>`)}
-          </select>
-        </label>
-        <label>Zoom
-          <button class="zbtn" @click=${() => this.zoomBy(-2)} title="Zoom out">&minus;</button>
-          <input type="range" min="4" max="48" .value=${String(this.scale)}
-            @input=${(e: Event) => (this.zoom = +(e.target as HTMLInputElement).value)} />
-          <button class="zbtn" @click=${() => this.zoomBy(2)} title="Zoom in">+</button>
-        </label>
-        <label><input type="checkbox" .checked=${this.wireframe} @change=${(e: Event) => (this.wireframe = (e.target as HTMLInputElement).checked)} /> wireframe</label>
-        <label><input type="checkbox" .checked=${this.live} ?disabled=${!this.entryId} @change=${(e: Event) => (this.live = (e.target as HTMLInputElement).checked)} /> live push</label>
+        <div class="group">
+          <label>Page
+            <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; if (this.guardDiscard()) this.loadLayout(v === "__new__" ? this.defaultLayout : this.stored[v]); }}>
+              ${Object.keys(this.stored).map((n) => html`<option ?selected=${n === this.layoutName}>${n}</option>`)}
+              <option value="__new__">+ new page</option>
+            </select>
+          </label>
+          <label>Name <input .value=${this.layoutName} @input=${(e: Event) => (this.layoutName = (e.target as HTMLInputElement).value)} /></label>
+        </div>
+        <div class="group">
+          <button @click=${this.save} ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to save/push"}>Save &amp; Push</button>
+          ${this.stored[this.layoutName] ? html`<button class="secondary" @click=${() => this.publishLayout(true)} title="List this page in the marketplace">Publish</button>` : ""}
+          ${this.stored[this.layoutName] ? html`<button class="danger" @click=${this.deleteLayout}>Delete</button>` : ""}
+        </div>
+        <span class="grow"></span>
+        <div class="group">
+          <label>Snap
+            <select @change=${(e: Event) => { this.layout.grid = +(e.target as HTMLSelectElement).value; this.edited(); }}>
+              ${[1, 2, 4].map((n) => html`<option ?selected=${(this.layout.grid ?? 2) === n}>${n}</option>`)}
+            </select> px</label>
+          <label>Zoom
+            <button class="zbtn" @click=${() => this.zoomBy(-2)} title="Zoom out">&minus;</button>
+            <input type="range" min="4" max="48" .value=${String(this.scale)}
+              @input=${(e: Event) => (this.zoom = +(e.target as HTMLInputElement).value)} />
+            <button class="zbtn" @click=${() => this.zoomBy(2)} title="Zoom in">+</button>
+          </label>
+          <label><input type="checkbox" .checked=${this.wireframe} @change=${(e: Event) => (this.wireframe = (e.target as HTMLInputElement).checked)} /> wireframe</label>
+          <label><input type="checkbox" .checked=${this.live} ?disabled=${!this.entryId} @change=${(e: Event) => (this.live = (e.target as HTMLInputElement).checked)} /> live push</label>
+        </div>
       </div>
 
       <div class="wrap">
@@ -569,20 +667,28 @@ export class PimoroniUnicornPanel extends LitElement {
     setTimeout(() => this.loadCatalog(), 8000);
   }
 
+  private _thumb(src?: string) {
+    return src
+      ? html`<img class="thumb" src="data:image/png;base64,${src}" />`
+      : html`<div class="thumb"></div>`;
+  }
+  private _mhead(thumb = true) {
+    return html`<div class="mhead">${thumb ? html`<span>Preview</span>` : ""}<span>Name</span><span>Dependencies</span><span>Status</span><span></span></div>`;
+  }
   private _contentRow(u: ContentUnit, kind: "layout" | "screenset") {
-    return html`<li>
-      <span class="grow">${u.label}
+    return html`<div class="mrow">
+      ${this._thumb(u.thumb)}
+      <div class="cell-name">${u.label}
         ${u.compat?.length ? html`<span class="hint">[${u.compat.join("/")}]</span>` : ""}
-        ${kind === "screenset" ? html`<span class="hint">${u.screens} screen(s)</span>` : ""}
-        ${u.compatible ? "" : html`<span class="badge warn">other model</span>`}</span>
-      ${u.requires?.length ? html`<span class="hint">${u.requires.length} dep(s)</span>` : ""}
-      <button ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to deploy"}
-        @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>Deploy</button>
-    </li>`;
+        ${kind === "screenset" ? html`<span class="hint">${u.screens} page(s)</span>` : ""}</div>
+      <div class="hint">${u.requires?.length ? html`<span title=${u.requires.join(", ")}>${u.requires.length} dep(s)</span>` : "—"}</div>
+      <div>${u.compatible ? html`<span class="badge ok">compatible</span>` : html`<span class="badge warn">other model</span>`}</div>
+      <div class="cell-action"><button ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to deploy"}
+        @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>Deploy</button></div>
+    </div>`;
   }
 
   private _marketplaceView() {
-    const ev = this.fwManifest?.engine_version;
     const all = this.showAllContent;
     const apps = this.contentLayouts.filter((a) => all || a.compatible);
     const sets = this.contentScreensets.filter((s) => all || s.compatible);
@@ -590,35 +696,36 @@ export class PimoroniUnicornPanel extends LitElement {
     const lbl: Record<string, string> = { installed: "installed", outdated: "update available", not_installed: "not installed" };
     return html`
       <div class="bar">
-        ${ev ? html`<span class="hint">engine v${ev}</span>` : ""}
         <label><input type="checkbox" .checked=${this.showAllContent}
           @change=${(e: Event) => { this.showAllContent = (e.target as HTMLInputElement).checked; }} /> show all models</label>
+        <span class="grow"></span>
         <button class="secondary" @click=${this.loadCatalog}>Refresh</button>
       </div>
 
-      <h3>Apps</h3>
+      <h3>Pages</h3>
       ${apps.length
-        ? html`<ul class="catalog">${apps.map((a) => this._contentRow(a, "layout"))}</ul>`
-        : html`<p class="hint">No published apps${all ? "" : " for this device"}. Publish one from the Layout tab.</p>`}
+        ? html`<div class="mtable">${this._mhead()}${apps.map((a) => this._contentRow(a, "layout"))}</div>`
+        : html`<p class="hint">No published pages${all ? "" : " for this device"}. Publish one from the Designer tab.</p>`}
 
-      <h3>Screen sets</h3>
+      <h3>Playlists</h3>
       ${sets.length
-        ? html`<ul class="catalog">${sets.map((s) => this._contentRow(s, "screenset"))}</ul>`
-        : html`<p class="hint">No screen sets${all ? "" : " for this device"}. Compose one on the Screens tab.</p>`}
+        ? html`<div class="mtable">${this._mhead()}${sets.map((s) => this._contentRow(s, "screenset"))}</div>`
+        : html`<p class="hint">No playlists${all ? "" : " for this device"}. Compose one on the Playlists tab.</p>`}
 
       <h3>Widgets &amp; fonts</h3>
       ${this.entryId
-        ? html`<ul class="catalog">
-            ${this.catalog.map((w) => html`<li>
-              <span class="grow">${w.label} <span class="badge ${cls[w.status] ?? ""}">${lbl[w.status] ?? w.status}</span></span>
-              ${w.requires?.length ? html`<span class="hint">needs ${w.requires.join(", ")}</span>` : ""}
-              ${w.status === "installed"
+        ? html`<div class="mtable compact">${this._mhead(false)}
+            ${this.catalog.map((w) => html`<div class="mrow">
+              <div class="cell-name">${w.label}</div>
+              <div class="hint">${w.requires?.length ? html`<span title=${w.requires.join(", ")}>${w.requires.length} dep(s)</span>` : "—"}</div>
+              <div><span class="badge ${cls[w.status] ?? ""}">${lbl[w.status] ?? w.status}</span></div>
+              <div class="cell-action">${w.status === "installed"
                 ? html`<button class="danger" @click=${() => this.removeWidgetUnit(w.id)}>Remove</button>`
-                : html`<button @click=${() => this.installWidget(w.id)}>${w.status === "outdated" ? "Update" : "Install"}</button>`}
-            </li>`)}
-          </ul>`
-        : html`<p class="hint">Select a device on the Layout tab to manage installed widgets.</p>`}
-      <p class="hint">Deploying an app installs any widgets/fonts it needs over the air first, then pushes the layout; the device reboots if files changed.</p>
+                : html`<button @click=${() => this.installWidget(w.id)}>${w.status === "outdated" ? "Update" : "Install"}</button>`}</div>
+            </div>`)}
+          </div>`
+        : html`<p class="hint">Select a device to manage installed widgets.</p>`}
+      <p class="hint">Deploying a page installs any widgets/fonts it needs over the air first, then pushes it; the device reboots if files changed.</p>
     `;
   }
 
@@ -721,7 +828,7 @@ export class PimoroniUnicornPanel extends LitElement {
       type: "pimoroni_unicorn/push_screens", entry_id: this.entryId,
       layouts: this.screenLayouts, dwell: this.screenDwell, transition: this.screenTransition,
     });
-    this.status = `Pushed ${this.screenLayouts.length} screen(s) to device.`;
+    this.status = `Pushed ${this.screenLayouts.length} page(s) to device.`;
   }
 
   private _screensView() {
@@ -730,14 +837,16 @@ export class PimoroniUnicornPanel extends LitElement {
     const cur = this.screenLayouts[this.screenIdx];
     const png = cur ? this.screenPngs[cur] : "";
     return html`
-      <div class="bar"><span class="hint">compose a screen rotation — mock preview on ${this.model}</span></div>
+      <div class="bar"><span class="hint">compose a playlist — pages cycle on a timer; preview on ${this.model}</span></div>
       <div class="wrap">
         <div class="col">
-          <h3>Screens (rotation order)</h3>
+          <h3>Pages in this playlist</h3>
+          <p class="hint">Tick pages to include; play order follows the order you tick.</p>
           ${names.length ? names.map((n) => html`<div class="panelrow"><label>
             <input type="checkbox" ?checked=${this.screenLayouts.includes(n)}
-              @change=${(e: Event) => this.toggleScreen(n, (e.target as HTMLInputElement).checked)} /> ${n}</label></div>`)
-            : html`<p class="hint">No saved layouts yet — create them on the Layout tab.</p>`}
+              @change=${(e: Event) => this.toggleScreen(n, (e.target as HTMLInputElement).checked)} />
+            ${this.screenLayouts.includes(n) ? html`<span class="chip">${this.screenLayouts.indexOf(n) + 1}</span>` : ""} ${n}</label></div>`)
+            : html`<p class="hint">No saved pages yet — create one on the Designer tab.</p>`}
           <div class="panelrow"><label>Dwell (s)
             <input type="number" style="width:60px" min="1" max="600" .value=${String(this.screenDwell)}
               @change=${(e: Event) => { this.screenDwell = +(e.target as HTMLInputElement).value; this.buildScreenPreview(); }} /></label></div>
@@ -747,7 +856,7 @@ export class PimoroniUnicornPanel extends LitElement {
             </select></label></div>
           <div class="panelrow">
             <button @click=${this.pushScreens} ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to push"}>Push to device</button>
-            <button class="secondary" @click=${this.saveScreenset} ?disabled=${!this.screenLayouts.length} title="Save as a reusable screen set in the marketplace">Save as screen set</button>
+            <button class="secondary" @click=${this.saveScreenset} ?disabled=${!this.screenLayouts.length} title="Save as a reusable playlist in the marketplace">Save as playlist</button>
           </div>
         </div>
         <div class="col">
@@ -755,7 +864,7 @@ export class PimoroniUnicornPanel extends LitElement {
             ${png ? html`<img src="data:image/png;base64,${png}" width=${this.dims[0] * sc} height=${this.dims[1] * sc}
               style=${`opacity:${this.screenOpacity};transition:opacity 280ms`} />` : ""}
           </div>
-          <div class="hint">${this.screenLayouts.length > 1 ? `rotating ${this.screenIdx + 1}/${this.screenLayouts.length}: ${cur ?? ""}` : (cur ?? "select layouts to preview")}</div>
+          <div class="hint">${this.screenLayouts.length > 1 ? `playing ${this.screenIdx + 1}/${this.screenLayouts.length}: ${cur ?? ""}` : (cur ?? "tick pages to preview")}</div>
         </div>
       </div>
     `;
