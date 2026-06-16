@@ -144,6 +144,8 @@ def save_custom(config_dir, spec) -> str:
     err = validate_spec(spec)
     if err:
         raise ValueError(err)
+    if spec["id"] in {w["id"] for w in builtin_widgets()}:
+        raise ValueError(f"'{spec['id']}' is a built-in widget id; choose another")
     d = widgets_dir(config_dir)
     d.mkdir(parents=True, exist_ok=True)
     (d / ("widget_" + spec["id"] + ".json")).write_text(json.dumps(spec))
