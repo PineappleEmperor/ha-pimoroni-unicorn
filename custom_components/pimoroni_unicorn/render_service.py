@@ -74,6 +74,11 @@ def layout_capabilities() -> dict:
     return _modules().widgets.LAYOUT_CAPABILITIES
 
 
+def builtin_icon_names() -> list[str]:
+    """Names of the icons that ship with the engine."""
+    return sorted(_modules().icons.STATIC_ICONS.keys())
+
+
 def layout_boxes(layout: dict) -> list:
     """Per-widget [w, h] boxes for the layout, computed by the real widget_box."""
     widgets = _modules().widgets
@@ -111,9 +116,28 @@ def _encode(g, width, height) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
-def render_layout_png(model: str, layout: dict) -> str:
+def _prime_icons(m, installed: dict | None) -> None:
+    """Load installed (LaMetric/custom) icon frames into the icon cache for preview."""
+    if installed is None:
+        return
+    m.icons._user_cache.clear()  # noqa: SLF001 — reflect the current registry, drop removed icons
+    for name, data in installed.items():
+        frames = data.get("frames") or []
+        try:
+            decoded = [base64.b64decode(fr) for fr in frames]
+        except (ValueError, binascii.Error):
+            continue
+        # Prime the engine icon module's caches directly — preview-only, no on-device
+        # filesystem to install into; the icons module has no public prime API.
+        m.icons._user_cache[name] = (decoded, [int(d) for d in (data.get("durations") or [])])  # noqa: SLF001
+        if data.get("code") is not None:
+            m.icons._code_alias[str(data["code"])] = name  # noqa: SLF001
+
+
+def render_layout_png(model: str, layout: dict, installed_icons: dict | None = None) -> str:
     """Render a layout for a model; return a base64 PNG."""
     m, g, width, height = _new_graphics(model)
+    _prime_icons(m, installed_icons)
     state = {**SAMPLE_STATE, "time": time.localtime()}
     ds = dict(state.get("display_sensors") or {})
     for entry in layout.get("widgets", []):

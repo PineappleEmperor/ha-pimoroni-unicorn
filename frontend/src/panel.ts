@@ -3,7 +3,7 @@ import { property, state } from "lit/decorators.js";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
-interface CfgField { key: string; type: "select" | "rgb" | "number" | "text" | "entity"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
+interface CfgField { key: string; type: "select" | "rgb" | "number" | "text" | "entity" | "icon"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
 interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; multi?: boolean; }
 interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; type?: string; name?: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
@@ -62,6 +62,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private contentLayouts: ContentUnit[] = [];
   @state() private contentScreensets: ContentUnit[] = [];
   @state() private showAllContent = false;
+  @state() private iconNames: string[] = [];
   @state() private screenLayouts: string[] = [];
   @state() private screenDwell = 10;
   @state() private screenTransition: "none" | "fade" = "none";
@@ -121,7 +122,14 @@ export class PimoroniUnicornPanel extends LitElement {
       background: var(--card-background-color, #fff); color: var(--primary-text-color, #111); }
   `;
 
-  protected firstUpdated(): void { this.loadDevices(); }
+  protected firstUpdated(): void { this.loadDevices(); this.loadIcons(); }
+
+  private async loadIcons() {
+    try {
+      const r = await this.hass.callWS({ type: "pimoroni_unicorn/icons" });
+      this.iconNames = [...(r.builtin ?? []), ...(r.installed ?? [])];
+    } catch { /* icons list optional */ }
+  }
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -368,6 +376,12 @@ export class PimoroniUnicornPanel extends LitElement {
             <input type="number" style="width:60px" min=${f.min ?? 1} max=${f.max ?? 64} step=${f.step ?? 1}
               .value=${String(this.cfgVal(entry, f.key))}
               @change=${(e: Event) => this.setCfg(entry, f.key, +(e.target as HTMLInputElement).value)} /></div>`;
+        }
+        if (f.type === "icon") {
+          return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+            <select @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLSelectElement).value)}>
+              ${this.iconNames.map((o) => html`<option ?selected=${this.cfgVal(entry, f.key) === o}>${o}</option>`)}
+            </select></div>`;
         }
         if (f.type === "entity") {
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>

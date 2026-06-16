@@ -8,8 +8,7 @@ WIDGET = {
     "id": "icon", "label": "Icon", "w": 8, "h": 8, "variants": [], "multi": True,
     "default_cfg": {"icon": "home"},
     "cfg_fields": [
-        {"key": "icon", "type": "select", "label": "Icon",
-         "options": sorted(icons.STATIC_ICONS.keys())},
+        {"key": "icon", "type": "icon", "label": "Icon"},
     ],
     "requires": [],
 }

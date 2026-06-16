@@ -8,7 +8,7 @@ import yaml
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
-from . import firmware_install, layout, marketplace, render_service
+from . import firmware_install, lametric, layout, marketplace, render_service
 from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN
 
 WS_DEVICES        = "pimoroni_unicorn/devices"
@@ -33,6 +33,7 @@ WS_DEPLOY_SCREENSET = "pimoroni_unicorn/deploy_screenset"
 WS_PUBLISH_LAYOUT = "pimoroni_unicorn/publish_layout"
 WS_SAVE_SCREENSET = "pimoroni_unicorn/save_screenset"
 WS_DELETE_SCREENSET = "pimoroni_unicorn/delete_screenset"
+WS_ICONS          = "pimoroni_unicorn/icons"
 
 
 @callback
@@ -43,7 +44,7 @@ def async_register(hass: HomeAssistant) -> None:
                     ws_catalog, ws_fw_manifest, ws_fw_install, ws_fw_remove,
                     ws_widget_preview, ws_widget_save, ws_widget_import, ws_widget_delete,
                     ws_content_catalog, ws_deploy_layout, ws_deploy_screenset,
-                    ws_publish_layout, ws_save_screenset, ws_delete_screenset):
+                    ws_publish_layout, ws_save_screenset, ws_delete_screenset, ws_icons):
         websocket_api.async_register_command(hass, handler)
 
 
@@ -114,8 +115,9 @@ async def ws_layouts(hass, connection, msg):
 @websocket_api.async_response
 async def ws_render(hass, connection, msg):
     """Render a layout to a base64 PNG using the device's own render code."""
+    installed = await lametric.async_get_registry(hass)
     png = await hass.async_add_executor_job(
-        render_service.render_layout_png, msg["model"], msg["layout"])
+        render_service.render_layout_png, msg["model"], msg["layout"], installed)
     boxes = render_service.layout_boxes(msg["layout"])
     connection.send_result(msg["id"], {"png": png, "boxes": boxes})
 
@@ -428,6 +430,17 @@ async def ws_delete_screenset(hass, connection, msg):
     """Remove a stored screenset."""
     await layout.async_remove_screenset(hass, msg["id"])
     connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({vol.Required("type"): WS_ICONS})
+@websocket_api.async_response
+async def ws_icons(hass, connection, msg):
+    """Names available to the icon widget: engine built-ins + installed LaMetric/custom."""
+    installed = sorted((await lametric.async_get_registry(hass)).keys())
+    connection.send_result(msg["id"], {
+        "builtin": render_service.builtin_icon_names(),
+        "installed": installed,
+    })
 
 
 def _parse_spec_text(text: str):
