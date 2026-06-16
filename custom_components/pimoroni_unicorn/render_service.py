@@ -123,9 +123,14 @@ def render_widget_png(model: str, spec: dict, cfg=None, state=None) -> str:
     """Render a single declarative widget spec to a base64 PNG for authoring preview."""
     m, g, width, height = _new_graphics(model)
     full = {**SAMPLE_STATE, "time": time.localtime(), **(state or {})}
+    full["display_sensors"] = dict(full.get("display_sensors") or {})
     for op in spec.get("draw", []):
         bind = op.get("bind")
-        if bind and bind not in full:
+        if not bind:
+            continue
+        if op.get("op") == "dot":
+            full["display_sensors"].setdefault(bind, {"state": True})  # sample 'on' for preview
+        elif bind not in full:
             full[bind] = 123  # sample value so unknown bindings still preview
     cfg = {**spec.get("default_cfg", {}), **(cfg or {})}
     m.declarative.render(g, spec, 0, 0, spec.get("w", width), spec.get("h", height), cfg, full)

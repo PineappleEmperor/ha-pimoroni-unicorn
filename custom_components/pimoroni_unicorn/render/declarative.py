@@ -63,6 +63,13 @@ def _draw_bar(g, op, x, y, state, pen):
         g.rectangle(x, y, fill, h)
 
 
+def _draw_dot(g, op, x, y, state):
+    sensor = state.get("display_sensors", {}).get(op.get("bind"), {})
+    rgb = op.get("on_color", (0, 255, 0)) if sensor.get("state") else op.get("off_color", (20, 20, 20))
+    g.set_pen(g.create_pen(*rgb))
+    g.rectangle(x, y, op.get("w", 2), op.get("h", 2))
+
+
 def render(g, spec, x, y, w, h, cfg, state):
     """Draw a declarative widget spec at (x, y)."""
     for op in spec.get("draw", []):
@@ -82,3 +89,5 @@ def render(g, spec, x, y, w, h, cfg, state):
             _draw_value(g, op, ox, oy, state, pen)
         elif kind == "bar":
             _draw_bar(g, op, ox, oy, state, pen)
+        elif kind == "dot":
+            _draw_dot(g, op, ox, oy, state)

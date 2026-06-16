@@ -156,7 +156,7 @@ def widgets_dir(config_dir) -> Path:
     return Path(config_dir) / "pimoroni_unicorn" / "widgets"
 
 
-_VALID_OPS = {"rect", "pixel", "icon", "value", "bar"}
+_VALID_OPS = {"rect", "pixel", "icon", "value", "bar", "dot"}
 
 
 def validate_spec(spec) -> str | None:
