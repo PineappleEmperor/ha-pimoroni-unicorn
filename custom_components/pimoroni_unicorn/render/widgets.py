@@ -3,16 +3,17 @@
 
 import json
 
-from . import weather_fx
-
 from . import declarative
+from . import overlay_weather
 from . import widget_calendar
 from . import widget_clock
 from . import widget_energy
+from . import widget_sensor
 from . import widget_sun_moon
 from . import widget_weekdays
 
-_UNITS = [widget_clock, widget_calendar, widget_weekdays, widget_energy, widget_sun_moon]
+_UNITS = [widget_clock, widget_calendar, widget_weekdays, widget_energy, widget_sun_moon, widget_sensor]
+_OVERLAY_UNITS = [overlay_weather]
 
 
 def _meta(mod):
@@ -25,7 +26,12 @@ def _meta(mod):
     }
 
 
+def _overlay_meta(mod):
+    return {"label": mod.OVERLAY["label"], "render": mod.render}
+
+
 WIDGET_REGISTRY = {mod.WIDGET["id"]: _meta(mod) for mod in _UNITS}
+OVERLAY_REGISTRY = {mod.OVERLAY["id"]: _overlay_meta(mod) for mod in _OVERLAY_UNITS}
 
 
 def _declarative_meta(spec):
@@ -70,18 +76,19 @@ def _discover_installed():
                         WIDGET_REGISTRY[wid] = _declarative_meta(json.load(f))
                 except Exception:
                     pass
+    for fn in names:
+        if fn.startswith("overlay_") and fn.endswith(".py"):
+            oid = fn[8:-3]
+            if oid not in OVERLAY_REGISTRY:
+                try:
+                    mod = __import__(fn[:-3])
+                    if hasattr(mod, "OVERLAY") and hasattr(mod, "render"):
+                        OVERLAY_REGISTRY[oid] = _overlay_meta(mod)
+                except Exception:
+                    pass
 
 
 _discover_installed()
-
-
-def _weather(g, state):
-    weather_fx.weather_overlay(state["weather"])
-
-
-OVERLAY_REGISTRY = {
-    "weather": {"label": "Weather", "render": _weather},
-}
 
 
 def widget_box(widget_id, cfg):

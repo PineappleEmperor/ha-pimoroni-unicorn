@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
-EXCLUDE = {"secrets.py", "__init__.py"}
+EXCLUDE = {"secrets.py", "secrets.example.py", "__init__.py"}
 
 
 def _manifest_sources() -> set[str]:

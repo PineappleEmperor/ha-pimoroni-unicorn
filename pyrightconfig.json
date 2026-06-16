@@ -6,5 +6,5 @@
   "reportMissingImports": true,
   "reportMissingModuleSource": false,
   "reportPrivateImportUsage": false,
-  "exclude": ["firmware", "custom_components/pimoroni_unicorn/render", "custom_components/pimoroni_unicorn/catalog"]
+  "exclude": ["firmware", "custom_components/pimoroni_unicorn/render", "custom_components/pimoroni_unicorn/catalog", "custom_components/pimoroni_unicorn/firmware"]
 }

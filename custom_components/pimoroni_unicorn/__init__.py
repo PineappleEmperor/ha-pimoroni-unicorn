@@ -29,16 +29,13 @@ from .const import (
     CONF_BATTERY_SOC_ENTITY,
     CONF_CONSUMPTION_ENTITY,
     CONF_DEVICE_ID,
-    CONF_DISPLAY_SENSORS,
     CONF_EXTRA_SENSORS,
-    CONF_MODEL,
     CONF_SHOW_PANEL,
     CONF_SOLAR_ENTITY,
     CONF_SUN_ENTITY,
     CONF_WEATHER_CODE_ENTITY,
     DOMAIN,
     OTA_SOURCE_FILES,
-    UNICORN_MODEL_KEYS,
 )
 from .notify import (
     DISMISS_SCHEMA,
@@ -48,19 +45,26 @@ from .notify import (
     make_generic_notify_handler,
     make_notify_handler,
 )
+from .screens import (
+    SET_SCREENS_SCHEMA,
+    SHOW_SCREEN_SCHEMA,
+    make_set_screens_handler,
+    make_show_screen_handler,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 SOLAR_INTERVAL        = timedelta(seconds=10)
-SERVICE_GENERATE_SECRETS  = "generate_secrets"
 SERVICE_PUSH_FIRMWARE     = "push_firmware"
 SERVICE_SEND_NOTIFICATION = "send_notification"
 SERVICE_DISMISS_NOTIFICATION = "dismiss_notification"
+SERVICE_SHOW_SCREEN       = "show_screen"
+SERVICE_SET_SCREENS       = "set_screens"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Pimoroni Unicorn from a config entry."""
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": [], "ha_config": {}, "display_sensor_ids": set()}
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": [], "ha_config": {}, "sensor_entities": set()}
 
     opts      = _merged_opts(entry)
     device_id = opts[CONF_DEVICE_ID]
@@ -70,7 +74,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _async_subscribe_layout_caps(hass, entry)
     await _async_subscribe_notify_caps(hass, entry)
     await _async_subscribe_fw_manifest(hass, entry)
-    await _async_setup_display_sensors(hass, entry)
+    await _async_setup_sensor_feed(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     await hass.config_entries.async_forward_entry_setups(entry, ["button"])
@@ -80,10 +84,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[f"{DOMAIN}_ws_registered"] = True
     await _async_refresh_panel(hass)
 
-    if not hass.services.has_service(DOMAIN, SERVICE_GENERATE_SECRETS):
-        hass.services.async_register(
-            DOMAIN, SERVICE_GENERATE_SECRETS, _make_generate_secrets_handler(hass)
-        )
     if not hass.services.has_service(DOMAIN, SERVICE_PUSH_FIRMWARE):
         hass.services.async_register(
             DOMAIN, SERVICE_PUSH_FIRMWARE, _make_push_firmware_handler(hass)
@@ -99,6 +99,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.services.has_service(DOMAIN, SERVICE_DISMISS_NOTIFICATION):
         hass.services.async_register(
             DOMAIN, SERVICE_DISMISS_NOTIFICATION, make_dismiss_handler(hass), schema=DISMISS_SCHEMA
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SHOW_SCREEN):
+        hass.services.async_register(
+            DOMAIN, SERVICE_SHOW_SCREEN, make_show_screen_handler(hass), schema=SHOW_SCREEN_SCHEMA
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_SCREENS):
+        hass.services.async_register(
+            DOMAIN, SERVICE_SET_SCREENS, make_set_screens_handler(hass), schema=SET_SCREENS_SCHEMA
         )
 
     return True
@@ -117,10 +125,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(NOTIFY_DOMAIN, device_id)
 
     if not hass.data.get(DOMAIN):
-        hass.services.async_remove(DOMAIN, SERVICE_GENERATE_SECRETS)
         hass.services.async_remove(DOMAIN, SERVICE_PUSH_FIRMWARE)
         hass.services.async_remove(DOMAIN, SERVICE_SEND_NOTIFICATION)
         hass.services.async_remove(DOMAIN, SERVICE_DISMISS_NOTIFICATION)
+        hass.services.async_remove(DOMAIN, SERVICE_SHOW_SCREEN)
+        hass.services.async_remove(DOMAIN, SERVICE_SET_SCREENS)
         if hass.data.pop(f"{DOMAIN}_panel_registered", False):
             frontend.async_remove_panel(hass, PANEL_URL_PATH)
 
@@ -180,7 +189,7 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     _setup_publishers(hass, entry)
     await _async_subscribe_ha_config(hass, entry)
     await _async_publish_ha_config(hass, entry)
-    await _async_setup_display_sensors(hass, entry)
+    await _async_setup_sensor_feed(hass, entry)
     await layout.async_push_active(hass, entry)
     await _async_refresh_panel(hass)
 
@@ -266,70 +275,36 @@ async def _async_publish_ha_config(hass: HomeAssistant, entry: ConfigEntry) -> N
     await async_publish(hass, f"{device_id}/ha_config", json.dumps(payload), retain=True)
 
 
-async def _async_setup_display_sensors(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Publish display sensor configs and subscribe to entity state changes."""
-    opts      = _merged_opts(entry)
-    device_id = opts[CONF_DEVICE_ID]
+async def _async_setup_sensor_feed(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Watch entities named by sensor widgets in the active layout; publish their on/off state."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
     store     = hass.data[DOMAIN][entry.entry_id]
-    sensors   = opts.get(CONF_DISPLAY_SENSORS, [])
-    new_ids   = {s["id"] for s in sensors}
+    active    = await layout.async_get_active(hass, entry) or {}
+    entities: set[str] = set()
+    for w in active.get("widgets", []):
+        if w.get("id") == "sensor":
+            ent = (w.get("cfg") or {}).get("entity")
+            if isinstance(ent, str) and ent:
+                entities.add(ent)
 
-    for removed_id in store.get("display_sensor_ids", set()) - new_ids:
-        await async_publish(hass, f"{device_id}/display/{removed_id}/config", "", retain=True)
-        await async_publish(hass, f"{device_id}/display/{removed_id}/state", "", retain=True)
-    store["display_sensor_ids"] = new_ids
+    for removed in store.get("sensor_entities", set()) - entities:
+        await async_publish(hass, f"{device_id}/display/{removed}/state", "", retain=True)
+    store["sensor_entities"] = entities
 
-    for sensor in sensors:
-        entity_id = sensor.get("entity_id", "")
-        sensor_id = sensor.get("id", "")
-        if not entity_id or not sensor_id:
-            continue
-
-        config_payload = json.dumps({
-            "name":    sensor.get("name", sensor_id),
-            "on_rgb":  _hex_to_rgb(sensor.get("on_color", "00FF00")),
-            "off_rgb": _hex_to_rgb(sensor.get("off_color", "1A1A1A")),
-            "x":       sensor.get("x_pos",  37),
-            "y":       sensor.get("y_pos",   1),
-            "width":   sensor.get("width",  sensor.get("size", 2)),
-            "height":  sensor.get("height", sensor.get("size", 2)),
-            "spacing": sensor.get("spacing", 4),
-        })
-        await async_publish(hass, f"{device_id}/display/{sensor_id}/config", config_payload, retain=True)
-
-        state = hass.states.get(entity_id)
-        await async_publish(
-            hass,
-            f"{device_id}/display/{sensor_id}/state",
-            "ON" if state and state.state == "on" else "OFF",
-            retain=True,
-        )
+    for ent in entities:
+        st = hass.states.get(ent)
+        await async_publish(hass, f"{device_id}/display/{ent}/state",
+                            "ON" if st and st.state == "on" else "OFF", retain=True)
 
         @callback
-        def _on_display_state(event: Any, _sid: str = sensor_id, _did: str = device_id) -> None:
+        def _on_state(event: Any, _ent: str = ent, _did: str = device_id) -> None:
             new_state = event.data.get("new_state")
             if new_state is not None:
                 hass.async_create_task(async_publish(
-                    hass,
-                    f"{_did}/display/{_sid}/state",
-                    "ON" if new_state.state == "on" else "OFF",
-                    retain=True,
-                ))
+                    hass, f"{_did}/display/{_ent}/state",
+                    "ON" if new_state.state == "on" else "OFF", retain=True))
 
-        store["unsub"].append(
-            async_track_state_change_event(hass, [entity_id], _on_display_state)
-        )
-
-
-def _hex_to_rgb(hex_str: str) -> list[int]:
-    """Convert hex colour string to [r, g, b] list."""
-    h = hex_str.lstrip("#").upper()
-    if len(h) != 6:
-        return [0, 255, 0]
-    try:
-        return [int(h[i:i + 2], 16) for i in (0, 2, 4)]
-    except ValueError:
-        return [0, 255, 0]
+        store["unsub"].append(async_track_state_change_event(hass, [ent], _on_state))
 
 
 def _merged_opts(entry: ConfigEntry) -> dict[str, Any]:
@@ -402,62 +377,6 @@ def _setup_publishers(hass: HomeAssistant, entry: ConfigEntry) -> None:
         )
 
 
-def _make_generate_secrets_handler(
-    hass: HomeAssistant,
-) -> Callable[[ServiceCall], Coroutine[Any, Any, None]]:
-    async def _handle_generate_secrets(call: ServiceCall) -> None:
-        entries = hass.config_entries.async_entries(DOMAIN)
-        if not entries:
-            _LOGGER.error("Pimoroni Unicorn: no configured entries found")
-            return
-
-        mqtt_broker   = ""
-        mqtt_port     = 1883
-        mqtt_username = ""
-        mqtt_entries  = hass.config_entries.async_entries("mqtt")
-        if mqtt_entries:
-            mqtt_data     = mqtt_entries[0].data
-            mqtt_broker   = mqtt_data.get("broker", "")
-            mqtt_port     = int(mqtt_data.get("port", 1883))
-            mqtt_username = mqtt_data.get("username", "")
-
-        out_dir = Path(hass.config.config_dir) / "pimoroni_unicorn"
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        generated: list[str] = []
-        for entry in entries:
-            opts      = _merged_opts(entry)
-            device_id = opts[CONF_DEVICE_ID]
-            file_path = out_dir / f"secrets_{device_id}.py"
-            model_key    = UNICORN_MODEL_KEYS.get(opts.get(CONF_MODEL, ""), "galactic")
-            entity_opts  = {k: (opts.get(k) or "") for k in (
-                CONF_SOLAR_ENTITY, CONF_CONSUMPTION_ENTITY, CONF_BATTERY_SOC_ENTITY,
-                CONF_BATTERY_CHARGING_ENTITY, CONF_SUN_ENTITY, CONF_WEATHER_CODE_ENTITY,
-            )}
-            content = _render_secrets(device_id, mqtt_broker, mqtt_port, mqtt_username, model_key, entity_opts)
-
-            await hass.async_add_executor_job(file_path.write_text, content)
-
-            generated.append(f"`{file_path}`")
-            _LOGGER.info("Pimoroni Unicorn: wrote %s", file_path)
-
-        files_list = "\n".join(f"- {p}" for p in generated)
-        notify_create(
-            hass,
-            title="Pimoroni Unicorn firmware config generated",
-            message=(
-                f"Generated secrets file(s):\n\n{files_list}\n\n"
-                "**Next steps:**\n"
-                "1. Open the file and fill in `SSID`, `PASSWORD`, and `MQTT_PASSWORD`\n"
-                "2. Rename to `secrets.py`\n"
-                "3. Copy `secrets.py`, `main.py`, and `hardware.py` to the root of your Pimoroni Unicorn"
-            ),
-            notification_id="pimoroni_unicorn_secrets_generated",
-        )
-
-    return _handle_generate_secrets
-
-
 def _make_push_firmware_handler(
     hass: HomeAssistant,
 ) -> Callable[[ServiceCall], Coroutine[Any, Any, None]]:
@@ -482,7 +401,7 @@ def _make_push_firmware_handler(
 
         requested    = call.data.get("files", ["main"])
         file_content = call.data.get("file_content", {})
-        source_dir   = Path(hass.config.config_dir) / "pimoroni_unicorn" / "firmware"
+        source_dir   = Path(__file__).parent / "firmware"
 
         all_errors: list[str] = []
         for entry in entries:
@@ -520,19 +439,6 @@ def _make_push_firmware_handler(
                                 "Pimoroni Unicorn OTA: low memory validating %s, skipping check",
                                 src_name,
                             )
-
-                    if key in file_content:
-                        src = source_dir / src_name
-                        if src.is_file():
-                            try:
-                                src.replace(src.with_name(src.name + ".old"))
-                            except OSError as e:
-                                _LOGGER.warning("Pimoroni Unicorn OTA: could not back up %s: %s", src_name, e)
-                        try:
-                            with src.open("w", encoding="utf-8") as f:
-                                f.write(content)
-                        except OSError as e:
-                            _LOGGER.warning("Pimoroni Unicorn OTA: could not update source %s: %s", src_name, e)
 
                     with (www_dir / src_name).open("w", encoding="utf-8") as f:
                         f.write(content)
@@ -574,43 +480,12 @@ def _make_push_firmware_handler(
             title="Pimoroni Unicorn OTA sent",
             message=(
                 f"OTA command sent for: {', '.join(requested)}.\n"
-                f"Device will download files and reboot automatically.{error_note}\n\n"
-                f"Source directory: `{source_dir}`"
+                f"Device will download files and reboot automatically.{error_note}"
             ),
             notification_id="pimoroni_unicorn_ota_sent",
         )
 
     return _handle_push_firmware
-
-
-def _render_secrets(
-    device_id: str,
-    mqtt_broker: str,
-    mqtt_port: int,
-    mqtt_username: str,
-    model_key: str,
-    entity_opts: dict[str, str],
-) -> str:
-    sun = entity_opts.get(CONF_SUN_ENTITY) or "sun.sun"
-    return (
-        f'SSID          = ""\n'
-        f'PASSWORD      = ""\n'
-        f'MQTT_SERVER   = "{mqtt_broker or ""}"\n'
-        f'MQTT_PORT     = {mqtt_port}\n'
-        f'MQTT_USER     = "{mqtt_username or ""}"\n'
-        f'MQTT_PASSWORD = ""\n'
-        f'DEVICE_ID     = "{device_id}"\n'
-        f'NTP_HOST      = "{mqtt_broker or ""}"  # defaults to MQTT_SERVER if omitted\n'
-        f'MODEL         = "{model_key}"\n'
-        f'\n'
-        f'# Optional: pre-configure HA entity IDs so the integration auto-fills on first setup\n'
-        f'HA_SOLAR_ENTITY            = "{entity_opts.get(CONF_SOLAR_ENTITY, "")}"\n'
-        f'HA_CONSUMPTION_ENTITY      = "{entity_opts.get(CONF_CONSUMPTION_ENTITY, "")}"\n'
-        f'HA_BATTERY_SOC_ENTITY      = "{entity_opts.get(CONF_BATTERY_SOC_ENTITY, "")}"\n'
-        f'HA_BATTERY_CHARGING_ENTITY = "{entity_opts.get(CONF_BATTERY_CHARGING_ENTITY, "")}"\n'
-        f'HA_SUN_ENTITY              = "{sun}"\n'
-        f'HA_WEATHER_CODE_ENTITY     = "{entity_opts.get(CONF_WEATHER_CODE_ENTITY, "")}"\n'
-    )
 
 
 def _resolve_ota_key(key: str) -> tuple[str, str]:

@@ -11,8 +11,17 @@ _FONTS = {
 
 
 def box(spec, cfg=None):
-    """Footprint declared by the spec."""
-    return (spec.get("w", 8), spec.get("h", 8))
+    """Footprint, honouring cfg w/h overrides for configurable widgets."""
+    cfg = cfg or {}
+    return (cfg.get("w", spec.get("w", 8)), cfg.get("h", spec.get("h", 8)))
+
+
+def _resolve(op, cfg):
+    """Substitute $name op fields from cfg (cfg-parameterised widgets)."""
+    out = {}
+    for k, v in op.items():
+        out[k] = cfg.get(v[1:]) if isinstance(v, str) and v[:1] == "$" else v
+    return out
 
 
 def _value_text(op, state):
@@ -63,9 +72,17 @@ def _draw_bar(g, op, x, y, state, pen):
         g.rectangle(x, y, fill, h)
 
 
+def _draw_dot(g, op, x, y, state):
+    sensor = state.get("display_sensors", {}).get(op.get("bind"), {})
+    rgb = op.get("on_color", (0, 255, 0)) if sensor.get("state") else op.get("off_color", (20, 20, 20))
+    g.set_pen(g.create_pen(*rgb))
+    g.rectangle(x, y, op.get("w", 2), op.get("h", 2))
+
+
 def render(g, spec, x, y, w, h, cfg, state):
     """Draw a declarative widget spec at (x, y)."""
-    for op in spec.get("draw", []):
+    for raw in spec.get("draw", []):
+        op = _resolve(raw, cfg)
         kind = op.get("op")
         ox = x + op.get("x", 0)
         oy = y + op.get("y", 0)
@@ -82,3 +99,5 @@ def render(g, spec, x, y, w, h, cfg, state):
             _draw_value(g, op, ox, oy, state, pen)
         elif kind == "bar":
             _draw_bar(g, op, ox, oy, state, pen)
+        elif kind == "dot":
+            _draw_dot(g, op, ox, oy, state)

@@ -8,6 +8,7 @@ from pathlib import Path
 _DIR = Path(__file__).parent / "catalog"
 _WIDGETS = _DIR / "widgets"
 _FONTS = _DIR / "fonts"
+_OVERLAYS = _DIR / "overlays"
 
 # Logical font dependency name (font:<name>) -> unit filename.
 FONT_FILES = {
@@ -23,16 +24,20 @@ def _short_hash(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()[:16]
 
 
-def _parse_widget(path: Path) -> dict | None:
-    """Extract the WIDGET descriptor literal from a unit file."""
+def _parse_descriptor(path: Path, name: str) -> dict | None:
+    """Extract a top-level dict literal (WIDGET/OVERLAY) from a unit file."""
     for node in ast.parse(path.read_text()).body:
         if isinstance(node, ast.Assign) and any(
-                isinstance(t, ast.Name) and t.id == "WIDGET" for t in node.targets):
+                isinstance(t, ast.Name) and t.id == name for t in node.targets):
             try:
                 return ast.literal_eval(node.value)
             except (ValueError, SyntaxError):
                 return None
     return None
+
+
+def _parse_widget(path: Path) -> dict | None:
+    return _parse_descriptor(path, "WIDGET")
 
 
 def builtin_widgets() -> list[dict]:
@@ -50,6 +55,34 @@ def builtin_widgets() -> list[dict]:
             "hash": _short_hash(p.read_bytes()),
         })
     return out
+
+
+def builtin_overlays() -> list[dict]:
+    """Catalogue of shipped overlay units with metadata + install hash."""
+    out = []
+    for p in sorted(_OVERLAYS.glob("overlay_*.py")):
+        meta = _parse_descriptor(p, "OVERLAY")
+        if not meta:
+            continue
+        out.append({
+            "id": meta["id"], "kind": "overlay",
+            "label": meta.get("label", meta["id"]),
+            "requires": meta.get("requires", []),
+            "device_file": p.name,
+            "hash": _short_hash(p.read_bytes()),
+        })
+    return out
+
+
+def unit_device_file(item_id: str, custom_dir=None) -> str | None:
+    """Resolve a catalogue item id to its on-device filename (for removal)."""
+    if _widget_path(item_id).is_file():
+        return "widget_" + item_id + ".py"
+    if custom_dir and (Path(custom_dir) / ("widget_" + item_id + ".json")).is_file():
+        return "widget_" + item_id + ".json"
+    if (_OVERLAYS / ("overlay_" + item_id + ".py")).is_file():
+        return "overlay_" + item_id + ".py"
+    return None
 
 
 def font_unit(name: str) -> dict | None:
@@ -110,6 +143,9 @@ def resolve_install(widget_id: str, device_files: dict | None = None,
             requires = json.loads(cp.read_text()).get("requires", [])
         except (ValueError, OSError):
             requires = []
+    elif (op := _OVERLAYS / ("overlay_" + widget_id + ".py")).is_file():
+        files = [("/" + op.name, op.read_text())]
+        requires = (_parse_descriptor(op, "OVERLAY") or {}).get("requires", [])
     else:
         return []
     return files + _font_deps(requires, device_files)
@@ -120,7 +156,7 @@ def widgets_dir(config_dir) -> Path:
     return Path(config_dir) / "pimoroni_unicorn" / "widgets"
 
 
-_VALID_OPS = {"rect", "pixel", "icon", "value", "bar"}
+_VALID_OPS = {"rect", "pixel", "icon", "value", "bar", "dot"}
 
 
 def validate_spec(spec) -> str | None:
@@ -144,6 +180,8 @@ def save_custom(config_dir, spec) -> str:
     err = validate_spec(spec)
     if err:
         raise ValueError(err)
+    if spec["id"] in {w["id"] for w in builtin_widgets()}:
+        raise ValueError(f"'{spec['id']}' is a built-in widget id; choose another")
     d = widgets_dir(config_dir)
     d.mkdir(parents=True, exist_ok=True)
     (d / ("widget_" + spec["id"] + ".json")).write_text(json.dumps(spec))
@@ -161,7 +199,7 @@ def device_diff(manifest: dict | None, custom_dir=None) -> list[dict]:
     """Per catalogue widget: installed / outdated / not_installed vs a device manifest."""
     files = (manifest or {}).get("files", {})
     out = []
-    for w in builtin_widgets() + custom_widgets(custom_dir):
+    for w in builtin_widgets() + custom_widgets(custom_dir) + builtin_overlays():
         dev = files.get(w["device_file"])
         status = "installed" if dev == w["hash"] else ("outdated" if dev else "not_installed")
         out.append({**w, "status": status})

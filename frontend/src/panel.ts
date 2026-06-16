@@ -1,10 +1,9 @@
 import { LitElement, html, css } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { property, state } from "lit/decorators.js";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
-type Rect = [number, number, number, number];
-interface CfgField { key: string; type: "select" | "rgb" | "number"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
+interface CfgField { key: string; type: "select" | "rgb" | "number" | "text"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
 interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; }
 interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
@@ -12,9 +11,6 @@ interface Layout { name?: string; model?: string; grid?: number; widgets: Widget
 interface Device { entry_id: string; device_id: string; model: string; name: string; active_layout?: string; }
 interface CatalogWidget { id: string; label: string; kind: string; requires: string[]; device_file: string; hash: string; status: string; }
 interface FwManifest { engine_version?: string; files?: Record<string, string>; }
-interface Sensor { id: string; entity_id: string; name: string; on_color: string; off_color: string; x_pos: number; y_pos: number; width?: number; height?: number; size?: number; spacing?: number; }
-const sw = (s: Sensor): number => s.width ?? s.size ?? 2;
-const sh = (s: Sensor): number => s.height ?? s.size ?? 2;
 
 const PREVIEW_TARGET_PX = 560;
 
@@ -38,12 +34,7 @@ const unhex = (s: string): Rgb => {
   const h = (s || "").replace("#", "");
   return [0, 2, 4].map((i) => parseInt(h.substr(i, 2), 16) || 0) as Rgb;
 };
-const dummySensors = (): Sensor[] => [
-  { id: "demo_a", entity_id: "", name: "Sensor A", on_color: "#8cc050", off_color: "#233014", x_pos: 0, y_pos: 0 },
-  { id: "demo_b", entity_id: "", name: "Sensor B", on_color: "#f7be12", off_color: "#3e3005", x_pos: 3, y_pos: 0 },
-];
 
-@customElement("pimoroni-unicorn-panel")
 export class PimoroniUnicornPanel extends LitElement {
   @property({ attribute: false }) hass!: any;
 
@@ -60,15 +51,20 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private dims: Size = [53, 11];
   @state() private zoom = 0;  // px per LED; 0 = auto-fit
   @state() private selected = -1;
-  @state() private sensors: Sensor[] = [];
-  @state() private selSensor = -1;
   @state() private layoutName = "default";
   @state() private live = false;
   @state() private wireframe = true;
   @state() private status = "";
-  @state() private tab: "layout" | "market" | "edit" = "layout";
+  @state() private tab: "layout" | "market" | "edit" | "screens" = "layout";
   @state() private catalog: CatalogWidget[] = [];
   @state() private fwManifest: FwManifest | null = null;
+  @state() private screenLayouts: string[] = [];
+  @state() private screenDwell = 10;
+  @state() private screenTransition: "none" | "fade" = "none";
+  @state() private screenPngs: Record<string, string> = {};
+  @state() private screenIdx = 0;
+  @state() private screenOpacity = 1;
+  private screenTimer = 0;
   @state() private specText = SAMPLE_SPEC;
   @state() private specPng = "";
   @state() private specError = "";
@@ -96,7 +92,6 @@ export class PimoroniUnicornPanel extends LitElement {
     .boxes { pointer-events: none; }
     .box { position: absolute; box-sizing: border-box; border: 1px solid rgba(255,255,255,.35); cursor: grab; touch-action: none; pointer-events: auto; }
     .box.sel { border: 2px solid var(--primary-color, #03a9f4); background: rgba(3,169,244,.10); }
-    .box.sensor { border: 1px dashed var(--warning-color, #ffa600); }
     .box .tag { position: absolute; top: -16px; left: 0; font: 11px monospace; color: #ccc; white-space: nowrap; }
     .wlist { list-style: none; padding: 0; margin: 0 0 12px; }
     .wlist li { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
@@ -153,11 +148,6 @@ export class PimoroniUnicornPanel extends LitElement {
       entry.x = Math.max(1 - bw, Math.min(W - 1, entry.x + dx));
       entry.y = Math.max(1 - bh, Math.min(H - 1, entry.y + dy));
       this.edited();
-    } else if (this.selSensor >= 0 && this.sensors[this.selSensor]) {
-      const sn = this.sensors[this.selSensor];
-      sn.x_pos = Math.max(0, Math.min(W - sw(sn), sn.x_pos + dx));
-      sn.y_pos = Math.max(0, Math.min(H - sh(sn), sn.y_pos + dy));
-      this.edited();
     }
   }
 
@@ -183,35 +173,14 @@ export class PimoroniUnicornPanel extends LitElement {
     if (!dev) return;
     this.entryId = entryId;
     await this.loadCaps({ entry_id: entryId });
-    const sres = await this.hass.callWS({ type: "pimoroni_unicorn/display_sensors", entry_id: entryId });
-    this.sensors = (sres.sensors ?? []).map((s: Sensor) => ({
-      ...s,
-      on_color: s.on_color?.startsWith("#") ? s.on_color : "#" + (s.on_color || "00ff00"),
-      off_color: s.off_color?.startsWith("#") ? s.off_color : "#" + (s.off_color || "1a1a1a"),
-    }));
-    this.selSensor = -1;
     const active = dev.active_layout ? this.stored[dev.active_layout] : undefined;
     this.loadLayout(active ?? this.defaultLayout);
   }
 
   private async selectMock(model: string): Promise<void> {
     this.entryId = "";
-    this.sensors = [];
-    this.selSensor = -1;
     await this.loadCaps({ model });
     this.loadLayout(this.defaultLayout);
-    for (const sn of dummySensors()) {
-      const [x, y] = this.freeSlot(sn.size ?? 2);
-      this.sensors = [...this.sensors, { ...sn, x_pos: x, y_pos: y }];
-    }
-  }
-
-  private renderSensors() {
-    return this.sensors.map((s) => ({
-      x: s.x_pos, y: s.y_pos, width: sw(s), height: sh(s),
-      on_rgb: unhex(s.on_color), off_rgb: unhex(s.off_color),
-      state: s.entity_id ? this.hass?.states?.[s.entity_id]?.state === "on" : true,
-    }));
   }
 
   private async refreshStored(): Promise<void> {
@@ -228,7 +197,7 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private async renderPreview(): Promise<void> {
     try {
-      const res = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: this.layout, sensors: this.renderSensors() });
+      const res = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: this.layout });
       this.png = res.png;
       this.wboxes = res.boxes ?? [];
       if (this.status.startsWith("Render failed")) this.status = "";
@@ -260,28 +229,6 @@ export class PimoroniUnicornPanel extends LitElement {
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
     this.zoomBy(e.deltaY < 0 ? 2 : -2);
-  }
-  // Rectangles already occupied by enabled widgets and existing sensors.
-  private occupiedRects(): Rect[] {
-    const rects: Rect[] = [];
-    this.layout.widgets.forEach((w, i) => {
-      if (w.enabled === false || !this.capFor(w.id)) return;
-      const [bw, bh] = this.boxDims(i);
-      rects.push([w.x, w.y, bw, bh]);
-    });
-    for (const sn of this.sensors) rects.push([sn.x_pos, sn.y_pos, sw(sn), sh(sn)]);
-    return rects;
-  }
-  // First top-left cell where a size×size box clears all occupied rects.
-  private freeSlot(size: number): [number, number] {
-    const [W, H] = this.dims;
-    const taken = this.occupiedRects();
-    const hits = (x: number, y: number) =>
-      taken.some(([rx, ry, rw, rh]) => x < rx + rw && x + size > rx && y < ry + rh && y + size > ry);
-    for (let y = 0; y <= H - size; y++)
-      for (let x = 0; x <= W - size; x++)
-        if (!hits(x, y)) return [x, y];
-    return [0, 0];
   }
   // Box dims come from the backend (computed by the real widget_box), so any
   // cfg-driven sizing (variant, size, digits…) is correct without client logic.
@@ -349,61 +296,6 @@ export class PimoroniUnicornPanel extends LitElement {
     this.selected = -1;
     this.edited();
   }
-  private startSensorDrag(i: number, ev: PointerEvent): void {
-    ev.preventDefault();
-    this.selSensor = i;
-    this.selected = -1;
-    const s = this.sensors[i];
-    const grid = this.layout.grid ?? 1;
-    const [W, H] = this.dims;
-    const sx = ev.clientX, sy = ev.clientY, ox = s.x_pos, oy = s.y_pos;
-    (ev.target as HTMLElement).setPointerCapture(ev.pointerId);
-    const move = (e: PointerEvent) => {
-      const dx = Math.round((e.clientX - sx) / this.scale / grid) * grid;
-      const dy = Math.round((e.clientY - sy) / this.scale / grid) * grid;
-      s.x_pos = Math.max(0, Math.min(W - sw(s), ox + dx));
-      s.y_pos = Math.max(0, Math.min(H - sh(s), oy + dy));
-      this.edited();
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      this.renderPreview();
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  }
-
-  private addSensor(): void {
-    const [x, y] = this.freeSlot(2);
-    this.sensors.push({
-      id: `sensor_${this.sensors.length + 1}`, entity_id: "", name: "Sensor",
-      on_color: "#00ff00", off_color: "#1a1a1a", x_pos: x, y_pos: y, width: 2, height: 2,
-    });
-    this.selSensor = this.sensors.length - 1;
-    this.edited();
-  }
-  private removeSensor(i: number): void {
-    this.sensors.splice(i, 1);
-    this.selSensor = -1;
-    this.edited();
-  }
-  private setSensor(i: number, key: keyof Sensor, value: string | number): void {
-    (this.sensors[i] as any)[key] = value;
-    this.edited();
-  }
-  private async saveSensors(): Promise<void> {
-    if (!this.entryId) return;
-    await this.hass.callWS({ type: "pimoroni_unicorn/set_display_sensors", entry_id: this.entryId, sensors: this.sensors });
-    this.status = "Saved sensors to device.";
-  }
-  private entityOptions(): string[] {
-    const states = this.hass?.states ?? {};
-    return Object.keys(states)
-      .filter((e) => /^(binary_sensor|sensor|light|switch|input_boolean)\./.test(e))
-      .sort();
-  }
-
   private toggleOverlay(id: string, on: boolean): void {
     const set = new Set(this.layout.overlays ?? []);
     if (on) set.add(id); else set.delete(id);
@@ -452,6 +344,11 @@ export class PimoroniUnicornPanel extends LitElement {
               .value=${String(this.cfgVal(entry, f.key))}
               @change=${(e: Event) => this.setCfg(entry, f.key, +(e.target as HTMLInputElement).value)} /></div>`;
         }
+        if (f.type === "text") {
+          return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+            <input type="text" style="width:120px" .value=${String(this.cfgVal(entry, f.key) ?? "")}
+              @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLInputElement).value)} /></div>`;
+        }
         return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
           <input type="color" .value=${hex(this.cfgVal(entry, f.key) as Rgb)}
             @input=${(e: Event) => this.setCfg(entry, f.key, unhex((e.target as HTMLInputElement).value))} /></div>`;
@@ -466,9 +363,11 @@ export class PimoroniUnicornPanel extends LitElement {
         <button class="tab ${this.tab === "layout" ? "on" : ""}" @click=${() => (this.tab = "layout")}>Layout</button>
         <button class="tab ${this.tab === "market" ? "on" : ""}" @click=${() => { this.tab = "market"; this.loadCatalog(); }}>Marketplace</button>
         <button class="tab ${this.tab === "edit" ? "on" : ""}" @click=${() => { this.tab = "edit"; this.previewSpec(); }}>Widget editor</button>
+        <button class="tab ${this.tab === "screens" ? "on" : ""}" @click=${() => { this.tab = "screens"; this.buildScreenPreview(); }}>Screens</button>
       </div>
       ${this.tab === "market" ? this._marketplaceView()
         : this.tab === "edit" ? this._editorView()
+        : this.tab === "screens" ? this._screensView()
         : this._layoutView()}
     `;
   }
@@ -529,9 +428,7 @@ export class PimoroniUnicornPanel extends LitElement {
                 style=${`left:${w.x * s}px;top:${w.y * s}px;width:${bw * s}px;height:${bh * s}px`}
                 @pointerdown=${(e: PointerEvent) => this.startDrag(i, e)}>
                 <span class="tag">${w.id}</span></div>`;
-            })}${this.sensors.map((sn, i) => html`<div class="box sensor ${i === this.selSensor ? "sel" : ""}"
-                style=${`left:${sn.x_pos * s}px;top:${sn.y_pos * s}px;width:${sw(sn) * s}px;height:${sh(sn) * s}px`}
-                @pointerdown=${(e: PointerEvent) => this.startSensorDrag(i, e)}></div>`)}</div>` : ""}
+            })}</div>` : ""}
           </div>
           <div class="status ${this.status.startsWith("Render failed") ? "err" : ""}">${this.status}</div>
         </div>
@@ -555,27 +452,6 @@ export class PimoroniUnicornPanel extends LitElement {
             <input type="checkbox" .checked=${overlays.has(o.id)} @change=${(e: Event) => this.toggleOverlay(o.id, (e.target as HTMLInputElement).checked)} /> ${o.label}</label></div>`)}
           <h3>Selected</h3>
           ${this.renderWidgetEditor()}
-
-          <h3>Sensors</h3>
-          ${this.sensors.map((sn, i) => html`
-            <div class="panelrow ${i === this.selSensor ? "sel" : ""}" @click=${() => (this.selSensor = i)}>
-              <input style="width:70px" .value=${sn.name} @change=${(e: Event) => this.setSensor(i, "name", (e.target as HTMLInputElement).value)} title="Name" />
-              <select .value=${sn.entity_id} @change=${(e: Event) => this.setSensor(i, "entity_id", (e.target as HTMLSelectElement).value)} title="Entity">
-                <option value="">(entity)</option>
-                ${this.entityOptions().map((eid) => html`<option ?selected=${eid === sn.entity_id}>${eid}</option>`)}
-              </select>
-              <input type="color" .value=${sn.on_color} @input=${(e: Event) => this.setSensor(i, "on_color", (e.target as HTMLInputElement).value)} title="On colour" />
-              <input type="color" .value=${sn.off_color} @input=${(e: Event) => this.setSensor(i, "off_color", (e.target as HTMLInputElement).value)} title="Off colour" />
-              <input type="number" style="width:42px" min="1" max="32" .value=${String(sw(sn))}
-                @change=${(e: Event) => this.setSensor(i, "width", +(e.target as HTMLInputElement).value)} title="Width (px)" />
-              <input type="number" style="width:42px" min="1" max="32" .value=${String(sh(sn))}
-                @change=${(e: Event) => this.setSensor(i, "height", +(e.target as HTMLInputElement).value)} title="Height (px)" />
-              <button class="danger" @click=${(e: Event) => { e.stopPropagation(); this.removeSensor(i); }}>✕</button>
-            </div>`)}
-          <div class="panelrow">
-            <button class="secondary" @click=${this.addSensor}>Add sensor</button>
-            <button @click=${this.saveSensors} ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to save sensors"}>Save sensors</button>
-          </div>
         </div>
       </div>
     `;
@@ -678,6 +554,91 @@ export class PimoroniUnicornPanel extends LitElement {
       </div>
     `;
   }
+
+  private toggleScreen(name: string, on: boolean) {
+    this.screenLayouts = on
+      ? [...this.screenLayouts, name]
+      : this.screenLayouts.filter((n) => n !== name);
+    this.buildScreenPreview();
+  }
+
+  private async buildScreenPreview() {
+    clearInterval(this.screenTimer);
+    const pngs: Record<string, string> = {};
+    for (const name of this.screenLayouts) {
+      const lay = this.stored[name];
+      if (!lay) continue;
+      try {
+        const r = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: lay });
+        pngs[name] = r.png;
+      } catch { /* skip unrenderable */ }
+    }
+    this.screenPngs = pngs;
+    this.screenIdx = 0;
+    this.screenOpacity = 1;
+    if (this.screenLayouts.length > 1 && this.screenDwell > 0) {
+      this.screenTimer = window.setInterval(() => this._advancePreview(), this.screenDwell * 1000);
+    }
+  }
+
+  private _advancePreview() {
+    const next = (this.screenIdx + 1) % this.screenLayouts.length;
+    if (this.screenTransition === "fade") {
+      this.screenOpacity = 0;
+      setTimeout(() => { this.screenIdx = next; this.screenOpacity = 1; }, 280);
+    } else {
+      this.screenIdx = next;
+    }
+  }
+
+  private async pushScreens() {
+    if (!this.entryId || !this.screenLayouts.length) return;
+    await this.hass.callWS({
+      type: "pimoroni_unicorn/push_screens", entry_id: this.entryId,
+      layouts: this.screenLayouts, dwell: this.screenDwell, transition: this.screenTransition,
+    });
+    this.status = `Pushed ${this.screenLayouts.length} screen(s) to device.`;
+  }
+
+  private _screensView() {
+    const sc = Math.max(6, Math.floor(PREVIEW_TARGET_PX / this.dims[0]));
+    const names = Object.keys(this.stored);
+    const cur = this.screenLayouts[this.screenIdx];
+    const png = cur ? this.screenPngs[cur] : "";
+    return html`
+      <div class="bar"><span class="hint">compose a screen rotation — mock preview on ${this.model}</span></div>
+      <div class="wrap">
+        <div class="col">
+          <h3>Screens (rotation order)</h3>
+          ${names.length ? names.map((n) => html`<div class="panelrow"><label>
+            <input type="checkbox" ?checked=${this.screenLayouts.includes(n)}
+              @change=${(e: Event) => this.toggleScreen(n, (e.target as HTMLInputElement).checked)} /> ${n}</label></div>`)
+            : html`<p class="hint">No saved layouts yet — create them on the Layout tab.</p>`}
+          <div class="panelrow"><label>Dwell (s)
+            <input type="number" style="width:60px" min="1" max="600" .value=${String(this.screenDwell)}
+              @change=${(e: Event) => { this.screenDwell = +(e.target as HTMLInputElement).value; this.buildScreenPreview(); }} /></label></div>
+          <div class="panelrow"><label>Transition
+            <select @change=${(e: Event) => { this.screenTransition = (e.target as HTMLSelectElement).value as "none" | "fade"; this.buildScreenPreview(); }}>
+              ${["none", "fade"].map((t) => html`<option ?selected=${t === this.screenTransition}>${t}</option>`)}
+            </select></label></div>
+          <div class="panelrow">
+            <button @click=${this.pushScreens} ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to push"}>Push to device</button>
+          </div>
+        </div>
+        <div class="col">
+          <div class="stage" style=${`width:${this.dims[0] * sc}px;height:${this.dims[1] * sc}px`}>
+            ${png ? html`<img src="data:image/png;base64,${png}" width=${this.dims[0] * sc} height=${this.dims[1] * sc}
+              style=${`opacity:${this.screenOpacity};transition:opacity 280ms`} />` : ""}
+          </div>
+          <div class="hint">${this.screenLayouts.length > 1 ? `rotating ${this.screenIdx + 1}/${this.screenLayouts.length}: ${cur ?? ""}` : (cur ?? "select layouts to preview")}</div>
+        </div>
+      </div>
+    `;
+  }
 }
 
 declare global { interface HTMLElementTagNameMap { "pimoroni-unicorn-panel": PimoroniUnicornPanel; } }
+
+if (!customElements.get("pimoroni-unicorn-panel")) {
+  customElements.define("pimoroni-unicorn-panel", PimoroniUnicornPanel);
+}

@@ -21,16 +21,24 @@ ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "custom_components" / "pimoroni_unicorn"
 RENDER_DIR = PKG / "render"
 CATALOG_DIR = PKG / "catalog"
+ENGINE_DIR = PKG / "firmware"
+
+# Verbatim engine modules bundled in the package so push_firmware can OTA them
+# (HACS delivers them with the integration). Excludes device-private/dev-only files.
+_ENGINE_EXCLUDE = {"secrets.py", "secrets.example.py", "__init__.py"}
 
 # Verbatim (untransformed) device-installable units shipped for the marketplace.
 # Byte-identical to firmware/ so the device manifest hash matches.
 CATALOG_WIDGETS = [
     "widget_clock.py", "widget_calendar.py", "widget_weekdays.py",
-    "widget_energy.py", "widget_sun_moon.py",
+    "widget_energy.py", "widget_sun_moon.py", "widget_sensor.py",
 ]
 CATALOG_FONTS = [
     "monospace_digits.py", "monospace_big_digits.py",
     "monospace_blocky.py", "monospace_tall.py", "monospace_humanist.py",
+]
+CATALOG_OVERLAYS = [
+    "overlay_weather.py",
 ]
 
 # Synced firmware render modules -> render/ (transformed).
@@ -39,12 +47,13 @@ FIRMWARE_MODULES = [
     "weather_fx.py", "monospace_digits.py", "monospace_big_digits.py",
     "monospace_blocky.py", "monospace_tall.py", "monospace_humanist.py",
     "widget_clock.py", "widget_calendar.py", "widget_weekdays.py",
-    "widget_energy.py", "widget_sun_moon.py", "declarative.py",
+    "widget_energy.py", "widget_sun_moon.py", "widget_sensor.py",
+    "declarative.py", "overlay_weather.py",
 ]
 
-_LOCAL = ("drawing|weather_fx|bitfonts|layouts|widgets|icons|sounds|declarative|"
+_LOCAL = ("drawing|weather_fx|bitfonts|layouts|widgets|icons|sounds|declarative|overlay_weather|"
           "monospace_digits|monospace_big_digits|monospace_blocky|monospace_tall|monospace_humanist|"
-          "widget_clock|widget_calendar|widget_weekdays|widget_energy|widget_sun_moon")
+          "widget_clock|widget_calendar|widget_weekdays|widget_energy|widget_sun_moon|widget_sensor")
 _TRANSFORMS = [
     (re.compile(rf"^import ({_LOCAL})$", re.MULTILINE), r"from . import \1"),
     (re.compile(rf"^import ({_LOCAL}) as (\w+)$", re.MULTILINE), r"from . import \1 as \2"),
@@ -71,6 +80,14 @@ def _catalog_pairs():
         yield ROOT / "firmware" / name, CATALOG_DIR / "widgets" / name
     for name in CATALOG_FONTS:
         yield ROOT / "firmware" / name, CATALOG_DIR / "fonts" / name
+    for name in CATALOG_OVERLAYS:
+        yield ROOT / "firmware" / name, CATALOG_DIR / "overlays" / name
+
+
+def _engine_pairs():
+    for src in sorted((ROOT / "firmware").glob("*.py")):
+        if src.name not in _ENGINE_EXCLUDE:
+            yield src, ENGINE_DIR / src.name
 
 
 def do_sync() -> None:
@@ -82,6 +99,10 @@ def do_sync() -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_text(src.read_text())  # verbatim — device-installable + hash-matching
         print(f"catalog {dst.relative_to(ROOT)}")
+    ENGINE_DIR.mkdir(parents=True, exist_ok=True)
+    for src, dst in _engine_pairs():
+        dst.write_text(src.read_text())  # verbatim — push_firmware OTA source
+        print(f"engine {dst.relative_to(ROOT)}")
 
 
 def do_check() -> int:
@@ -93,12 +114,15 @@ def do_check() -> int:
     for src, dst in _catalog_pairs():
         if not dst.is_file() or dst.read_text() != src.read_text():
             stale.append(str(dst.relative_to(ROOT)))
+    for src, dst in _engine_pairs():
+        if not dst.is_file() or dst.read_text() != src.read_text():
+            stale.append(str(dst.relative_to(ROOT)))
     if stale:
-        print("render/ or catalog/ out of sync with firmware/ (run scripts/sync_render.py sync):")
+        print("render/, catalog/ or firmware/ out of sync with firmware/ (run scripts/sync_render.py sync):")
         for s in stale:
             print(f"  - {s}")
         return 1
-    print("render/ + catalog/ in sync with firmware/")
+    print("render/ + catalog/ + firmware/ in sync with firmware/")
     return 0
 
 

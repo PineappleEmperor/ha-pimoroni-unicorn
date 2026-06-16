@@ -29,21 +29,23 @@ CONF_BATTERY_CHARGING_ENTITY    = "battery_charging_entity"
 CONF_SUN_ENTITY                 = "sun_entity"
 CONF_WEATHER_CODE_ENTITY        = "weather_code_entity"
 CONF_EXTRA_SENSORS              = "extra_sensors"
-CONF_DISPLAY_SENSORS            = "display_sensors"
 CONF_SHOW_PANEL                 = "show_panel"
 
 OTA_SOURCE_FILES = {
     "main":                ("main.py",                 "/main.py"),
+    "boot":                ("boot.py",                 "/boot.py"),
     "hardware":            ("hardware.py",             "/hardware.py"),
     "version":             ("version.py",              "/version.py"),
     "drawing":             ("drawing.py",              "/drawing.py"),
     "widgets":             ("widgets.py",              "/widgets.py"),
     "declarative":         ("declarative.py",          "/declarative.py"),
+    "overlay_weather":     ("overlay_weather.py",      "/overlay_weather.py"),
     "widget_clock":        ("widget_clock.py",         "/widget_clock.py"),
     "widget_calendar":     ("widget_calendar.py",      "/widget_calendar.py"),
     "widget_weekdays":     ("widget_weekdays.py",      "/widget_weekdays.py"),
     "widget_energy":       ("widget_energy.py",        "/widget_energy.py"),
     "widget_sun_moon":     ("widget_sun_moon.py",      "/widget_sun_moon.py"),
+    "widget_sensor":       ("widget_sensor.py",        "/widget_sensor.py"),
     "layouts":             ("layouts.py",              "/layouts.py"),
     "notify_animations":   ("notify_animations.py",    "/notify_animations.py"),
     "icons":               ("icons.py",                "/icons.py"),
