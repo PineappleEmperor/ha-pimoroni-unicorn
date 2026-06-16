@@ -3,10 +3,10 @@ import { property, state } from "lit/decorators.js";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
-interface CfgField { key: string; type: "select" | "rgb" | "number" | "text"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
-interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; }
+interface CfgField { key: string; type: "select" | "rgb" | "number" | "text" | "entity"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
+interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; multi?: boolean; }
 interface OverlayCap { id: string; label: string; }
-interface WidgetEntry { id: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
+interface WidgetEntry { id: string; type?: string; name?: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
 interface Layout { name?: string; model?: string; grid?: number; widgets: WidgetEntry[]; overlays?: string[]; }
 interface Device { entry_id: string; device_id: string; model: string; name: string; active_layout?: string; }
 interface CatalogWidget { id: string; label: string; kind: string; requires: string[]; device_file: string; hash: string; status: string; }
@@ -222,6 +222,8 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private capFor(id: string): WidgetCap | undefined { return this.caps.find((c) => c.id === id); }
+  private typeOf(entry: WidgetEntry): string { return entry.type ?? entry.id; }
+  private capForEntry(entry: WidgetEntry): WidgetCap | undefined { return this.capFor(this.typeOf(entry)); }
   private get scale(): number { return this.zoom || Math.max(4, Math.floor(PREVIEW_TARGET_PX / this.dims[0])); }
   private zoomBy(delta: number): void {
     this.zoom = Math.min(48, Math.max(4, this.scale + delta));
@@ -235,14 +237,20 @@ export class PimoroniUnicornPanel extends LitElement {
   private boxDims(i: number): Size {
     const b = this.wboxes[i];
     if (b) return b;
-    const cap = this.capFor(this.layout.widgets[i]?.id ?? "");
+    const entry = this.layout.widgets[i];
+    const cap = entry ? this.capForEntry(entry) : undefined;
     return cap ? [cap.w, cap.h] : [0, 0];
   }
   private cfgVal(entry: WidgetEntry, key: string): unknown {
-    return entry.cfg?.[key] ?? this.capFor(entry.id)?.default_cfg[key];
+    return entry.cfg?.[key] ?? this.capForEntry(entry)?.default_cfg[key];
   }
   private setCfg(entry: WidgetEntry, key: string, value: unknown): void {
     entry.cfg = { ...(entry.cfg ?? {}), [key]: value };
+    this.edited();
+  }
+  private setName(entry: WidgetEntry, value: string): void {
+    const name = value.trim();
+    if (name) entry.name = name; else delete entry.name;
     this.edited();
   }
   private setPos(entry: WidgetEntry, axis: "x" | "y", value: number): void {
@@ -285,9 +293,19 @@ export class PimoroniUnicornPanel extends LitElement {
     window.addEventListener("pointerup", up);
   }
 
-  private addWidget(id: string): void {
-    if (!id) return;
-    this.layout.widgets.push({ id, x: 0, y: 0, cfg: {} });
+  private addWidget(type: string): void {
+    if (!type) return;
+    const cap = this.capFor(type);
+    const present = new Set(this.layout.widgets.map((w) => w.id));
+    let entry: WidgetEntry;
+    if (cap?.multi || present.has(type)) {
+      let n = 2, id = `${type}-${n}`;
+      while (present.has(id)) id = `${type}-${++n}`;
+      entry = { id, type, name: `${cap?.label ?? type} ${n}`, x: 0, y: 0, cfg: {} };
+    } else {
+      entry = { id: type, type, x: 0, y: 0, cfg: {} };
+    }
+    this.layout.widgets.push(entry);
     this.selected = this.layout.widgets.length - 1;
     this.edited();
   }
@@ -321,10 +339,13 @@ export class PimoroniUnicornPanel extends LitElement {
   private renderWidgetEditor() {
     const entry = this.layout.widgets[this.selected];
     if (!entry) return html`<p class="hint">Select a widget to edit.</p>`;
-    const cap = this.capFor(entry.id);
+    const cap = this.capForEntry(entry);
     if (!cap) return "";
     return html`
-      <h3>${cap.label}</h3>
+      <h3>${entry.name ?? cap.label}</h3>
+      <div class="panelrow"><label>Name</label>
+        <input type="text" style="width:160px" placeholder=${cap.label} .value=${entry.name ?? ""}
+          @change=${(e: Event) => this.setName(entry, (e.target as HTMLInputElement).value)} /></div>
       <div class="panelrow">
         <label>X</label><input type="number" style="width:60px" .value=${String(entry.x)}
           @change=${(e: Event) => this.setPos(entry, "x", +(e.target as HTMLInputElement).value)} />
@@ -343,6 +364,15 @@ export class PimoroniUnicornPanel extends LitElement {
             <input type="number" style="width:60px" min=${f.min ?? 1} max=${f.max ?? 64} step=${f.step ?? 1}
               .value=${String(this.cfgVal(entry, f.key))}
               @change=${(e: Event) => this.setCfg(entry, f.key, +(e.target as HTMLInputElement).value)} /></div>`;
+        }
+        if (f.type === "entity") {
+          return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+            <input type="text" style="width:200px" list="pu-entity-list" placeholder="entity id…"
+              .value=${String(this.cfgVal(entry, f.key) ?? "")}
+              @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLInputElement).value)} />
+            <datalist id="pu-entity-list">
+              ${Object.keys(this.hass?.states ?? {}).map((eid) => html`<option value=${eid}></option>`)}
+            </datalist></div>`;
         }
         if (f.type === "text") {
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
@@ -374,8 +404,8 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private _layoutView() {
     const s = this.scale;
-    const present = new Set(this.layout.widgets.map((w) => w.id));
-    const addable = this.caps.filter((c) => !present.has(c.id));
+    const presentTypes = new Set(this.layout.widgets.map((w) => this.typeOf(w)));
+    const addable = this.caps.filter((c) => c.multi || !presentTypes.has(c.id));
     const overlays = new Set(this.layout.overlays ?? []);
     const gridStyle = `background-image:linear-gradient(to right,rgba(255,255,255,.10) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.10) 1px,transparent 1px);background-size:${s}px ${s}px`;
     return html`
@@ -422,12 +452,12 @@ export class PimoroniUnicornPanel extends LitElement {
             ${this.png ? html`<img src="data:image/png;base64,${this.png}" width=${this.dims[0] * s} height=${this.dims[1] * s} @load=${this.onImgLoad} />` : ""}
             <div class="grid" style=${gridStyle}></div>
             ${this.wireframe ? html`<div class="boxes">${this.layout.widgets.map((w, i) => {
-              if (!this.capFor(w.id) || w.enabled === false) return "";
+              if (!this.capForEntry(w) || w.enabled === false) return "";
               const [bw, bh] = this.boxDims(i);
               return html`<div class="box ${i === this.selected ? "sel" : ""}"
                 style=${`left:${w.x * s}px;top:${w.y * s}px;width:${bw * s}px;height:${bh * s}px`}
                 @pointerdown=${(e: PointerEvent) => this.startDrag(i, e)}>
-                <span class="tag">${w.id}</span></div>`;
+                <span class="tag">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span></div>`;
             })}</div>` : ""}
           </div>
           <div class="status ${this.status.startsWith("Render failed") ? "err" : ""}">${this.status}</div>
@@ -440,7 +470,7 @@ export class PimoroniUnicornPanel extends LitElement {
               <li class="${i === this.selected ? "sel" : ""}" @click=${() => (this.selected = i)}>
                 <input type="checkbox" .checked=${w.enabled !== false}
                   @click=${(e: Event) => { e.stopPropagation(); w.enabled = (e.target as HTMLInputElement).checked; this.edited(); }} />
-                <span class="grow">${this.capFor(w.id)?.label ?? w.id}</span>
+                <span class="grow">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span>
               </li>`)}
           </ul>
           ${addable.length ? html`<div class="panelrow">

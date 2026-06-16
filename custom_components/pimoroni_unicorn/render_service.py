@@ -64,12 +64,13 @@ def layout_boxes(layout: dict) -> list:
     widgets = _modules().widgets
     out = []
     for entry in layout.get("widgets", []):
-        meta = widgets.WIDGET_REGISTRY.get(entry.get("id"))
+        wid = entry.get("type", entry.get("id"))
+        meta = widgets.WIDGET_REGISTRY.get(wid)
         if meta is None:
             out.append([0, 0])
             continue
         cfg = {**meta["default_cfg"], **entry.get("cfg", {})}
-        out.append(list(widgets.widget_box(entry["id"], cfg)))
+        out.append(list(widgets.widget_box(wid, cfg)))
     return out
 
 

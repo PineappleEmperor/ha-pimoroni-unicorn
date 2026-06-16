@@ -282,7 +282,7 @@ async def _async_setup_sensor_feed(hass: HomeAssistant, entry: ConfigEntry) -> N
     active    = await layout.async_get_active(hass, entry) or {}
     entities: set[str] = set()
     for w in active.get("widgets", []):
-        if w.get("id") == "sensor":
+        if w.get("type", w.get("id")) == "sensor":
             ent = (w.get("cfg") or {}).get("entity")
             if isinstance(ent, str) and ent:
                 entities.add(ent)
