@@ -114,6 +114,12 @@ def render_layout_png(model: str, layout: dict, sensors=None) -> str:
     """Render a layout (and any display sensors) for a model; return a base64 PNG."""
     m, g, width, height = _new_graphics(model)
     state = {**SAMPLE_STATE, "time": time.localtime()}
+    ds = dict(state.get("display_sensors") or {})
+    for entry in layout.get("widgets", []):
+        bind = (entry.get("cfg") or {}).get("bind")
+        if bind:
+            ds.setdefault(bind, {"state": True})  # mock 'on' so sensor widgets preview
+    state["display_sensors"] = ds
     m.widgets.render_layout(g, layout, state)
     m.drawing.draw_display_sensors(_sensors_dict(sensors))
     return _encode(g, width, height)
