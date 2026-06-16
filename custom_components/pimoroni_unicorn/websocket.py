@@ -27,6 +27,12 @@ WS_WIDGET_PREVIEW = "pimoroni_unicorn/widget_preview"
 WS_WIDGET_SAVE    = "pimoroni_unicorn/widget_save"
 WS_WIDGET_IMPORT  = "pimoroni_unicorn/widget_import"
 WS_WIDGET_DELETE  = "pimoroni_unicorn/widget_delete"
+WS_CONTENT        = "pimoroni_unicorn/content_catalog"
+WS_DEPLOY_LAYOUT  = "pimoroni_unicorn/deploy_layout"
+WS_DEPLOY_SCREENSET = "pimoroni_unicorn/deploy_screenset"
+WS_PUBLISH_LAYOUT = "pimoroni_unicorn/publish_layout"
+WS_SAVE_SCREENSET = "pimoroni_unicorn/save_screenset"
+WS_DELETE_SCREENSET = "pimoroni_unicorn/delete_screenset"
 
 
 @callback
@@ -35,7 +41,9 @@ def async_register(hass: HomeAssistant) -> None:
     for handler in (ws_devices, ws_capabilities, ws_layouts, ws_render,
                     ws_save_layout, ws_push_layout, ws_delete_layout, ws_push_screens,
                     ws_catalog, ws_fw_manifest, ws_fw_install, ws_fw_remove,
-                    ws_widget_preview, ws_widget_save, ws_widget_import, ws_widget_delete):
+                    ws_widget_preview, ws_widget_save, ws_widget_import, ws_widget_delete,
+                    ws_content_catalog, ws_deploy_layout, ws_deploy_screenset,
+                    ws_publish_layout, ws_save_screenset, ws_delete_screenset):
         websocket_api.async_register_command(hass, handler)
 
 
@@ -302,6 +310,123 @@ async def ws_widget_delete(hass, connection, msg):
     """Delete a custom declarative widget."""
     await hass.async_add_executor_job(
         marketplace.delete_custom, hass.config.config_dir, msg["widget_id"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_CONTENT,
+    vol.Optional("entry_id"): str,
+})
+@websocket_api.async_response
+async def ws_content_catalog(hass, connection, msg):
+    """Marketplace content: published layouts + screensets, flagged compatible vs the device."""
+    custom = marketplace.widgets_dir(hass.config.config_dir)
+    all_layouts = await layout.async_get_registry(hass)
+    published = await layout.async_published_layouts(hass)
+    screensets = await layout.async_get_screensets(hass)
+    model = None
+    if msg.get("entry_id"):
+        entry = _entry(hass, msg["entry_id"])
+        if entry is not None:
+            model = _model_key(entry)
+
+    def _tag(units):
+        return [{**u, "compatible": marketplace.compatible(u["compat"], model)} for u in units]
+
+    connection.send_result(msg["id"], {
+        "model": model,
+        "layouts": _tag(marketplace.layout_units(published, custom)),
+        "screensets": _tag(marketplace.screenset_units(screensets, all_layouts)),
+    })
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_DEPLOY_LAYOUT,
+    vol.Required("entry_id"): str,
+    vol.Required("name"): str,
+    vol.Optional("override", default=False): bool,
+})
+@websocket_api.async_response
+async def ws_deploy_layout(hass, connection, msg):
+    """Resolve a layout's deps, install missing ones, then deploy it to the device."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown device")
+        return
+    lay = (await layout.async_get_registry(hass)).get(msg["name"])
+    if lay is None:
+        connection.send_error(msg["id"], "not_found", "Unknown layout")
+        return
+    custom = marketplace.widgets_dir(hass.config.config_dir)
+    unit = marketplace.layout_unit(msg["name"], lay, custom)
+    if not msg["override"] and not marketplace.compatible(unit["compat"], _model_key(entry)):
+        connection.send_error(msg["id"], "incompatible",
+                              f"Layout targets {unit['compat']}, device is {_model_key(entry)}")
+        return
+    ok = await firmware_install.async_deploy_layout(hass, entry, lay)
+    connection.send_result(msg["id"], {"ok": ok})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_DEPLOY_SCREENSET,
+    vol.Required("entry_id"): str,
+    vol.Required("id"): str,
+    vol.Optional("override", default=False): bool,
+})
+@websocket_api.async_response
+async def ws_deploy_screenset(hass, connection, msg):
+    """Resolve every referenced app's deps, install missing ones, then deploy the rotation."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown device")
+        return
+    screensets = await layout.async_get_screensets(hass)
+    ss = screensets.get(msg["id"])
+    if ss is None:
+        connection.send_error(msg["id"], "not_found", "Unknown screenset")
+        return
+    all_layouts = await layout.async_get_registry(hass)
+    unit = marketplace.screenset_unit(msg["id"], ss, all_layouts)
+    if not msg["override"] and not marketplace.compatible(unit["compat"], _model_key(entry)):
+        connection.send_error(msg["id"], "incompatible",
+                              f"Screenset targets {unit['compat']}, device is {_model_key(entry)}")
+        return
+    ok = await firmware_install.async_deploy_screenset(hass, entry, ss, all_layouts)
+    connection.send_result(msg["id"], {"ok": ok})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_PUBLISH_LAYOUT,
+    vol.Required("name"): str,
+    vol.Required("published"): bool,
+})
+@websocket_api.async_response
+async def ws_publish_layout(hass, connection, msg):
+    """Mark a stored layout (un)published to the marketplace."""
+    await layout.async_set_published(hass, msg["name"], msg["published"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_SAVE_SCREENSET,
+    vol.Required("id"): str,
+    vol.Required("screenset"): dict,
+})
+@websocket_api.async_response
+async def ws_save_screenset(hass, connection, msg):
+    """Store a screenset (referenced apps + rotation + triggers)."""
+    await layout.async_save_screenset(hass, msg["id"], msg["screenset"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_DELETE_SCREENSET,
+    vol.Required("id"): str,
+})
+@websocket_api.async_response
+async def ws_delete_screenset(hass, connection, msg):
+    """Remove a stored screenset."""
+    await layout.async_remove_screenset(hass, msg["id"])
     connection.send_result(msg["id"], {"ok": True})
 
 
