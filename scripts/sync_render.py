@@ -21,6 +21,11 @@ ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "custom_components" / "pimoroni_unicorn"
 RENDER_DIR = PKG / "render"
 CATALOG_DIR = PKG / "catalog"
+ENGINE_DIR = PKG / "firmware"
+
+# Verbatim engine modules bundled in the package so push_firmware can OTA them
+# (HACS delivers them with the integration). Excludes device-private/dev-only files.
+_ENGINE_EXCLUDE = {"secrets.py", "secrets.example.py", "__init__.py"}
 
 # Verbatim (untransformed) device-installable units shipped for the marketplace.
 # Byte-identical to firmware/ so the device manifest hash matches.
@@ -73,6 +78,12 @@ def _catalog_pairs():
         yield ROOT / "firmware" / name, CATALOG_DIR / "fonts" / name
 
 
+def _engine_pairs():
+    for src in sorted((ROOT / "firmware").glob("*.py")):
+        if src.name not in _ENGINE_EXCLUDE:
+            yield src, ENGINE_DIR / src.name
+
+
 def do_sync() -> None:
     RENDER_DIR.mkdir(parents=True, exist_ok=True)
     for src, dst in _pairs():
@@ -82,6 +93,10 @@ def do_sync() -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_text(src.read_text())  # verbatim — device-installable + hash-matching
         print(f"catalog {dst.relative_to(ROOT)}")
+    ENGINE_DIR.mkdir(parents=True, exist_ok=True)
+    for src, dst in _engine_pairs():
+        dst.write_text(src.read_text())  # verbatim — push_firmware OTA source
+        print(f"engine {dst.relative_to(ROOT)}")
 
 
 def do_check() -> int:
@@ -93,12 +108,15 @@ def do_check() -> int:
     for src, dst in _catalog_pairs():
         if not dst.is_file() or dst.read_text() != src.read_text():
             stale.append(str(dst.relative_to(ROOT)))
+    for src, dst in _engine_pairs():
+        if not dst.is_file() or dst.read_text() != src.read_text():
+            stale.append(str(dst.relative_to(ROOT)))
     if stale:
-        print("render/ or catalog/ out of sync with firmware/ (run scripts/sync_render.py sync):")
+        print("render/, catalog/ or firmware/ out of sync with firmware/ (run scripts/sync_render.py sync):")
         for s in stale:
             print(f"  - {s}")
         return 1
-    print("render/ + catalog/ in sync with firmware/")
+    print("render/ + catalog/ + firmware/ in sync with firmware/")
     return 0
 
 

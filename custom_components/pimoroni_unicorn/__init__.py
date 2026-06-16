@@ -418,7 +418,7 @@ def _make_push_firmware_handler(
 
         requested    = call.data.get("files", ["main"])
         file_content = call.data.get("file_content", {})
-        source_dir   = Path(hass.config.config_dir) / "pimoroni_unicorn" / "firmware"
+        source_dir   = Path(__file__).parent / "firmware"
 
         all_errors: list[str] = []
         for entry in entries:
@@ -456,19 +456,6 @@ def _make_push_firmware_handler(
                                 "Pimoroni Unicorn OTA: low memory validating %s, skipping check",
                                 src_name,
                             )
-
-                    if key in file_content:
-                        src = source_dir / src_name
-                        if src.is_file():
-                            try:
-                                src.replace(src.with_name(src.name + ".old"))
-                            except OSError as e:
-                                _LOGGER.warning("Pimoroni Unicorn OTA: could not back up %s: %s", src_name, e)
-                        try:
-                            with src.open("w", encoding="utf-8") as f:
-                                f.write(content)
-                        except OSError as e:
-                            _LOGGER.warning("Pimoroni Unicorn OTA: could not update source %s: %s", src_name, e)
 
                     with (www_dir / src_name).open("w", encoding="utf-8") as f:
                         f.write(content)
@@ -510,8 +497,7 @@ def _make_push_firmware_handler(
             title="Pimoroni Unicorn OTA sent",
             message=(
                 f"OTA command sent for: {', '.join(requested)}.\n"
-                f"Device will download files and reboot automatically.{error_note}\n\n"
-                f"Source directory: `{source_dir}`"
+                f"Device will download files and reboot automatically.{error_note}"
             ),
             notification_id="pimoroni_unicorn_ota_sent",
         )
