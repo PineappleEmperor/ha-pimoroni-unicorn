@@ -37,6 +37,9 @@ CATALOG_FONTS = [
     "monospace_digits.py", "monospace_big_digits.py",
     "monospace_blocky.py", "monospace_tall.py", "monospace_humanist.py",
 ]
+CATALOG_OVERLAYS = [
+    "overlay_weather.py",
+]
 
 # Synced firmware render modules -> render/ (transformed).
 FIRMWARE_MODULES = [
@@ -44,10 +47,10 @@ FIRMWARE_MODULES = [
     "weather_fx.py", "monospace_digits.py", "monospace_big_digits.py",
     "monospace_blocky.py", "monospace_tall.py", "monospace_humanist.py",
     "widget_clock.py", "widget_calendar.py", "widget_weekdays.py",
-    "widget_energy.py", "widget_sun_moon.py", "declarative.py",
+    "widget_energy.py", "widget_sun_moon.py", "declarative.py", "overlay_weather.py",
 ]
 
-_LOCAL = ("drawing|weather_fx|bitfonts|layouts|widgets|icons|sounds|declarative|"
+_LOCAL = ("drawing|weather_fx|bitfonts|layouts|widgets|icons|sounds|declarative|overlay_weather|"
           "monospace_digits|monospace_big_digits|monospace_blocky|monospace_tall|monospace_humanist|"
           "widget_clock|widget_calendar|widget_weekdays|widget_energy|widget_sun_moon")
 _TRANSFORMS = [
@@ -76,6 +79,8 @@ def _catalog_pairs():
         yield ROOT / "firmware" / name, CATALOG_DIR / "widgets" / name
     for name in CATALOG_FONTS:
         yield ROOT / "firmware" / name, CATALOG_DIR / "fonts" / name
+    for name in CATALOG_OVERLAYS:
+        yield ROOT / "firmware" / name, CATALOG_DIR / "overlays" / name
 
 
 def _engine_pairs():
