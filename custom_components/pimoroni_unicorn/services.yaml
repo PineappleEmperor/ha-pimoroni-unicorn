@@ -142,3 +142,48 @@ push_firmware:
     file_content:
       selector:
         object: {}
+
+show_screen:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: pimoroni_unicorn
+    index:
+      selector:
+        number:
+          min: 0
+          max: 32
+          mode: box
+    name:
+      selector:
+        text: {}
+    clear:
+      selector:
+        boolean: {}
+
+set_screens:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: pimoroni_unicorn
+    layouts:
+      required: true
+      selector:
+        text:
+          multiple: true
+    dwell:
+      selector:
+        number:
+          min: 1
+          max: 600
+          mode: box
+    transition:
+      selector:
+        select:
+          options:
+            - none
+            - fade

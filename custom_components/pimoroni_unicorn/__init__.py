@@ -45,6 +45,12 @@ from .notify import (
     make_generic_notify_handler,
     make_notify_handler,
 )
+from .screens import (
+    SET_SCREENS_SCHEMA,
+    SHOW_SCREEN_SCHEMA,
+    make_set_screens_handler,
+    make_show_screen_handler,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,6 +58,8 @@ SOLAR_INTERVAL        = timedelta(seconds=10)
 SERVICE_PUSH_FIRMWARE     = "push_firmware"
 SERVICE_SEND_NOTIFICATION = "send_notification"
 SERVICE_DISMISS_NOTIFICATION = "dismiss_notification"
+SERVICE_SHOW_SCREEN       = "show_screen"
+SERVICE_SET_SCREENS       = "set_screens"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -92,6 +100,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_register(
             DOMAIN, SERVICE_DISMISS_NOTIFICATION, make_dismiss_handler(hass), schema=DISMISS_SCHEMA
         )
+    if not hass.services.has_service(DOMAIN, SERVICE_SHOW_SCREEN):
+        hass.services.async_register(
+            DOMAIN, SERVICE_SHOW_SCREEN, make_show_screen_handler(hass), schema=SHOW_SCREEN_SCHEMA
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_SCREENS):
+        hass.services.async_register(
+            DOMAIN, SERVICE_SET_SCREENS, make_set_screens_handler(hass), schema=SET_SCREENS_SCHEMA
+        )
 
     return True
 
@@ -112,6 +128,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_PUSH_FIRMWARE)
         hass.services.async_remove(DOMAIN, SERVICE_SEND_NOTIFICATION)
         hass.services.async_remove(DOMAIN, SERVICE_DISMISS_NOTIFICATION)
+        hass.services.async_remove(DOMAIN, SERVICE_SHOW_SCREEN)
+        hass.services.async_remove(DOMAIN, SERVICE_SET_SCREENS)
         if hass.data.pop(f"{DOMAIN}_panel_registered", False):
             frontend.async_remove_panel(hass, PANEL_URL_PATH)
 
