@@ -71,24 +71,25 @@ jobs:
           fi
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
 
-      - name: Apply label from commit type
+      - name: Apply label from commit subjects
         if: steps.commits.outputs.ahead != '0' && steps.pr.outputs.pr_number != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TITLE: ${{ steps.commits.outputs.title }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         run: |
-          # A `!` after the type (feat!:, fix(scope)!:) means breaking → major bump.
-          if echo "$TITLE" | grep -qiE '^[a-z]+(\(.+\))?!:'; then
+          # Label from the highest-priority type across ALL commits (not the PR title or
+          # branch name): breaking (`type!:`) > feat > fix > chore/docs.
+          SUBJECTS=$(git log origin/main..HEAD --pretty=format:'%s')
+          if echo "$SUBJECTS" | grep -qiE '^[a-z]+(\(.+\))?!:'; then
             LABEL="xfeat"
+          elif echo "$SUBJECTS" | grep -qiE '^(feat|feature)(\(.+\))?:'; then
+            LABEL="feature"
+          elif echo "$SUBJECTS" | grep -qiE '^fix(\(.+\))?:'; then
+            LABEL="fix"
+          elif echo "$SUBJECTS" | grep -qiE '^(chore|docs)(\(.+\))?:'; then
+            LABEL="chore"
           else
-            TYPE=$(echo "$TITLE" | grep -oiE '^(feat|fix|chore|docs)' | head -1 | tr '[:upper:]' '[:lower:]')
-            case "$TYPE" in
-              feat)       LABEL="feature" ;;
-              fix)        LABEL="fix" ;;
-              chore|docs) LABEL="chore" ;;
-              *)          exit 0 ;;
-            esac
+            exit 0
           fi
           # Replace any stale type label so it reflects the current commits.
           for L in feature fix chore xfeat; do
