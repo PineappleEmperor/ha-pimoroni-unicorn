@@ -9,7 +9,7 @@ interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; type?: string; name?: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
 interface Layout { name?: string; model?: string; grid?: number; widgets: WidgetEntry[]; overlays?: string[]; }
 interface Device { entry_id: string; device_id: string; model: string; name: string; active_layout?: string; }
-interface CatalogWidget { id: string; label: string; kind: string; requires: string[]; device_file: string; hash: string; status: string; }
+interface CatalogWidget { id: string; label: string; kind: string; requires: string[]; device_file: string; hash: string; status: string; thumb?: string; }
 interface ContentUnit { id: string; label: string; kind: string; compat: string[]; requires: string[]; screens: number; compatible: boolean; thumb?: string; }
 interface FwManifest { engine_version?: string; files?: Record<string, string>; }
 
@@ -64,6 +64,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private showAllContent = false;
   @state() private iconNames: string[] = [];
   @state() private dirty = false;
+  @state() private sectionsOpen: Record<string, boolean> = {};
   @state() private screenLayouts: string[] = [];
   @state() private screenDwell = 10;
   @state() private screenTransition: "none" | "fade" = "none";
@@ -163,6 +164,12 @@ export class PimoroniUnicornPanel extends LitElement {
     }
     .tab:hover:not(.on) { background: color-mix(in srgb, var(--pu-primary) 7%, transparent); filter: none; }
     .tab.on { color: var(--pu-primary); border-bottom-color: var(--pu-primary); }
+    .section { margin-bottom: 8px; }
+    .shead { display: flex; gap: 10px; align-items: center; cursor: pointer; padding: 10px 4px; user-select: none; }
+    .shead:hover .stitle { color: var(--pu-primary); }
+    .chev { display: inline-block; transition: transform .15s; color: var(--secondary-text-color, #79747e); font-size: 12px; }
+    .chev.open { transform: rotate(90deg); }
+    .stitle { font-size: 16px; font-weight: 500; }
     .mtable { max-width: 780px; margin-bottom: 8px; }
     .mhead, .mrow { display: grid; grid-template-columns: 56px minmax(120px,1fr) minmax(80px,0.9fr) 120px 110px; gap: 12px; align-items: center; }
     .mtable.compact .mhead, .mtable.compact .mrow { grid-template-columns: minmax(120px,1fr) minmax(80px,0.9fr) 120px 110px; }
@@ -672,8 +679,19 @@ export class PimoroniUnicornPanel extends LitElement {
       ? html`<img class="thumb" src="data:image/png;base64,${src}" />`
       : html`<div class="thumb"></div>`;
   }
-  private _mhead(thumb = true) {
-    return html`<div class="mhead">${thumb ? html`<span>Preview</span>` : ""}<span>Name</span><span>Dependencies</span><span>Status</span><span></span></div>`;
+  private _mhead() {
+    return html`<div class="mhead"><span>Preview</span><span>Name</span><span>Dependencies</span><span>Status</span><span></span></div>`;
+  }
+  private _section(key: string, title: string, count: number, body: unknown) {
+    const open = this.sectionsOpen[key] !== false;
+    return html`<div class="section">
+      <div class="shead" @click=${() => { this.sectionsOpen = { ...this.sectionsOpen, [key]: !open }; }}>
+        <span class="chev ${open ? "open" : ""}">▸</span>
+        <span class="stitle">${title}</span>
+        <span class="chip dim">${count}</span>
+      </div>
+      ${open ? body : ""}
+    </div>`;
   }
   private _contentRow(u: ContentUnit, kind: "layout" | "screenset") {
     return html`<div class="mrow">
@@ -702,20 +720,18 @@ export class PimoroniUnicornPanel extends LitElement {
         <button class="secondary" @click=${this.loadCatalog}>Refresh</button>
       </div>
 
-      <h3>Pages</h3>
-      ${apps.length
+      ${this._section("pages", "Pages", apps.length, apps.length
         ? html`<div class="mtable">${this._mhead()}${apps.map((a) => this._contentRow(a, "layout"))}</div>`
-        : html`<p class="hint">No published pages${all ? "" : " for this device"}. Publish one from the Designer tab.</p>`}
+        : html`<p class="hint">No published pages${all ? "" : " for this device"}. Publish one from the Designer tab.</p>`)}
 
-      <h3>Playlists</h3>
-      ${sets.length
+      ${this._section("playlists", "Playlists", sets.length, sets.length
         ? html`<div class="mtable">${this._mhead()}${sets.map((s) => this._contentRow(s, "screenset"))}</div>`
-        : html`<p class="hint">No playlists${all ? "" : " for this device"}. Compose one on the Playlists tab.</p>`}
+        : html`<p class="hint">No playlists${all ? "" : " for this device"}. Compose one on the Playlists tab.</p>`)}
 
-      <h3>Widgets &amp; fonts</h3>
-      ${this.entryId
-        ? html`<div class="mtable compact">${this._mhead(false)}
+      ${this._section("widgets", "Widgets & fonts", this.catalog.length, this.entryId
+        ? html`<div class="mtable">${this._mhead()}
             ${this.catalog.map((w) => html`<div class="mrow">
+              ${this._thumb(w.thumb)}
               <div class="cell-name">${w.label}</div>
               <div class="hint">${w.requires?.length ? html`<span title=${w.requires.join(", ")}>${w.requires.length} dep(s)</span>` : "—"}</div>
               <div><span class="badge ${cls[w.status] ?? ""}">${lbl[w.status] ?? w.status}</span></div>
@@ -724,7 +740,7 @@ export class PimoroniUnicornPanel extends LitElement {
                 : html`<button @click=${() => this.installWidget(w.id)}>${w.status === "outdated" ? "Update" : "Install"}</button>`}</div>
             </div>`)}
           </div>`
-        : html`<p class="hint">Select a device to manage installed widgets.</p>`}
+        : html`<p class="hint">Select a device to manage installed widgets.</p>`)}
       <p class="hint">Deploying a page installs any widgets/fonts it needs over the air first, then pushes it; the device reboots if files changed.</p>
     `;
   }

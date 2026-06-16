@@ -149,6 +149,33 @@ def render_layout_png(model: str, layout: dict, installed_icons: dict | None = N
     return _encode(g, width, height)
 
 
+def render_unit_thumb(model: str, unit_id: str, installed_icons: dict | None = None) -> str | None:
+    """Render a single catalogue widget (at its box) or overlay (at model size) for a thumbnail."""
+    m = _modules()
+    widgets = m.widgets
+    if unit_id in widgets.WIDGET_REGISTRY:
+        meta = widgets.WIDGET_REGISTRY[unit_id]
+        cfg = meta.get("default_cfg", {})
+        w, h = widgets.widget_box(unit_id, cfg)
+        if not w or not h:
+            w, h = meta.get("w", 8), meta.get("h", 8)
+        g = m.PicoGraphics(w, h)
+        m.drawing.init(g, m.bitfonts.BitFont(g), w, h)
+        m.weather_fx.init(g, w, h)
+        m.icons.init(g)
+        _prime_icons(m, installed_icons)
+        g.set_pen(g.create_pen(0, 0, 0))
+        g.clear()
+        meta["render"](g, 0, 0, w, h, cfg, {**SAMPLE_STATE, "time": time.localtime(), "display_sensors": {}})
+        return _encode(g, w, h)
+    if unit_id in widgets.OVERLAY_REGISTRY:
+        width, height = MODEL_DIMS.get(model, MODEL_DIMS["galactic"])
+        m2, g, width, height = _new_graphics(model)
+        m2.widgets.OVERLAY_REGISTRY[unit_id]["render"](g, {**SAMPLE_STATE, "time": time.localtime()})
+        return _encode(g, width, height)
+    return None
+
+
 def render_widget_png(model: str, spec: dict, cfg=None, state=None) -> str:
     """Render a single declarative widget spec to a base64 PNG for authoring preview."""
     m, g, width, height = _new_graphics(model)

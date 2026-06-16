@@ -57,6 +57,14 @@ def _model_key(entry) -> str:
     return model if model in render_service.MODEL_DIMS else "galactic"
 
 
+def _safe_render(fn, *args):
+    """Render, returning None on failure — one bad unit mustn't break a catalogue."""
+    try:
+        return fn(*args)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 @websocket_api.websocket_command({vol.Required("type"): WS_DEVICES})
 @callback
 def ws_devices(hass, connection, msg):
@@ -202,12 +210,22 @@ def _fw_manifest(hass, entry_id):
     vol.Required("type"): WS_CATALOG,
     vol.Optional("entry_id"): str,
 })
-@callback
-def ws_catalog(hass, connection, msg):
-    """Catalogue of installable widgets (built-in + custom) with install status."""
+@websocket_api.async_response
+async def ws_catalog(hass, connection, msg):
+    """Catalogue of installable widgets (built-in + custom) with status + thumbnails."""
     manifest = _fw_manifest(hass, msg["entry_id"]) if msg.get("entry_id") else None
     custom = marketplace.widgets_dir(hass.config.config_dir)
-    connection.send_result(msg["id"], {"widgets": marketplace.device_diff(manifest, custom)})
+    widgets = marketplace.device_diff(manifest, custom)
+    model = _model_key(_entry(hass, msg["entry_id"])) if msg.get("entry_id") else "galactic"
+    installed_icons = await lametric.async_get_registry(hass)
+
+    def _thumbs():
+        return {w["id"]: _safe_render(render_service.render_unit_thumb, model, w["id"], installed_icons)
+                for w in widgets}
+
+    thumbs = await hass.async_add_executor_job(_thumbs)
+    connection.send_result(msg["id"], {
+        "widgets": [{**w, "thumb": thumbs.get(w["id"])} for w in widgets]})
 
 
 @websocket_api.websocket_command({
@@ -341,13 +359,11 @@ async def ws_content_catalog(hass, connection, msg):
         out = {}
         for name in thumb_names:
             lay = all_layouts.get(name)
-            if not lay:
-                continue
-            try:  # noqa: SIM105 — no contextlib (MicroPython parity); a bad page mustn't break the catalogue
-                out[name] = render_service.render_layout_png(
-                    lay.get("model", "galactic"), lay, installed_icons)
-            except Exception:  # noqa: BLE001
-                pass
+            if lay:
+                png = _safe_render(render_service.render_layout_png,
+                                   lay.get("model", "galactic"), lay, installed_icons)
+                if png:
+                    out[name] = png
         return out
 
     thumbs = await hass.async_add_executor_job(_thumbs)
