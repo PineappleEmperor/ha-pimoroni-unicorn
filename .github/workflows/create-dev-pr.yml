@@ -78,15 +78,20 @@ jobs:
           TITLE: ${{ steps.commits.outputs.title }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         run: |
-          TYPE=$(echo "$TITLE" | grep -oiE '^(feat|fix|chore|docs)' | head -1 | tr '[:upper:]' '[:lower:]')
-          case "$TYPE" in
-            feat)       LABEL="feature" ;;
-            fix)        LABEL="fix" ;;
-            chore|docs) LABEL="chore" ;;
-            *)          exit 0 ;;
-          esac
+          # A `!` after the type (feat!:, fix(scope)!:) means breaking → major bump.
+          if echo "$TITLE" | grep -qiE '^[a-z]+(\(.+\))?!:'; then
+            LABEL="xfeat"
+          else
+            TYPE=$(echo "$TITLE" | grep -oiE '^(feat|fix|chore|docs)' | head -1 | tr '[:upper:]' '[:lower:]')
+            case "$TYPE" in
+              feat)       LABEL="feature" ;;
+              fix)        LABEL="fix" ;;
+              chore|docs) LABEL="chore" ;;
+              *)          exit 0 ;;
+            esac
+          fi
           # Replace any stale type label so it reflects the current commits.
-          for L in feature fix chore; do
+          for L in feature fix chore xfeat; do
             [ "$L" != "$LABEL" ] && gh pr edit "$PR_NUMBER" --remove-label "$L" 2>/dev/null || true
           done
           gh label create "$LABEL" --force 2>/dev/null || true

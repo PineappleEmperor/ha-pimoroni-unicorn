@@ -1,22 +1,29 @@
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
 autolabeler:
-  
+  # Breaking first: any type with `!` (feat!, fix!, refactor!:) or an xfeat/breaking branch.
+  # Must precede the feature rule, and the type rules below require `:` (not `!`) so a
+  # `feat!:` title lands here only, not in both buckets.
+  - label: "xfeat"
+    branch:
+      - '/^(xfeat|xfeature|breaking)\/.+/'
+    title:
+      - '/^\w+(\(.+\))?!:/'
   - label: "chore"
     branch:
       - '/^(chore|docs?)\/.+/'
     title:
-      - '/^(chore|docs).*/i'
+      - '/^(chore|docs)(\(.+\))?:/i'
   - label: "fix"
     branch:
       - '/^fix\/.+/'
     title:
-      - '/^fix.*/i'
+      - '/^fix(\(.+\))?:/i'
   - label: "feature"
     branch:
       - '/^(feature|feat)\/.+/'
     title:
-      - '/^(feat|feature).*/i'
+      - '/^(feat|feature)(\(.+\))?:/i'
 categories:
   - title: '🚨 Breaking Change'
     labels:
