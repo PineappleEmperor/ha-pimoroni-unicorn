@@ -46,10 +46,10 @@ from .notify import (
     make_notify_handler,
 )
 from .screens import (
-    SET_SCREENS_SCHEMA,
-    SHOW_SCREEN_SCHEMA,
-    make_set_screens_handler,
-    make_show_screen_handler,
+    SET_PLAYLIST_SCHEMA,
+    SHOW_PAGE_SCHEMA,
+    make_set_playlist_handler,
+    make_show_page_handler,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,8 +58,8 @@ SOLAR_INTERVAL        = timedelta(seconds=10)
 SERVICE_PUSH_FIRMWARE     = "push_firmware"
 SERVICE_SEND_NOTIFICATION = "send_notification"
 SERVICE_DISMISS_NOTIFICATION = "dismiss_notification"
-SERVICE_SHOW_SCREEN       = "show_screen"
-SERVICE_SET_SCREENS       = "set_screens"
+SERVICE_SHOW_PAGE         = "show_page"
+SERVICE_SET_PLAYLIST      = "set_playlist"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -100,13 +100,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_register(
             DOMAIN, SERVICE_DISMISS_NOTIFICATION, make_dismiss_handler(hass), schema=DISMISS_SCHEMA
         )
-    if not hass.services.has_service(DOMAIN, SERVICE_SHOW_SCREEN):
+    if not hass.services.has_service(DOMAIN, SERVICE_SHOW_PAGE):
         hass.services.async_register(
-            DOMAIN, SERVICE_SHOW_SCREEN, make_show_screen_handler(hass), schema=SHOW_SCREEN_SCHEMA
+            DOMAIN, SERVICE_SHOW_PAGE, make_show_page_handler(hass), schema=SHOW_PAGE_SCHEMA
         )
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_SCREENS):
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_PLAYLIST):
         hass.services.async_register(
-            DOMAIN, SERVICE_SET_SCREENS, make_set_screens_handler(hass), schema=SET_SCREENS_SCHEMA
+            DOMAIN, SERVICE_SET_PLAYLIST, make_set_playlist_handler(hass), schema=SET_PLAYLIST_SCHEMA
         )
 
     return True
@@ -128,8 +128,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_PUSH_FIRMWARE)
         hass.services.async_remove(DOMAIN, SERVICE_SEND_NOTIFICATION)
         hass.services.async_remove(DOMAIN, SERVICE_DISMISS_NOTIFICATION)
-        hass.services.async_remove(DOMAIN, SERVICE_SHOW_SCREEN)
-        hass.services.async_remove(DOMAIN, SERVICE_SET_SCREENS)
+        hass.services.async_remove(DOMAIN, SERVICE_SHOW_PAGE)
+        hass.services.async_remove(DOMAIN, SERVICE_SET_PLAYLIST)
         if hass.data.pop(f"{DOMAIN}_panel_registered", False):
             frontend.async_remove_panel(hass, PANEL_URL_PATH)
 

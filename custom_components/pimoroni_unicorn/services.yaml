@@ -143,7 +143,7 @@ push_firmware:
       selector:
         object: {}
 
-show_screen:
+show_page:
   fields:
     device_id:
       required: true
@@ -163,14 +163,14 @@ show_screen:
       selector:
         boolean: {}
 
-set_screens:
+set_playlist:
   fields:
     device_id:
       required: true
       selector:
         device:
           integration: pimoroni_unicorn
-    layouts:
+    pages:
       required: true
       selector:
         text:
