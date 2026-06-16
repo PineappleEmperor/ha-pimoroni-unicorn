@@ -4,7 +4,7 @@ import { property, state } from "lit/decorators.js";
 type Rgb = [number, number, number];
 type Size = [number, number];
 type Rect = [number, number, number, number];
-interface CfgField { key: string; type: "select" | "rgb" | "number"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
+interface CfgField { key: string; type: "select" | "rgb" | "number" | "text"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
 interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; }
 interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
@@ -450,6 +450,11 @@ export class PimoroniUnicornPanel extends LitElement {
             <input type="number" style="width:60px" min=${f.min ?? 1} max=${f.max ?? 64} step=${f.step ?? 1}
               .value=${String(this.cfgVal(entry, f.key))}
               @change=${(e: Event) => this.setCfg(entry, f.key, +(e.target as HTMLInputElement).value)} /></div>`;
+        }
+        if (f.type === "text") {
+          return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+            <input type="text" style="width:120px" .value=${String(this.cfgVal(entry, f.key) ?? "")}
+              @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLInputElement).value)} /></div>`;
         }
         return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
           <input type="color" .value=${hex(this.cfgVal(entry, f.key) as Rgb)}

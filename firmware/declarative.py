@@ -10,8 +10,17 @@ _FONTS = {
 
 
 def box(spec, cfg=None):
-    """Footprint declared by the spec."""
-    return (spec.get("w", 8), spec.get("h", 8))
+    """Footprint, honouring cfg w/h overrides for configurable widgets."""
+    cfg = cfg or {}
+    return (cfg.get("w", spec.get("w", 8)), cfg.get("h", spec.get("h", 8)))
+
+
+def _resolve(op, cfg):
+    """Substitute $name op fields from cfg (cfg-parameterised widgets)."""
+    out = {}
+    for k, v in op.items():
+        out[k] = cfg.get(v[1:]) if isinstance(v, str) and v[:1] == "$" else v
+    return out
 
 
 def _value_text(op, state):
@@ -71,7 +80,8 @@ def _draw_dot(g, op, x, y, state):
 
 def render(g, spec, x, y, w, h, cfg, state):
     """Draw a declarative widget spec at (x, y)."""
-    for op in spec.get("draw", []):
+    for raw in spec.get("draw", []):
+        op = _resolve(raw, cfg)
         kind = op.get("op")
         ox = x + op.get("x", 0)
         oy = y + op.get("y", 0)
