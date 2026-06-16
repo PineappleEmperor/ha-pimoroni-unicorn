@@ -71,29 +71,3 @@ jobs:
           fi
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
 
-      - name: Apply label from commit subjects
-        if: steps.commits.outputs.ahead != '0' && steps.pr.outputs.pr_number != ''
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
-        run: |
-          # Label from the highest-priority type across ALL commits (not the PR title or
-          # branch name): breaking (`type!:`) > feat > fix > chore/docs.
-          SUBJECTS=$(git log origin/main..HEAD --pretty=format:'%s')
-          if echo "$SUBJECTS" | grep -qiE '^[a-z]+(\(.+\))?!:'; then
-            LABEL="xfeat"
-          elif echo "$SUBJECTS" | grep -qiE '^(feat|feature)(\(.+\))?:'; then
-            LABEL="feature"
-          elif echo "$SUBJECTS" | grep -qiE '^fix(\(.+\))?:'; then
-            LABEL="fix"
-          elif echo "$SUBJECTS" | grep -qiE '^(chore|docs)(\(.+\))?:'; then
-            LABEL="chore"
-          else
-            exit 0
-          fi
-          # Replace any stale type label so it reflects the current commits.
-          for L in feature fix chore xfeat; do
-            [ "$L" != "$LABEL" ] && gh pr edit "$PR_NUMBER" --remove-label "$L" 2>/dev/null || true
-          done
-          gh label create "$LABEL" --force 2>/dev/null || true
-          gh pr edit "$PR_NUMBER" --add-label "$LABEL"
