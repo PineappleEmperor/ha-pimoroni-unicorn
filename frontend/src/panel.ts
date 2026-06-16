@@ -10,6 +10,7 @@ interface WidgetEntry { id: string; type?: string; name?: string; x: number; y: 
 interface Layout { name?: string; model?: string; grid?: number; widgets: WidgetEntry[]; overlays?: string[]; }
 interface Device { entry_id: string; device_id: string; model: string; name: string; active_layout?: string; }
 interface CatalogWidget { id: string; label: string; kind: string; requires: string[]; device_file: string; hash: string; status: string; }
+interface ContentUnit { id: string; label: string; kind: string; compat: string[]; requires: string[]; screens: number; compatible: boolean; }
 interface FwManifest { engine_version?: string; files?: Record<string, string>; }
 
 const PREVIEW_TARGET_PX = 560;
@@ -58,6 +59,9 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private tab: "layout" | "market" | "edit" | "screens" = "layout";
   @state() private catalog: CatalogWidget[] = [];
   @state() private fwManifest: FwManifest | null = null;
+  @state() private contentLayouts: ContentUnit[] = [];
+  @state() private contentScreensets: ContentUnit[] = [];
+  @state() private showAllContent = false;
   @state() private screenLayouts: string[] = [];
   @state() private screenDwell = 10;
   @state() private screenTransition: "none" | "fade" = "none";
@@ -430,6 +434,7 @@ export class PimoroniUnicornPanel extends LitElement {
         <label>Name <input .value=${this.layoutName} @input=${(e: Event) => (this.layoutName = (e.target as HTMLInputElement).value)} /></label>
         <button @click=${this.save} ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to save/push"}>Save &amp; Push</button>
         ${this.stored[this.layoutName] ? html`<button class="danger" @click=${this.deleteLayout}>Delete</button>` : ""}
+        ${this.stored[this.layoutName] ? html`<button class="secondary" @click=${() => this.publishLayout(true)} title="List this app in the marketplace">Publish</button>` : ""}
         <label>Snap
           <select @change=${(e: Event) => { this.layout.grid = +(e.target as HTMLSelectElement).value; this.edited(); }}>
             ${[1, 2, 4].map((n) => html`<option ?selected=${(this.layout.grid ?? 2) === n}>${n}</option>`)}
@@ -488,11 +493,54 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private async loadCatalog() {
+    await this.loadContent();
     if (!this.entryId) { this.catalog = []; this.fwManifest = null; return; }
     const c = await this.hass.callWS({ type: "pimoroni_unicorn/catalog", entry_id: this.entryId });
     this.catalog = c.widgets ?? [];
     const m = await this.hass.callWS({ type: "pimoroni_unicorn/fw_manifest", entry_id: this.entryId });
     this.fwManifest = m.manifest ?? null;
+  }
+
+  private async loadContent() {
+    const q = this.entryId ? { entry_id: this.entryId } : {};
+    const c = await this.hass.callWS({ type: "pimoroni_unicorn/content_catalog", ...q });
+    this.contentLayouts = c.layouts ?? [];
+    this.contentScreensets = c.screensets ?? [];
+  }
+
+  private async deployLayout(name: string, compatible: boolean) {
+    if (!this.entryId) { this.status = "Select a device to deploy."; return; }
+    if (!compatible && !confirm(`"${name}" isn't built for this device's model. Deploy anyway?`)) return;
+    const r = await this.hass.callWS({
+      type: "pimoroni_unicorn/deploy_layout", entry_id: this.entryId, name, override: !compatible });
+    this.status = r.ok ? `Deployed "${name}" (installing any missing widgets/fonts first).` : `Deploy failed.`;
+  }
+
+  private async deployScreenset(id: string, compatible: boolean) {
+    if (!this.entryId) { this.status = "Select a device to deploy."; return; }
+    if (!compatible && !confirm(`"${id}" isn't built for this device's model. Deploy anyway?`)) return;
+    const r = await this.hass.callWS({
+      type: "pimoroni_unicorn/deploy_screenset", entry_id: this.entryId, id, override: !compatible });
+    this.status = r.ok ? `Deployed screen set "${id}".` : `Deploy failed.`;
+  }
+
+  private async publishLayout(published: boolean) {
+    if (!this.stored[this.layoutName]) { this.status = "Save the layout first, then publish."; return; }
+    await this.hass.callWS({ type: "pimoroni_unicorn/publish_layout", name: this.layoutName, published });
+    this.status = published ? `Published "${this.layoutName}" to the marketplace.` : `Unpublished "${this.layoutName}".`;
+    this.loadContent();
+  }
+
+  private async saveScreenset() {
+    if (!this.screenLayouts.length) { this.status = "Add at least one screen first."; return; }
+    const id = prompt("Name this screen set:");
+    if (!id) return;
+    await this.hass.callWS({
+      type: "pimoroni_unicorn/save_screenset", id,
+      screenset: { label: id, layouts: this.screenLayouts, dwell: this.screenDwell,
+                   transition: this.screenTransition, triggers: [] } });
+    this.status = `Saved screen set "${id}".`;
+    this.loadContent();
   }
 
   private async installWidget(id: string) {
@@ -507,24 +555,56 @@ export class PimoroniUnicornPanel extends LitElement {
     setTimeout(() => this.loadCatalog(), 8000);
   }
 
+  private _contentRow(u: ContentUnit, kind: "layout" | "screenset") {
+    return html`<li>
+      <span class="grow">${u.label}
+        ${u.compat?.length ? html`<span class="hint">[${u.compat.join("/")}]</span>` : ""}
+        ${kind === "screenset" ? html`<span class="hint">${u.screens} screen(s)</span>` : ""}
+        ${u.compatible ? "" : html`<span class="badge warn">other model</span>`}</span>
+      ${u.requires?.length ? html`<span class="hint">${u.requires.length} dep(s)</span>` : ""}
+      <button ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to deploy"}
+        @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>Deploy</button>
+    </li>`;
+  }
+
   private _marketplaceView() {
-    if (!this.entryId) return html`<p class="hint">Select a device on the Layout tab to manage installed widgets.</p>`;
-    const ev = this.fwManifest?.engine_version ?? "?";
+    const ev = this.fwManifest?.engine_version;
+    const all = this.showAllContent;
+    const apps = this.contentLayouts.filter((a) => all || a.compatible);
+    const sets = this.contentScreensets.filter((s) => all || s.compatible);
     const cls: Record<string, string> = { installed: "ok", outdated: "warn", not_installed: "" };
     const lbl: Record<string, string> = { installed: "installed", outdated: "update available", not_installed: "not installed" };
     return html`
-      <div class="bar"><span class="hint">engine v${ev}</span>
-        <button class="secondary" @click=${this.loadCatalog}>Refresh</button></div>
-      <ul class="catalog">
-        ${this.catalog.map((w) => html`<li>
-          <span class="grow">${w.label} <span class="badge ${cls[w.status] ?? ""}">${lbl[w.status] ?? w.status}</span></span>
-          ${w.requires?.length ? html`<span class="hint">needs ${w.requires.join(", ")}</span>` : ""}
-          ${w.status === "installed"
-            ? html`<button class="danger" @click=${() => this.removeWidgetUnit(w.id)}>Remove</button>`
-            : html`<button @click=${() => this.installWidget(w.id)}>${w.status === "outdated" ? "Update" : "Install"}</button>`}
-        </li>`)}
-      </ul>
-      <p class="hint">Install pulls the widget (and any fonts it needs) to the device over the air; the device reboots and the widget becomes available on the Layout tab.</p>
+      <div class="bar">
+        ${ev ? html`<span class="hint">engine v${ev}</span>` : ""}
+        <label><input type="checkbox" .checked=${this.showAllContent}
+          @change=${(e: Event) => { this.showAllContent = (e.target as HTMLInputElement).checked; }} /> show all models</label>
+        <button class="secondary" @click=${this.loadCatalog}>Refresh</button>
+      </div>
+
+      <h3>Apps</h3>
+      ${apps.length
+        ? html`<ul class="catalog">${apps.map((a) => this._contentRow(a, "layout"))}</ul>`
+        : html`<p class="hint">No published apps${all ? "" : " for this device"}. Publish one from the Layout tab.</p>`}
+
+      <h3>Screen sets</h3>
+      ${sets.length
+        ? html`<ul class="catalog">${sets.map((s) => this._contentRow(s, "screenset"))}</ul>`
+        : html`<p class="hint">No screen sets${all ? "" : " for this device"}. Compose one on the Screens tab.</p>`}
+
+      <h3>Widgets &amp; fonts</h3>
+      ${this.entryId
+        ? html`<ul class="catalog">
+            ${this.catalog.map((w) => html`<li>
+              <span class="grow">${w.label} <span class="badge ${cls[w.status] ?? ""}">${lbl[w.status] ?? w.status}</span></span>
+              ${w.requires?.length ? html`<span class="hint">needs ${w.requires.join(", ")}</span>` : ""}
+              ${w.status === "installed"
+                ? html`<button class="danger" @click=${() => this.removeWidgetUnit(w.id)}>Remove</button>`
+                : html`<button @click=${() => this.installWidget(w.id)}>${w.status === "outdated" ? "Update" : "Install"}</button>`}
+            </li>`)}
+          </ul>`
+        : html`<p class="hint">Select a device on the Layout tab to manage installed widgets.</p>`}
+      <p class="hint">Deploying an app installs any widgets/fonts it needs over the air first, then pushes the layout; the device reboots if files changed.</p>
     `;
   }
 
@@ -653,6 +733,7 @@ export class PimoroniUnicornPanel extends LitElement {
             </select></label></div>
           <div class="panelrow">
             <button @click=${this.pushScreens} ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to push"}>Push to device</button>
+            <button class="secondary" @click=${this.saveScreenset} ?disabled=${!this.screenLayouts.length} title="Save as a reusable screen set in the marketplace">Save as screen set</button>
           </div>
         </div>
         <div class="col">
