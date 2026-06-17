@@ -9,6 +9,7 @@ _DIR = Path(__file__).parent / "catalog"
 _WIDGETS = _DIR / "widgets"
 _FONTS = _DIR / "fonts"
 _OVERLAYS = _DIR / "overlays"
+_LAYOUTS = _DIR / "layouts"
 
 # Logical font dependency name (font:<name>) -> unit filename.
 FONT_FILES = {
@@ -272,6 +273,19 @@ def layout_unit(name: str, layout: dict, custom_dir=None) -> dict:
 def layout_units(layouts: dict, custom_dir=None) -> list[dict]:
     """Descriptors for every stored layout (name -> layout dict)."""
     return [layout_unit(n, lay, custom_dir) for n, lay in sorted(layouts.items())]
+
+
+def builtin_layouts() -> dict:
+    """Shipped starter pages: name -> layout dict."""
+    out = {}
+    if _LAYOUTS.is_dir():
+        for p in sorted(_LAYOUTS.glob("*.json")):
+            try:
+                lay = json.loads(p.read_text())
+            except (ValueError, OSError):
+                continue
+            out[lay.get("name", p.stem)] = lay
+    return out
 
 
 def screenset_unit(sid: str, ss: dict, layouts: dict) -> dict:

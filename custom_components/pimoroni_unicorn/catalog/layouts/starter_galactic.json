@@ -1,0 +1,65 @@
+{
+  "name": "Starter \u00b7 Galactic",
+  "model": "galactic",
+  "grid": 2,
+  "widgets": [
+    {
+      "id": "calendar",
+      "x": 0,
+      "y": 0,
+      "cfg": {
+        "header_color": [
+          200,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "id": "clock",
+      "x": 11,
+      "y": 1,
+      "cfg": {
+        "variant": "big",
+        "color": [
+          255,
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "id": "weekdays",
+      "x": 12,
+      "y": 9,
+      "cfg": {
+        "variant": "big",
+        "active": [
+          0,
+          0,
+          128
+        ],
+        "inactive": [
+          60,
+          60,
+          60
+        ]
+      }
+    },
+    {
+      "id": "energy",
+      "x": 34,
+      "y": 6,
+      "cfg": {}
+    },
+    {
+      "id": "sun_moon",
+      "x": 46,
+      "y": 0,
+      "cfg": {}
+    }
+  ],
+  "overlays": [
+    "weather"
+  ]
+}

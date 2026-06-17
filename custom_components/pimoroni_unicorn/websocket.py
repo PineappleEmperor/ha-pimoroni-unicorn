@@ -347,21 +347,24 @@ async def ws_content_catalog(hass, connection, msg):
     all_layouts = await layout.async_get_registry(hass)
     published = await layout.async_published_layouts(hass)
     screensets = await layout.async_get_screensets(hass)
+    builtin = marketplace.builtin_layouts()
+    pages = {**builtin, **published}            # published wins on a name clash
+    thumb_source = {**builtin, **all_layouts}
     model = None
     if msg.get("entry_id"):
         entry = _entry(hass, msg["entry_id"])
         if entry is not None:
             model = _model_key(entry)
 
-    # Thumbnail every published page + the first page of each screenset.
+    # Thumbnail every catalogue page + the first page of each screenset.
     installed_icons = await lametric.async_get_registry(hass)
-    thumb_names = set(published) | {
+    thumb_names = set(pages) | {
         ss["layouts"][0] for ss in screensets.values() if ss.get("layouts")}
 
     def _thumbs():
         out = {}
         for name in thumb_names:
-            lay = all_layouts.get(name)
+            lay = thumb_source.get(name)
             if lay:
                 png = _safe_render(render_service.render_layout_png,
                                    lay.get("model", "galactic"), lay, installed_icons)
@@ -381,7 +384,7 @@ async def ws_content_catalog(hass, connection, msg):
 
     connection.send_result(msg["id"], {
         "model": model,
-        "layouts": _tag(marketplace.layout_units(published, custom)),
+        "layouts": _tag(marketplace.layout_units(pages, custom)),
         "screensets": _tag(marketplace.screenset_units(screensets, all_layouts), first_key="layouts"),
     })
 
@@ -399,7 +402,7 @@ async def ws_deploy_layout(hass, connection, msg):
     if entry is None:
         connection.send_error(msg["id"], "not_found", "Unknown device")
         return
-    lay = (await layout.async_get_registry(hass)).get(msg["name"])
+    lay = (await layout.async_get_registry(hass)).get(msg["name"]) or marketplace.builtin_layouts().get(msg["name"])
     if lay is None:
         connection.send_error(msg["id"], "not_found", "Unknown layout")
         return
