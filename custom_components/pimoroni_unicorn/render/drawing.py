@@ -300,7 +300,7 @@ def draw_big_weekdays(current_day, x, y, active_colour, inactive_colour):
 def draw_icon(icon_type, x, y):
     """Draw a small status icon (alert/home/check) at (x, y) with explicit pixels.
 
-    Pixel-only (no triangle/line) so device and emulator render identically.
+    Pixel-only (no triangle/line) so device and preview render identically.
     """
     if icon_type == "alert":
         _g.set_pen(_RED)

@@ -2,8 +2,8 @@
 
 A layout: {name, model, grid, widgets:[{id,x,y,cfg,enabled?}], overlays:[id]}.
 Galactic reproduces the original hardcoded composition. Cosmic/Stellar are
-hand-tuned for their dimensions. Editable in the emulator and overridable via
-a pushed /layout.json on the device.
+hand-tuned for their dimensions. Editable in the panel Designer and overridable
+via a pushed /settings/layout.json on the device.
 """
 
 DEFAULT_LAYOUTS = {

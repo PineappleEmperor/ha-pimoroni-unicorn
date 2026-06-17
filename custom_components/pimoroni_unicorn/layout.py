@@ -1,6 +1,6 @@
 """Named display-layout registry, import, and per-device MQTT push.
 
-Layouts are authored in the emulator and pasted in as JSON. They are stored
+Layouts are authored in the panel Designer and exported/pasted as JSON. They are stored
 by name in an HA Store; each device selects an active layout (by name, in its
 config entry options) which is pushed to {device_id}/layout. Mirrors the icon
 registry pattern in lametric.py.

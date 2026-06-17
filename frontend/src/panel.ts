@@ -597,6 +597,7 @@ export class PimoroniUnicornPanel extends LitElement {
         </div>
         <div class="group">
           <button @click=${this.save} ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to save/push"}>Save &amp; Push</button>
+          <button class="secondary" @click=${this.exportLayout} title="Copy this page's JSON to clipboard to share or import elsewhere">Export JSON</button>
           ${this.stored[this.layoutName] ? html`<button class="secondary" @click=${() => this.publishLayout(true)} title="List this page in the marketplace">Publish</button>` : ""}
           ${this.stored[this.layoutName] ? html`<button class="danger" @click=${this.deleteLayout}>Delete</button>` : ""}
         </div>
@@ -692,6 +693,22 @@ export class PimoroniUnicornPanel extends LitElement {
     const r = await this.hass.callWS({
       type: "pimoroni_unicorn/deploy_screenset", entry_id: this.entryId, id, override: !compatible });
     this.status = r.ok ? `Deployed screen set "${id}".` : `Deploy failed.`;
+  }
+
+  private async exportLayout(): Promise<void> {
+    const out = { ...this.layout, name: this.layoutName, model: this.model };
+    const json = JSON.stringify(out, null, 2);
+    try {
+      await navigator.clipboard.writeText(json);
+      this.status = `Copied "${this.layoutName}" JSON (${this.model}) to clipboard.`;
+    } catch {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+      a.download = `${this.layoutName || "layout"}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      this.status = `Downloaded "${this.layoutName}.json".`;
+    }
   }
 
   private async publishLayout(published: boolean) {

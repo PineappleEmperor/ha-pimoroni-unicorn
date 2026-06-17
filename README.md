@@ -138,7 +138,7 @@ For bulk preview or generating firmware built-ins there is a dev-side helper: `p
 
 The **Unicorn** sidebar panel has a persistent device selector (model + size shown) above four tabs. The frontend is a Lit/TypeScript bundle built from `frontend/` (`npm run build`) into `custom_components/pimoroni_unicorn/panel/editor.js`, and follows your HA light/dark theme.
 
-- **Designer** — a **page** is one configured screen (which widgets sit where, with per-widget config/colour). Drag widgets on a pixel-accurate preview (rendered by the device's own code), then **Save & Push** to the device over MQTT (no reflash), or **Publish** to list it in the marketplace. Unsaved edits are guarded before switching page/device. Sensor widgets take an **entity** (lookup), can be added multiple times, and named per instance. Pages can also be authored in the terminal emulator (`scripts/emulate.py layout`) and imported under **Configure → Import layout**.
+- **Designer** — a **page** is one configured screen (which widgets sit where, with per-widget config/colour). Drag widgets on a pixel-accurate preview (rendered by the device's own code), then **Save & Push** to the device over MQTT (no reflash), or **Publish** to list it in the marketplace. Unsaved edits are guarded before switching page/device. Sensor widgets take an **entity** (lookup), can be added multiple times, and named per instance. Pick **Mock (preview only)** to design for any model without hardware, then **Export JSON** to share a page or import one under **Configure → Import layout**.
 - **Widget editor** — author a *declarative* widget in a **Form** (add/edit draw ops via fields) or raw **YAML/JSON** (toggle), with a live device-faithful preview; **Import** a pasted spec and **Save** to your custom catalogue (`<config>/pimoroni_unicorn/widgets/`). Draw ops: `value`, `bar`, `rect`, `pixel`, `icon`, `dot`, with state `bind` + `fmt`.
 - **Playlists** — compose a **playlist**: an ordered, timed cycle of pages (dwell + `fade` transition), reorder with ▲ ▼, preview the rotation, then **Push to device** or **Save as playlist**. Drive the live page/playlist from automations with the `show_page` / `set_playlist` services.
 
@@ -178,19 +178,11 @@ Define a device's playlist from named `pages` (in order), with `dwell` seconds a
 
 ## Development
 
-`scripts/emulate.py` runs the real firmware rendering code against a CPython PicoGraphics shim and draws the LED matrix in the terminal (24-bit ANSI, two pixels per character row) — no hardware needed:
+All rendering runs in CPython with no hardware: `render_service.py` executes the real firmware draw code against a `PicoGraphics` shim (`render/` package) and returns PNGs. This powers the panel's **Designer** preview and Marketplace thumbnails, and the same path is used by `scripts/check_widget_boxes.py`, which renders every widget headless and asserts its lit-pixel bounding box (CI guard).
 
-```bash
-python scripts/emulate.py animations                                # cycle animation modules
-python scripts/emulate.py notify '{"v":2,"text":"hi","icon":"check"}'
-python scripts/emulate.py icons                                     # built-in + installed icons
-python scripts/emulate.py display --model cosmic                    # main screen, per-model layout
-python scripts/emulate.py layout  --model cosmic                    # visual layout editor
-```
+Author layouts in the **Designer** tab — pick a device, or **Mock (preview only)** to design for any model without hardware. Arrange widgets on the pixel-accurate preview, then **Export JSON** to share a layout, or **Save & Push** it to a device. Shared JSON is applied under **Configure → Import layout** (stored by name, selectable per device, pushed over MQTT) or published directly to the `<device_id>/layout` topic.
 
-Keys: `space` pause, `r` restart, `n`/`p` cycle, `+`/`-` speed, `q` quit. In `display` mode press `t` to fire a notification over the running screen (takeover, like the device). In `layout` mode the arrow keys move the selected widget (snapped to the grid), `tab` selects the next, `v` cycles its variant, `space` enables/disables it, `a`/`r` add/remove, and `s` saves to `scripts/emulator/layouts/<model>.json`. Apply that JSON to a device either by importing it under **Configure → Import layout** (stored by name, selectable per device, pushed over MQTT) or by publishing it directly to the `<device_id>/layout` topic.
-
-Edits to watched firmware files (`notify_animations.py`, `icons.py`, `drawing.py`, `weather_fx.py`, `bitfonts.py`, `widgets.py`, `layouts.py`, `animations/*.py`) hot-reload live. `--model cosmic|stellar` switches matrix size; `--frames N` renders headless (CI-friendly). The renderer consumes a plain RGB framebuffer, so alternative frontends (e.g. a web canvas) can reuse the same shim. Note: the shim has no `bitmap6` font, so the `tiny` clock variant renders approximately (font8 substituted); `big`/`small` are exact.
+Because device and preview must render identically, firmware draw code uses only shim-faithful primitives (`pixel`, `rectangle`, bitmask fonts — no `circle`/`triangle`/non-bitmap fonts). Note: the shim has no `bitmap6` font, so the `tiny` clock variant renders approximately (font8 substituted); `big`/`small` are exact.
 
 <!-- Badges -->
 

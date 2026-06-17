@@ -258,7 +258,7 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_import_layout(self, user_input=None):
-        """Import a layout JSON authored in the emulator and make it active."""
+        """Import a layout JSON authored in the panel Designer and make it active."""
         errors = {}
         if user_input is not None:
             parsed = layout.parse_layout(user_input["layout_json"])
