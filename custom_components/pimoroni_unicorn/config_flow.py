@@ -110,10 +110,7 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         if self._initialized:
             return
         self._initialized = True
-        store      = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
-        ha_config  = store.get("ha_config", {})
-        merged     = {**ha_config, **self._config_entry.data, **self._config_entry.options}
-        self._settings = merged
+        self._settings = {**self._config_entry.data, **self._config_entry.options}
 
     async def async_step_init(self, user_input=None):
         """Show main options menu."""

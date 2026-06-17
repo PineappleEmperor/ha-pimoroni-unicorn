@@ -67,13 +67,12 @@ SERVICE_SET_PLAYLIST      = "set_playlist"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Pimoroni Unicorn from a config entry."""
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": [], "ha_config": {}, "sensor_entities": set()}
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": [], "sensor_entities": set()}
 
     opts      = _merged_opts(entry)
     device_id = opts[CONF_DEVICE_ID]
 
     _setup_publishers(hass, entry)
-    await _async_subscribe_ha_config(hass, entry)
     await _async_subscribe_layout_caps(hass, entry)
     await _async_subscribe_notify_caps(hass, entry)
     await _async_subscribe_fw_manifest(hass, entry)
@@ -191,28 +190,9 @@ async def _async_refresh_panel(hass: HomeAssistant) -> None:
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
     _setup_publishers(hass, entry)
-    await _async_subscribe_ha_config(hass, entry)
-    await _async_publish_ha_config(hass, entry)
     await _async_setup_sensor_feed(hass, entry)
     await layout.async_push_active(hass, entry)
     await _async_refresh_panel(hass)
-
-
-async def _async_subscribe_ha_config(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Subscribe to retained ha_config topic and cache payload in hass.data."""
-    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
-
-    @callback
-    def _on_ha_config(msg: Any) -> None:
-        try:
-            data = json.loads(msg.payload)
-            if isinstance(data, dict) and entry.entry_id in hass.data.get(DOMAIN, {}):
-                hass.data[DOMAIN][entry.entry_id]["ha_config"] = data
-        except (json.JSONDecodeError, ValueError):
-            pass
-
-    unsub = await async_subscribe(hass, f"{device_id}/ha_config", _on_ha_config)
-    hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
 
 
 async def _async_subscribe_layout_caps(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -267,19 +247,6 @@ async def _async_subscribe_notify_caps(hass: HomeAssistant, entry: ConfigEntry) 
 
     unsub = await async_subscribe(hass, f"{device_id}/notify/capabilities", _on_caps)
     hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
-
-
-async def _async_publish_ha_config(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Publish current entity config to retained MQTT topic."""
-    opts      = _merged_opts(entry)
-    device_id = opts[CONF_DEVICE_ID]
-    entity_keys = (
-        CONF_SOLAR_ENTITY, CONF_CONSUMPTION_ENTITY, CONF_BATTERY_SOC_ENTITY,
-        CONF_BATTERY_CHARGING_ENTITY, CONF_SUN_ENTITY, CONF_WEATHER_CODE_ENTITY,
-        CONF_EXTRA_SENSORS,
-    )
-    payload = {k: opts[k] for k in entity_keys if opts.get(k)}
-    await async_publish(hass, f"{device_id}/ha_config", json.dumps(payload), retain=True)
 
 
 async def _async_publish_time(hass: HomeAssistant, device_id: str) -> None:
