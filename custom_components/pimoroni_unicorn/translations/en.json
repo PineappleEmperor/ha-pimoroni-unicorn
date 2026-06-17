@@ -8,10 +8,15 @@
           "device_id": "Device ID",
           "model": "Model"
         }
+      },
+      "mqtt_confirm": {
+        "title": "Pimoroni Unicorn discovered",
+        "description": "Set up {device_id} ({model})?"
       }
     },
     "abort": {
-      "already_configured": "Device already configured."
+      "already_configured": "Device already configured.",
+      "invalid_discovery": "The device's discovery message was invalid."
     }
   },
   "options": {

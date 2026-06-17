@@ -597,6 +597,12 @@ async def mqtt_task():
             mqtt_client.connect()
             print("Connected to MQTT broker")
             mqtt_client.publish(TOPIC_STATUS, b"online", retain=True)
+            # Announce to the Pimoroni Unicorn integration for auto-discovery (no manual device id).
+            mqtt_client.publish(
+                f"pimoroni_unicorn/discovery/{DEVICE_ID}",
+                json.dumps({"device_id": DEVICE_ID, "model": MODEL, "name": DEVICE_ID}),
+                retain=True,
+            )
             await asyncio.sleep(0.5)
 
             mqtt_client.publish(

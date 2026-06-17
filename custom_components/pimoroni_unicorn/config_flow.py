@@ -1,5 +1,7 @@
 """Config flow for Pimoroni Unicorn."""
 
+import json
+
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -17,6 +19,7 @@ from homeassistant.helpers.selector import (
     TextSelector,
     TextSelectorConfig,
 )
+from homeassistant.helpers.service_info.mqtt import MqttServiceInfo
 from homeassistant.util import slugify
 
 from . import lametric, layout
@@ -33,8 +36,11 @@ from .const import (
     CONF_WEATHER_CODE_ENTITY,
     DOMAIN,
     NOTIFY_STATIC_ICONS,
+    UNICORN_MODEL_KEYS,
     UNICORN_MODELS,
 )
+
+_KEY_TO_LABEL = {key: label for label, key in UNICORN_MODEL_KEYS.items()}
 
 DATA_SCHEMA = vol.Schema({
     vol.Required(CONF_DEVICE_ID, default="pimoroni_unicorn_1"): str,
@@ -87,6 +93,35 @@ class PimoroniUnicornConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=DATA_SCHEMA,
             errors=errors,
+        )
+
+    async def async_step_mqtt(self, discovery_info: MqttServiceInfo):
+        """Auto-discover a device from its retained announcement (no manual entry)."""
+        try:
+            data = json.loads(discovery_info.payload)
+        except (ValueError, TypeError):
+            return self.async_abort(reason="invalid_discovery")
+        device_id = data.get("device_id")
+        if not device_id:
+            return self.async_abort(reason="invalid_discovery")
+        await self.async_set_unique_id(device_id)
+        self._abort_if_unique_id_configured()
+        label = _KEY_TO_LABEL.get(data.get("model", ""), UNICORN_MODELS[0])
+        self._discovered = {CONF_DEVICE_ID: device_id, CONF_MODEL: label}
+        self.context["title_placeholders"] = {"name": data.get("name") or device_id}
+        return await self.async_step_mqtt_confirm()
+
+    async def async_step_mqtt_confirm(self, user_input: dict | None = None):
+        """Confirm adding a discovered device."""
+        if user_input is not None:
+            return self.async_create_entry(
+                title=self._discovered[CONF_DEVICE_ID], data=self._discovered)
+        return self.async_show_form(
+            step_id="mqtt_confirm",
+            description_placeholders={
+                "device_id": self._discovered[CONF_DEVICE_ID],
+                "model": self._discovered[CONF_MODEL],
+            },
         )
 
     @staticmethod
