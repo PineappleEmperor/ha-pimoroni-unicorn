@@ -22,6 +22,7 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
 )
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
@@ -65,6 +66,26 @@ SERVICE_SHOW_PAGE         = "show_page"
 SERVICE_SET_PLAYLIST      = "set_playlist"
 
 
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the integration-wide services once, independent of any device."""
+    hass.services.async_register(
+        DOMAIN, SERVICE_PUSH_FIRMWARE, _make_push_firmware_handler(hass)
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_SEND_NOTIFICATION, make_generic_notify_handler(hass), schema=GENERIC_NOTIFY_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_DISMISS_NOTIFICATION, make_dismiss_handler(hass), schema=DISMISS_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_SHOW_PAGE, make_show_page_handler(hass), schema=SHOW_PAGE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_SET_PLAYLIST, make_set_playlist_handler(hass), schema=SET_PLAYLIST_SCHEMA
+    )
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Pimoroni Unicorn from a config entry."""
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": [], "sensor_entities": set(), "diag": {}}
@@ -88,29 +109,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[f"{DOMAIN}_ws_registered"] = True
     await _async_refresh_panel(hass)
 
-    if not hass.services.has_service(DOMAIN, SERVICE_PUSH_FIRMWARE):
-        hass.services.async_register(
-            DOMAIN, SERVICE_PUSH_FIRMWARE, _make_push_firmware_handler(hass)
-        )
     if device_id and not hass.services.has_service(NOTIFY_DOMAIN, device_id):
         hass.services.async_register(
             NOTIFY_DOMAIN, device_id, make_notify_handler(hass, device_id), schema=NOTIFY_SERVICE_SCHEMA
-        )
-    if not hass.services.has_service(DOMAIN, SERVICE_SEND_NOTIFICATION):
-        hass.services.async_register(
-            DOMAIN, SERVICE_SEND_NOTIFICATION, make_generic_notify_handler(hass), schema=GENERIC_NOTIFY_SCHEMA
-        )
-    if not hass.services.has_service(DOMAIN, SERVICE_DISMISS_NOTIFICATION):
-        hass.services.async_register(
-            DOMAIN, SERVICE_DISMISS_NOTIFICATION, make_dismiss_handler(hass), schema=DISMISS_SCHEMA
-        )
-    if not hass.services.has_service(DOMAIN, SERVICE_SHOW_PAGE):
-        hass.services.async_register(
-            DOMAIN, SERVICE_SHOW_PAGE, make_show_page_handler(hass), schema=SHOW_PAGE_SCHEMA
-        )
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_PLAYLIST):
-        hass.services.async_register(
-            DOMAIN, SERVICE_SET_PLAYLIST, make_set_playlist_handler(hass), schema=SET_PLAYLIST_SCHEMA
         )
 
     return True
@@ -128,14 +129,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if device_id and hass.services.has_service(NOTIFY_DOMAIN, device_id):
         hass.services.async_remove(NOTIFY_DOMAIN, device_id)
 
-    if not hass.data.get(DOMAIN):
-        hass.services.async_remove(DOMAIN, SERVICE_PUSH_FIRMWARE)
-        hass.services.async_remove(DOMAIN, SERVICE_SEND_NOTIFICATION)
-        hass.services.async_remove(DOMAIN, SERVICE_DISMISS_NOTIFICATION)
-        hass.services.async_remove(DOMAIN, SERVICE_SHOW_PAGE)
-        hass.services.async_remove(DOMAIN, SERVICE_SET_PLAYLIST)
-        if hass.data.pop(f"{DOMAIN}_panel_registered", False):
-            frontend.async_remove_panel(hass, PANEL_URL_PATH)
+    if not hass.data.get(DOMAIN) and hass.data.pop(f"{DOMAIN}_panel_registered", False):
+        frontend.async_remove_panel(hass, PANEL_URL_PATH)
 
     return True
 
