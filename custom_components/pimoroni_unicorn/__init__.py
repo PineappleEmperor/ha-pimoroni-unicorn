@@ -22,6 +22,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.loader import async_get_integration
+from homeassistant.util import dt as dt_util
 
 from . import layout, websocket as ws_api
 from .const import (
@@ -55,6 +56,7 @@ from .screens import (
 _LOGGER = logging.getLogger(__name__)
 
 SOLAR_INTERVAL        = timedelta(seconds=10)
+TIME_INTERVAL         = timedelta(minutes=5)
 SERVICE_PUSH_FIRMWARE     = "push_firmware"
 SERVICE_SEND_NOTIFICATION = "send_notification"
 SERVICE_DISMISS_NOTIFICATION = "dismiss_notification"
@@ -74,6 +76,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _async_subscribe_layout_caps(hass, entry)
     await _async_subscribe_notify_caps(hass, entry)
     await _async_subscribe_fw_manifest(hass, entry)
+    await _async_setup_time_feed(hass, entry)
     await _async_setup_sensor_feed(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
@@ -238,6 +241,8 @@ async def _async_subscribe_fw_manifest(hass: HomeAssistant, entry: ConfigEntry) 
             data = json.loads(msg.payload)
             if isinstance(data, dict) and entry.entry_id in hass.data.get(DOMAIN, {}):
                 hass.data[DOMAIN][entry.entry_id]["fw_manifest"] = data
+                # Device just (re)connected — push fresh time so its clock is right immediately.
+                hass.async_create_task(_async_publish_time(hass, device_id))
         except (json.JSONDecodeError, ValueError):
             pass
 
@@ -273,6 +278,25 @@ async def _async_publish_ha_config(hass: HomeAssistant, entry: ConfigEntry) -> N
     )
     payload = {k: opts[k] for k in entity_keys if opts.get(k)}
     await async_publish(hass, f"{device_id}/ha_config", json.dumps(payload), retain=True)
+
+
+async def _async_publish_time(hass: HomeAssistant, device_id: str) -> None:
+    """Push HA's local time to the device (so it needs no NTP/internet)."""
+    n = dt_util.now()
+    payload = {"y": n.year, "mo": n.month, "d": n.day, "h": n.hour, "mi": n.minute, "s": n.second}
+    await async_publish(hass, f"{device_id}/time", json.dumps(payload), retain=True)
+
+
+async def _async_setup_time_feed(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Publish HA local time now and on an interval; device sets its RTC from it."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+    await _async_publish_time(hass, device_id)
+
+    async def _tick(_now) -> None:
+        await _async_publish_time(hass, device_id)
+
+    hass.data[DOMAIN][entry.entry_id]["unsub"].append(
+        async_track_time_interval(hass, _tick, TIME_INTERVAL))
 
 
 async def _async_setup_sensor_feed(hass: HomeAssistant, entry: ConfigEntry) -> None:

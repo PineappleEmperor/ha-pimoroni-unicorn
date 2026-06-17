@@ -89,6 +89,7 @@ TOPIC_SCREEN_SHOW       = f"{DEVICE_ID}/screen/show"
 TOPIC_OTA               = f"{DEVICE_ID}/ota"
 TOPIC_FW_MANIFEST       = f"{DEVICE_ID}/fw/manifest"
 TOPIC_FW_REMOVE         = f"{DEVICE_ID}/fw/remove"
+TOPIC_TIME              = f"{DEVICE_ID}/time"
 
 # --- HA Device details ---
 DEVICE_INFO = {
@@ -454,6 +455,17 @@ def on_message(topic, message):
                 print("Icon cmd failed:", e)
             return
 
+        if topic_str == TOPIC_TIME:
+            try:
+                global _time_synced, _last_ntp_ms
+                t = json.loads(message)
+                machine.RTC().datetime((t["y"], t["mo"], t["d"], 0, t["h"], t["mi"], t["s"], 0))
+                _time_synced = True
+                _last_ntp_ms = time.ticks_ms()
+            except Exception as e:
+                print("Time cmd failed:", e)
+            return
+
         if topic_str == TOPIC_LAYOUT:
             try:
                 data = json.loads(message)
@@ -636,7 +648,7 @@ async def mqtt_task():
                 TOPIC_COMMAND, TOPIC_SOLAR, TOPIC_WEATHER,
                 TOPIC_ANIM_CMD, TOPIC_ENERGY_MODE_CMD, TOPIC_NOTIFY,
                 TOPIC_NOTIFY_DISMISS, TOPIC_ICONS_CMD, TOPIC_LAYOUT, TOPIC_OTA,
-                TOPIC_SCREENS, TOPIC_SCREEN_SHOW, TOPIC_FW_REMOVE,
+                TOPIC_SCREENS, TOPIC_SCREEN_SHOW, TOPIC_FW_REMOVE, TOPIC_TIME,
             ):
                 mqtt_client.subscribe(topic.encode())
 
