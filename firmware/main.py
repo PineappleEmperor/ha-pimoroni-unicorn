@@ -150,6 +150,15 @@ def _load_screens():
 
 
 _screens, _screen_dwell_ms, _screen_transition = _load_screens()
+
+
+def _uses_energy():
+    """True if any page uses the energy widget (gates the energy-only HA entities)."""
+    for s in _screens:
+        for w in s.get("widgets", []):
+            if w.get("type", w.get("id")) == "energy":
+                return True
+    return False
 _screen_idx = 0
 _screen_pinned = False
 _screen_switch_ms = 0
@@ -619,29 +628,31 @@ async def mqtt_task():
                     "brightness": True, "brightness_scale": 100, "device": DEVICE_INFO,
                 }),
             )
-            mqtt_client.publish(
-                f"{DISCOVERY_PREFIX}/switch/{DEVICE_ID}/animation/config",
-                json.dumps({
-                    "name": "Battery Animation",
-                    "unique_id": f"{DEVICE_ID}_battery_animation",
-                    "command_topic": TOPIC_ANIM_CMD, "state_topic": TOPIC_ANIM_STATE,
-                    "availability_topic": TOPIC_STATUS,
-                    "payload_available": "online", "payload_not_available": "offline",
-                    "device": DEVICE_INFO,
-                }),
-            )
-            mqtt_client.publish(
-                f"{DISCOVERY_PREFIX}/select/{DEVICE_ID}/energy_mode/config",
-                json.dumps({
-                    "name": "Energy Mode", "unique_id": f"{DEVICE_ID}_energy_mode",
-                    "command_topic": TOPIC_ENERGY_MODE_CMD,
-                    "state_topic": TOPIC_ENERGY_MODE_STATE,
-                    "options": ["Solar", "Consumption", "Net"],
-                    "availability_topic": TOPIC_STATUS,
-                    "payload_available": "online", "payload_not_available": "offline",
-                    "device": DEVICE_INFO,
-                }),
-            )
+            # Energy-only entities — only advertise them when the energy widget is in use.
+            if _uses_energy():
+                mqtt_client.publish(
+                    f"{DISCOVERY_PREFIX}/switch/{DEVICE_ID}/animation/config",
+                    json.dumps({
+                        "name": "Battery Animation",
+                        "unique_id": f"{DEVICE_ID}_battery_animation",
+                        "command_topic": TOPIC_ANIM_CMD, "state_topic": TOPIC_ANIM_STATE,
+                        "availability_topic": TOPIC_STATUS,
+                        "payload_available": "online", "payload_not_available": "offline",
+                        "device": DEVICE_INFO,
+                    }),
+                )
+                mqtt_client.publish(
+                    f"{DISCOVERY_PREFIX}/select/{DEVICE_ID}/energy_mode/config",
+                    json.dumps({
+                        "name": "Energy Mode", "unique_id": f"{DEVICE_ID}_energy_mode",
+                        "command_topic": TOPIC_ENERGY_MODE_CMD,
+                        "state_topic": TOPIC_ENERGY_MODE_STATE,
+                        "options": ["Solar", "Consumption", "Net"],
+                        "availability_topic": TOPIC_STATUS,
+                        "payload_available": "online", "payload_not_available": "offline",
+                        "device": DEVICE_INFO,
+                    }),
+                )
 
             mqtt_client.subscribe(f"{DEVICE_ID}/display/#".encode())
             for topic in (
@@ -652,8 +663,9 @@ async def mqtt_task():
             ):
                 mqtt_client.subscribe(topic.encode())
 
-            mqtt_client.publish(TOPIC_ANIM_STATE, b"ON" if battery_animation else b"OFF", retain=True)
-            mqtt_client.publish(TOPIC_ENERGY_MODE_STATE, energy_mode.encode(), retain=True)
+            if _uses_energy():
+                mqtt_client.publish(TOPIC_ANIM_STATE, b"ON" if battery_animation else b"OFF", retain=True)
+                mqtt_client.publish(TOPIC_ENERGY_MODE_STATE, energy_mode.encode(), retain=True)
             mqtt_client.publish(
                 f"{DEVICE_ID}/notify/capabilities", json.dumps(NOTIFY_CAPABILITIES), retain=True
             )
