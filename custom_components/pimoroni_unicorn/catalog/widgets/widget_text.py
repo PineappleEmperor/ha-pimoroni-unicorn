@@ -10,6 +10,7 @@ WIDGET = {
         {"key": "color", "type": "rgb", "label": "Colour"},
         {"key": "color_mode", "type": "select",
          "options": ["solid", "rainbow", "per_char"], "label": "Colour mode"},
+        {"key": "colors", "type": "rgblist", "label": "Per-char colours"},
         {"key": "speed", "type": "number", "min": 0, "max": 10, "step": 1, "label": "Rainbow speed"},
     ],
     "multi": True,

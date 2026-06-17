@@ -3,7 +3,7 @@ import { property, state } from "lit/decorators.js";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
-interface CfgField { key: string; type: "select" | "rgb" | "number" | "text" | "entity" | "icon"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
+interface CfgField { key: string; type: "select" | "rgb" | "rgblist" | "number" | "text" | "entity" | "icon"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
 interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; multi?: boolean; }
 interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; type?: string; name?: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
@@ -219,6 +219,10 @@ export class PimoroniUnicornPanel extends LitElement {
     .frow { display: flex; align-items: center; gap: 14px; padding: 8px 10px; border: 1px solid var(--pu-outline); border-radius: 8px; margin-bottom: 6px; }
     .fmeta { display: flex; flex-direction: column; gap: 2px; width: 160px; flex: none; }
     .fprev { height: 40px; image-rendering: pixelated; background: #000; border-radius: 6px; padding: 0 8px; object-fit: contain; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .swatches { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+    .swatch { position: relative; display: inline-flex; }
+    .swatch .x { position: absolute; top: -6px; right: -6px; width: 14px; height: 14px; line-height: 12px; padding: 0; border-radius: 50%; border: none; background: var(--pu-outline); color: #fff; font-size: 11px; cursor: pointer; }
+    .swatches .add { width: 22px; height: 22px; padding: 0; border-radius: 6px; border: 1px dashed var(--pu-outline); background: transparent; color: inherit; font-size: 15px; cursor: pointer; }
   `;
 
   protected firstUpdated(): void { this.loadDevices(); this.loadIcons(); this.loadFonts(); }
@@ -444,6 +448,21 @@ export class PimoroniUnicornPanel extends LitElement {
     entry.cfg = { ...(entry.cfg ?? {}), [key]: value };
     this.edited();
   }
+  private cfgPalette(entry: WidgetEntry, key: string): Rgb[] {
+    const p = this.cfgVal(entry, key) as Rgb[] | undefined;
+    if (p && p.length) return p.map((c) => [...c] as Rgb);
+    return [((this.cfgVal(entry, "color") as Rgb) ?? [255, 255, 255])];
+  }
+  private setCfgColor(entry: WidgetEntry, key: string, i: number, rgb: Rgb): void {
+    const p = this.cfgPalette(entry, key); p[i] = rgb; this.setCfg(entry, key, p);
+  }
+  private addCfgColor(entry: WidgetEntry, key: string): void {
+    const p = this.cfgPalette(entry, key); p.push([255, 255, 255]); this.setCfg(entry, key, p);
+  }
+  private removeCfgColor(entry: WidgetEntry, key: string, i: number): void {
+    const p = this.cfgPalette(entry, key);
+    if (p.length > 1) { p.splice(i, 1); this.setCfg(entry, key, p); }
+  }
   private setName(entry: WidgetEntry, value: string): void {
     const name = value.trim();
     if (name) entry.name = name; else delete entry.name;
@@ -551,6 +570,22 @@ export class PimoroniUnicornPanel extends LitElement {
           @change=${(e: Event) => this.setPos(entry, "y", +(e.target as HTMLInputElement).value)} />
       </div>
       ${cap.cfg_fields.map((f) => {
+        const mode = this.cfgVal(entry, "color_mode");
+        if (f.key === "speed" && mode !== "rainbow") return "";
+        if (f.type === "rgblist" && mode !== "per_char") return "";
+        if (f.type === "rgblist") {
+          const palette = this.cfgPalette(entry, f.key);
+          return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+            <span class="swatches">
+              ${palette.map((c, i) => html`<span class="swatch">
+                <input type="color" .value=${hex(c)}
+                  @input=${(e: Event) => this.setCfgColor(entry, f.key, i, unhex((e.target as HTMLInputElement).value))} />
+                ${palette.length > 1 ? html`<button class="x" title="Remove"
+                  @click=${() => this.removeCfgColor(entry, f.key, i)}>×</button>` : ""}
+              </span>`)}
+              <button class="add" title="Add colour" @click=${() => this.addCfgColor(entry, f.key)}>+</button>
+            </span></div>`;
+        }
         if (f.type === "select") {
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
             <select @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLSelectElement).value)}>
