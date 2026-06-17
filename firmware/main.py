@@ -1,5 +1,6 @@
 """Pimoroni Unicorn display controller with Home Assistant MQTT integration."""
 
+import gc
 import json
 import time
 from secrets import DEVICE_ID, MQTT_PASSWORD, MQTT_PORT, MQTT_SERVER, MQTT_USER, PASSWORD, SSID
@@ -81,6 +82,7 @@ TOPIC_OTA               = f"{DEVICE_ID}/ota"
 TOPIC_FW_MANIFEST       = f"{DEVICE_ID}/fw/manifest"
 TOPIC_FW_REMOVE         = f"{DEVICE_ID}/fw/remove"
 TOPIC_TIME              = f"{DEVICE_ID}/time"
+TOPIC_DIAG              = f"{DEVICE_ID}/diag"
 
 # --- HA Device details ---
 DEVICE_INFO = {
@@ -681,6 +683,10 @@ async def mqtt_task():
                 mqtt_client.check_msg()
                 if time.ticks_ms() % 60000 < 500:
                     mqtt_client.publish(TOPIC_STATUS, b"online", retain=True)
+                    page = _screens[_screen_idx].get("name", str(_screen_idx)) if _screens else ""
+                    mqtt_client.publish(TOPIC_DIAG, json.dumps({
+                        "page": page, "free_mem": gc.mem_free(), "uptime_s": time.ticks_ms() // 1000,
+                    }), retain=True)
                     # Re-sync NTP if never synced, or hourly — time isn't battery-backed.
                     if not _time_synced or time.ticks_diff(time.ticks_ms(), _last_ntp_ms) > 3600000:
                         await sync_time()

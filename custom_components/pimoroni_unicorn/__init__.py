@@ -67,7 +67,7 @@ SERVICE_SET_PLAYLIST      = "set_playlist"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Pimoroni Unicorn from a config entry."""
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": [], "sensor_entities": set()}
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": [], "sensor_entities": set(), "diag": {}}
 
     opts      = _merged_opts(entry)
     device_id = opts[CONF_DEVICE_ID]
@@ -76,11 +76,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _async_subscribe_layout_caps(hass, entry)
     await _async_subscribe_notify_caps(hass, entry)
     await _async_subscribe_fw_manifest(hass, entry)
+    await _async_subscribe_diag(hass, entry)
     await _async_setup_time_feed(hass, entry)
     await _async_setup_sensor_feed(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-    await hass.config_entries.async_forward_entry_setups(entry, ["button", "update"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["button", "update", "sensor"])
 
     if not hass.data.get(f"{DOMAIN}_ws_registered"):
         ws_api.async_register(hass)
@@ -117,7 +118,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    await hass.config_entries.async_unload_platforms(entry, ["button", "update"])
+    await hass.config_entries.async_unload_platforms(entry, ["button", "update", "sensor"])
     store = hass.data[DOMAIN].pop(entry.entry_id, {})
     for unsub in store.get("unsub", []):
         unsub()
@@ -229,6 +230,24 @@ async def _async_subscribe_fw_manifest(hass: HomeAssistant, entry: ConfigEntry) 
             pass
 
     unsub = await async_subscribe(hass, f"{device_id}/fw/manifest", _on_manifest)
+    hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
+
+
+async def _async_subscribe_diag(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Subscribe to the retained diagnostics topic (current page, free memory, uptime)."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+
+    @callback
+    def _on_diag(msg: Any) -> None:
+        try:
+            data = json.loads(msg.payload)
+            if isinstance(data, dict) and entry.entry_id in hass.data.get(DOMAIN, {}):
+                hass.data[DOMAIN][entry.entry_id]["diag"] = data
+                async_dispatcher_send(hass, f"{DOMAIN}_diag_{entry.entry_id}")
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    unsub = await async_subscribe(hass, f"{device_id}/diag", _on_diag)
     hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
 
 
