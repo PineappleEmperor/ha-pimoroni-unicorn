@@ -14,9 +14,10 @@ _SAMPLE = {"weekday": "WWW", "day": "30", "month": "WWW", "month_full": "SEPTEMB
 WIDGET = {
     "id": "date", "label": "Date text", "w": 11, "h": 5, "variants": [],
     "default_cfg": {"format": "weekday", "color": [255, 255, 255],
-                    "color_mode": "solid", "speed": 3},
+                    "font": "font3x5", "color_mode": "solid", "speed": 3},
     "cfg_fields": [
         {"key": "format", "type": "select", "options": _FORMATS, "label": "Format"},
+        {"key": "font", "type": "select", "options": ["font3x5", "font5x9"], "label": "Font"},
         {"key": "color", "type": "rgb", "label": "Colour"},
         {"key": "color_mode", "type": "select",
          "options": ["solid", "rainbow", "per_char"], "label": "Colour mode"},
@@ -43,8 +44,10 @@ def _format(cfg, t):
 
 
 def box(cfg):
-    """Worst-case width for the chosen format; fixed 5px height."""
-    return (max(1, drawing.text_width(_SAMPLE.get(cfg.get("format", "weekday"), "WWW"))), 5)
+    """Worst-case width for the chosen format and font."""
+    font = cfg.get("font", "font3x5")
+    h = 9 if font == "font5x9" else 5
+    return (max(1, drawing.text_width(_SAMPLE.get(cfg.get("format", "weekday"), "WWW"), font=font)), h)
 
 
 def render(g, x, y, w, h, cfg, state):

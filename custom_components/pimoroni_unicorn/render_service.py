@@ -214,6 +214,8 @@ FONT_SPECS = [
      "builtin": True, "upper": True, "sample": "HELLO 2026"},
     {"name": "font4x5",    "label": "Mini 4×5",     "kind": "alpha",  "w": 4, "h": 5,
      "builtin": True, "upper": True, "sample": "HELLO 2026"},
+    {"name": "font5x9",    "label": "Tall 5×9",     "kind": "alpha",  "w": 5, "h": 9,
+     "builtin": True, "upper": False, "sample": "Hello 2026"},
     {"name": "digits",     "label": "Digits 3×5",   "kind": "digits", "w": 3, "h": 5,
      "device_file": "monospace_digits.py",     "sample": "012345"},
     {"name": "big_digits", "label": "Big 5×7",      "kind": "digits", "w": 5, "h": 7,
@@ -226,7 +228,7 @@ FONT_SPECS = [
      "device_file": "monospace_humanist.py",   "sample": "012345"},
 ]
 
-_ALPHA_FONTS = {"font3x5": True, "font4x5": True}  # name -> force-uppercase
+_ALPHA_FONTS = {"font3x5": True, "font4x5": True, "font5x9": False}  # name -> force-uppercase
 _DIGIT_FONTS = {
     "digits":     ("monospace_digits",     "DIGITS",     3, 5),
     "big_digits": ("monospace_big_digits", "BIG_DIGITS", 5, 7),

@@ -2,7 +2,7 @@
 """Display drawing utilities for the Pimoroni Unicorn."""
 import time
 
-from .bitfonts import font3x5
+from .bitfonts import font3x5, font5x9
 from .monospace_big_digits import BIG_DIGITS
 from .monospace_blocky import BLOCKY
 from .monospace_digits import DIGITS
@@ -16,6 +16,16 @@ _CLOCK_FONTS = {
     "tall":     (TALL, 3),
     "humanist": (HUMANIST, 4),
 }
+
+# Selectable text fonts: name -> (glyph table, force-uppercase). font3x5 is
+# uppercase-only; font5x9 is mixed-case so case is preserved.
+_TEXT_FONTS = {"font3x5": (font3x5, True), "font5x9": (font5x9, False)}
+
+
+def _text_font(name):
+    """Resolve a text font name to (glyph table, force-uppercase)."""
+    return _TEXT_FONTS.get(name, _TEXT_FONTS["font3x5"])
+
 
 BATTERY_ROWS = 4
 
@@ -109,16 +119,17 @@ def text_fx_colors(s, cfg, elapsed_ms=0):
 
 
 def draw_text_fx(s, x, y, cfg, elapsed_ms=0):
-    """Draw an uppercase 3x5 string with solid / per-char / rainbow colouring."""
-    s = str(s).upper()
+    """Draw a string in the configured text font with solid / per-char / rainbow colouring."""
+    table, upper = _text_font(cfg.get("font", "font3x5"))
+    s = str(s).upper() if upper else str(s)
     colors = text_fx_colors(s, cfg, elapsed_ms)
     cx = x
     for i in range(len(s)):
-        glyph = font3x5.get(s[i])
+        glyph = table.get(s[i])
         if glyph is None:
             continue
         _g.set_pen(_g.create_pen(*colors[i]))
-        _bitfont.draw_char(s[i], cx, y, font3x5)
+        _bitfont.draw_char(s[i], cx, y, table)
         cx += glyph["w"] + glyph["s"]
 
 
@@ -291,11 +302,13 @@ BIG_DIGIT_W = 5
 BIG_DIGIT_STEP = BIG_DIGIT_W + 1
 
 
-def text_width(s, d=1):
-    """Pixel width of a string in the 3x5 font (unknown glyphs skipped)."""
+def text_width(s, d=1, font="font3x5"):
+    """Pixel width of a string in the named text font (unknown glyphs skipped)."""
+    table, upper = _text_font(font)
+    seq = str(s).upper() if upper else str(s)
     total = 0
-    for ch in str(s).upper():
-        glyph = font3x5.get(ch)
+    for ch in seq:
+        glyph = table.get(ch)
         if glyph:
             total += glyph["w"] + d
     return total - d if total else 0
