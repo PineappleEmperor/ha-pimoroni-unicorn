@@ -6,14 +6,16 @@ import declarative
 import overlay_weather
 import widget_calendar
 import widget_clock
+import widget_date
 import widget_energy
 import widget_icon
 import widget_sensor
 import widget_sun_moon
+import widget_text
 import widget_weekdays
 
 _UNITS = [widget_clock, widget_calendar, widget_weekdays, widget_energy, widget_sun_moon,
-          widget_sensor, widget_icon]
+          widget_sensor, widget_icon, widget_text, widget_date]
 _OVERLAY_UNITS = [overlay_weather]
 
 

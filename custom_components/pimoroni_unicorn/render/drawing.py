@@ -237,6 +237,22 @@ BIG_DIGIT_W = 5
 BIG_DIGIT_STEP = BIG_DIGIT_W + 1
 
 
+def text_width(s, d=1):
+    """Pixel width of a string in the 3x5 font (unknown glyphs skipped)."""
+    total = 0
+    for ch in str(s).upper():
+        glyph = font3x5.get(ch)
+        if glyph:
+            total += glyph["w"] + d
+    return total - d if total else 0
+
+
+def draw_text(s, x, y, color=None):
+    """Draw an uppercase string in the 3x5 bitmap font at (x, y)."""
+    _g.set_pen(_g.create_pen(*color) if color else _WHITE)
+    _bitfont.draw_text(str(s).upper(), x, y, font3x5, d=1)
+
+
 def draw_clock(x, t=None, y=1, variant="big", color=None):
     """Draw the time at (x, y). variant: big (HHMM row), small (3x5 row), stacked (HH over MM)."""
     if t is None:

@@ -56,6 +56,8 @@ OTA_SOURCE_FILES = {
     "widget_sun_moon":     ("widget_sun_moon.py",      "/widgets/widget_sun_moon.py"),
     "widget_sensor":       ("widget_sensor.py",        "/widgets/widget_sensor.py"),
     "widget_icon":         ("widget_icon.py",          "/widgets/widget_icon.py"),
+    "widget_text":         ("widget_text.py",          "/widgets/widget_text.py"),
+    "widget_date":         ("widget_date.py",          "/widgets/widget_date.py"),
     "monospace_digits":    ("monospace_digits.py",     "/assets/fonts/monospace_digits.py"),
     "monospace_big_digits":("monospace_big_digits.py", "/assets/fonts/monospace_big_digits.py"),
     "monospace_blocky":    ("monospace_blocky.py",     "/assets/fonts/monospace_blocky.py"),
