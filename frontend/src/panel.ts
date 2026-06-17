@@ -26,6 +26,17 @@ const SAMPLE_SPEC = JSON.stringify({
 const MODELS: Record<string, Size> = { galactic: [53, 11], cosmic: [32, 32], stellar: [16, 16] };
 const MOCK = "__mock__";
 
+// Declarative op types and their per-op fields (all ops also carry x, y).
+const OP_TYPES = ["value", "bar", "rect", "pixel", "icon", "dot"];
+const OP_FIELDS: Record<string, [string, string][]> = {
+  value: [["bind", "text"], ["fmt", "text"], ["color", "rgb"]],
+  bar:   [["w", "num"], ["h", "num"], ["bind", "text"], ["max", "num"], ["color", "rgb"], ["bg", "rgb"]],
+  rect:  [["w", "num"], ["h", "num"], ["color", "rgb"]],
+  pixel: [["color", "rgb"]],
+  icon:  [["name", "icon"]],
+  dot:   [["w", "num"], ["h", "num"], ["bind", "text"], ["on_color", "rgb"], ["off_color", "rgb"]],
+};
+
 const hex = (rgb?: Rgb): string => {
   const [r, g, b] = rgb ?? [0, 0, 0];
   return "#" + [r, g, b].map((v) => Math.max(0, Math.min(255, v | 0)).toString(16).padStart(2, "0")).join("");
@@ -73,6 +84,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private screenOpacity = 1;
   private screenTimer = 0;
   @state() private specText = SAMPLE_SPEC;
+  @state() private editMode: "form" | "yaml" = "form";
   @state() private specPng = "";
   @state() private specError = "";
   private specTimer = 0;
@@ -171,13 +183,12 @@ export class PimoroniUnicornPanel extends LitElement {
     .chev.open { transform: rotate(90deg); }
     .stitle { font-size: 16px; font-weight: 500; }
     .mtable { max-width: 780px; margin-bottom: 8px; }
-    .mhead, .mrow { display: grid; grid-template-columns: 56px minmax(120px,1fr) minmax(80px,0.9fr) 120px 110px; gap: 12px; align-items: center; }
-    .mtable.compact .mhead, .mtable.compact .mrow { grid-template-columns: minmax(120px,1fr) minmax(80px,0.9fr) 120px 110px; }
+    .mhead, .mrow { display: grid; grid-template-columns: 108px minmax(120px,1fr) minmax(80px,0.9fr) 120px 110px; gap: 12px; align-items: center; }
     .mhead { font-size: 12px; font-weight: 600; color: var(--secondary-text-color, #79747e); padding: 0 14px 6px; }
     .mrow { border: 1px solid var(--pu-outline); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
     .cell-name { font-weight: 500; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .cell-action { display: flex; justify-content: flex-end; }
-    .thumb { width: 48px; height: 48px; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .thumb { width: 100px; height: 64px; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
     .catalog { list-style: none; padding: 0; margin: 0; max-width: 680px; }
     .catalog li {
       display: flex; gap: 12px; align-items: center; padding: 12px 14px;
@@ -188,6 +199,7 @@ export class PimoroniUnicornPanel extends LitElement {
     .badge.ok { background: color-mix(in srgb, var(--success-color, #2e7d32) 18%, transparent); color: var(--success-color, #2e7d32); }
     .badge.warn { background: color-mix(in srgb, var(--warning-color, #ed6c02) 20%, transparent); color: var(--warning-color, #ed6c02); }
     .spec { width: 380px; height: 320px; font: 13px ui-monospace, monospace; resize: vertical; }
+    .opcard { border: 1px solid var(--pu-outline); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
   `;
 
   protected firstUpdated(): void { this.loadDevices(); this.loadIcons(); }
@@ -779,14 +791,90 @@ export class PimoroniUnicornPanel extends LitElement {
     } catch (err: any) { this.specError = err?.message ?? String(err); }
   }
 
+  private parsedSpec(): Record<string, any> | null {
+    try { return JSON.parse(this.specText); } catch { return null; }
+  }
+  private writeSpec(spec: Record<string, any>): void {
+    this.specText = JSON.stringify(spec, null, 2);
+    this.specError = "";
+    clearTimeout(this.specTimer);
+    this.specTimer = window.setTimeout(() => this.previewSpec(), 120);
+  }
+  private setSpecField(key: string, val: unknown): void {
+    const s = this.parsedSpec(); if (!s) return;
+    s[key] = val; this.writeSpec(s);
+  }
+  private setOpField(i: number, key: string, val: unknown): void {
+    const s = this.parsedSpec(); if (!s || !Array.isArray(s.draw)) return;
+    s.draw[i] = { ...s.draw[i], [key]: val }; this.writeSpec(s);
+  }
+  private addOp(type: string): void {
+    const s = this.parsedSpec() ?? {}; s.draw = [...(s.draw ?? []), { op: type, x: 0, y: 0 }]; this.writeSpec(s);
+  }
+  private removeOp(i: number): void {
+    const s = this.parsedSpec(); if (!s || !Array.isArray(s.draw)) return;
+    s.draw.splice(i, 1); this.writeSpec(s);
+  }
+
+  private _opField(op: Record<string, any>, i: number, key: string, type: string) {
+    if (type === "rgb") return html`<label>${key}</label>
+      <input type="color" .value=${hex(op[key] as Rgb)} @input=${(e: Event) => this.setOpField(i, key, unhex((e.target as HTMLInputElement).value))} />`;
+    if (type === "num") return html`<label>${key}</label>
+      <input type="number" style="width:54px" .value=${String(op[key] ?? 0)} @change=${(e: Event) => this.setOpField(i, key, +(e.target as HTMLInputElement).value)} />`;
+    if (type === "icon") return html`<label>${key}</label>
+      <select @change=${(e: Event) => this.setOpField(i, key, (e.target as HTMLSelectElement).value)}>
+        ${this.iconNames.map((o) => html`<option ?selected=${op[key] === o}>${o}</option>`)}</select>`;
+    return html`<label>${key}</label>
+      <input type="text" style="width:90px" .value=${String(op[key] ?? "")} @change=${(e: Event) => this.setOpField(i, key, (e.target as HTMLInputElement).value)} />`;
+  }
+  private _opEditor(op: Record<string, any>, i: number) {
+    return html`<div class="opcard">
+      <div class="panelrow">
+        <select @change=${(e: Event) => this.setOpField(i, "op", (e.target as HTMLSelectElement).value)}>
+          ${OP_TYPES.map((t) => html`<option ?selected=${t === op.op}>${t}</option>`)}</select>
+        <label>x</label><input type="number" style="width:54px" .value=${String(op.x ?? 0)} @change=${(e: Event) => this.setOpField(i, "x", +(e.target as HTMLInputElement).value)} />
+        <label>y</label><input type="number" style="width:54px" .value=${String(op.y ?? 0)} @change=${(e: Event) => this.setOpField(i, "y", +(e.target as HTMLInputElement).value)} />
+        <span class="grow"></span>
+        <button class="danger zbtn" @click=${() => this.removeOp(i)}>✕</button>
+      </div>
+      <div class="panelrow">${(OP_FIELDS[op.op] ?? []).map(([k, t]) => this._opField(op, i, k, t))}</div>
+    </div>`;
+  }
+  private _formView() {
+    const s = this.parsedSpec();
+    if (!s) return html`<p class="status err">Spec isn't valid JSON — switch to YAML / JSON to fix it.</p>`;
+    const num = (k: string) => html`<label>${k}</label><input type="number" style="width:60px" .value=${String(s[k] ?? "")} @change=${(e: Event) => this.setSpecField(k, +(e.target as HTMLInputElement).value)} />`;
+    return html`
+      <div class="panelrow">
+        <label>ID</label><input style="width:120px" .value=${s.id ?? ""} @change=${(e: Event) => this.setSpecField("id", (e.target as HTMLInputElement).value)} />
+        <label>Label</label><input style="width:120px" .value=${s.label ?? ""} @change=${(e: Event) => this.setSpecField("label", (e.target as HTMLInputElement).value)} />
+      </div>
+      <div class="panelrow">${num("w")}${num("h")}</div>
+      <h3>Draw ops</h3>
+      ${(s.draw ?? []).map((op: Record<string, any>, i: number) => this._opEditor(op, i))}
+      <div class="panelrow"><label>Add op</label>
+        <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v) { this.addOp(v); (e.target as HTMLSelectElement).value = ""; } }}>
+          <option value="">add op…</option>${OP_TYPES.map((t) => html`<option>${t}</option>`)}</select></div>
+    `;
+  }
+
   private _editorView() {
     const sc = Math.max(6, Math.floor(PREVIEW_TARGET_PX / this.dims[0]));
     return html`
-      <div class="bar"><span class="hint">declarative widget — JSON spec, previewed on ${this.model}</span></div>
+      <div class="bar">
+        <span class="hint">declarative widget — previewed on ${this.model}</span>
+        <span class="grow"></span>
+        <div class="group">
+          <button class="${this.editMode === "form" ? "" : "secondary"}" @click=${() => { this.editMode = "form"; }}>Form</button>
+          <button class="${this.editMode === "yaml" ? "" : "secondary"}" @click=${() => { this.editMode = "yaml"; }}>YAML / JSON</button>
+        </div>
+      </div>
       <div class="wrap">
         <div class="col">
-          <textarea class="spec" .value=${this.specText}
-            @input=${(e: Event) => this.onSpecInput((e.target as HTMLTextAreaElement).value)}></textarea>
+          ${this.editMode === "form"
+            ? this._formView()
+            : html`<textarea class="spec" .value=${this.specText}
+                @input=${(e: Event) => this.onSpecInput((e.target as HTMLTextAreaElement).value)}></textarea>`}
           <div class="panelrow">
             <button @click=${this.saveSpec}>Save custom</button>
             <button class="secondary" @click=${() => { const t = prompt("Paste YAML or JSON widget spec:"); if (t) this.importSpec(t); }}>Import…</button>
