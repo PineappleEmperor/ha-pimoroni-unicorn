@@ -204,3 +204,77 @@ def render_widget_png(model: str, spec: dict, cfg=None, state=None, elapsed_ms: 
 def render_widget_frames(model: str, spec: dict, cfg=None, n: int = 8, step_ms: int = 200) -> list[str]:
     """N base64 PNG frames of a widget spec stepped through time, for an animated preview."""
     return [render_widget_png(model, spec, cfg, None, i * step_ms) for i in range(n)]
+
+
+# Marketplace font catalog. alpha fonts are bitmask dicts in the engine's bitfonts.py
+# (always shipped); digit fonts are installable monospace_* units. Each previews
+# through the device font code so the gallery is byte-faithful.
+FONT_SPECS = [
+    {"name": "font3x5",    "label": "Mini 3×5",     "kind": "alpha",  "w": 3, "h": 5,
+     "builtin": True, "upper": True, "sample": "HELLO 2026"},
+    {"name": "font4x5",    "label": "Mini 4×5",     "kind": "alpha",  "w": 4, "h": 5,
+     "builtin": True, "upper": True, "sample": "HELLO 2026"},
+    {"name": "digits",     "label": "Digits 3×5",   "kind": "digits", "w": 3, "h": 5,
+     "device_file": "monospace_digits.py",     "sample": "012345"},
+    {"name": "big_digits", "label": "Big 5×7",      "kind": "digits", "w": 5, "h": 7,
+     "device_file": "monospace_big_digits.py", "sample": "012345"},
+    {"name": "blocky",     "label": "Blocky 4×5",   "kind": "digits", "w": 4, "h": 5,
+     "device_file": "monospace_blocky.py",     "sample": "012345"},
+    {"name": "tall",       "label": "Tall 3×7",     "kind": "digits", "w": 3, "h": 7,
+     "device_file": "monospace_tall.py",       "sample": "012345"},
+    {"name": "humanist",   "label": "Humanist 4×7", "kind": "digits", "w": 4, "h": 7,
+     "device_file": "monospace_humanist.py",   "sample": "012345"},
+]
+
+_ALPHA_FONTS = {"font3x5": True, "font4x5": True}  # name -> force-uppercase
+_DIGIT_FONTS = {
+    "digits":     ("monospace_digits",     "DIGITS",     3, 5),
+    "big_digits": ("monospace_big_digits", "BIG_DIGITS", 5, 7),
+    "blocky":     ("monospace_blocky",     "BLOCKY",     4, 5),
+    "tall":       ("monospace_tall",       "TALL",       3, 7),
+    "humanist":   ("monospace_humanist",   "HUMANIST",   4, 7),
+}
+
+
+def font_specs() -> list[dict]:
+    """Marketplace font catalog metadata (no install state)."""
+    return [dict(s) for s in FONT_SPECS]
+
+
+def render_text_png(font_name: str, text: str, color=(255, 255, 255)) -> str:
+    """Render a text strip in the named device font; base64 PNG sized to content."""
+    m = _modules()
+    text = str(text)
+    if font_name in _ALPHA_FONTS:
+        font = getattr(m.bitfonts, font_name)
+        s = "".join(c for c in (text.upper() if _ALPHA_FONTS[font_name] else text) if c in font)
+        gh = font[s[0]]["h"] if s else 5
+        width = sum(font[c]["w"] + font[c]["s"] for c in s) - (font[s[-1]]["s"] if s else 0)
+        width = max(1, width)
+        g = m.PicoGraphics(width, gh)
+        g.set_pen(g.create_pen(0, 0, 0))
+        g.clear()
+        g.set_pen(g.create_pen(*color))
+        m.bitfonts.BitFont(g).draw_text(s, 0, 0, font, d=1)
+        return _encode(g, width, gh)
+    if font_name in _DIGIT_FONTS:
+        from importlib import import_module
+
+        modname, attr, gw, gh = _DIGIT_FONTS[font_name]
+        table = getattr(import_module(f"{__package__}.render.{modname}"), attr)
+        digits = [int(c) for c in text if c.isdigit()]
+        width = max(1, len(digits) * (gw + 1) - 1) if digits else 1
+        g = m.PicoGraphics(width, gh)
+        g.set_pen(g.create_pen(0, 0, 0))
+        g.clear()
+        g.set_pen(g.create_pen(*color))
+        x = 0
+        for d in digits:
+            row = table[d]
+            for i in range(gh):
+                for j in range(gw):
+                    if row[i * gw + j]:
+                        g.pixel(x + j, i)
+            x += gw + 1
+        return _encode(g, width, gh)
+    raise ValueError(f"unknown font {font_name}")

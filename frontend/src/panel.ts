@@ -11,6 +11,7 @@ interface Layout { name?: string; model?: string; grid?: number; widgets: Widget
 interface Device { entry_id: string; device_id: string; model: string; name: string; active_layout?: string; }
 interface CatalogWidget { id: string; label: string; kind: string; requires: string[]; device_file: string; hash: string; status: string; thumb?: string; }
 interface ContentUnit { id: string; label: string; kind: string; compat: string[]; requires: string[]; screens: number; compatible: boolean; thumb?: string; }
+interface FontSpec { name: string; label: string; kind: "alpha" | "digits"; w: number; h: number; builtin?: boolean; sample: string; }
 interface FwManifest { engine_version?: string; files?: Record<string, string>; }
 
 const PREVIEW_TARGET_PX = 560;
@@ -78,6 +79,10 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private installedIcons: string[] = [];
   @state() private iconCode = "";
   @state() private iconName = "";
+  @state() private fonts: FontSpec[] = [];
+  @state() private fontText = "";
+  @state() private fontPngs: Record<string, string> = {};
+  private fontTimer = 0;
   @state() private dirty = false;
   @state() private sectionsOpen: Record<string, boolean> = {};
   @state() private screenLayouts: string[] = [];
@@ -211,9 +216,12 @@ export class PimoroniUnicornPanel extends LitElement {
     .badge.warn { background: color-mix(in srgb, var(--warning-color, #ed6c02) 20%, transparent); color: var(--warning-color, #ed6c02); }
     .spec { width: 380px; height: 320px; font: 13px ui-monospace, monospace; resize: vertical; }
     .opcard { border: 1px solid var(--pu-outline); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+    .frow { display: flex; align-items: center; gap: 14px; padding: 8px 10px; border: 1px solid var(--pu-outline); border-radius: 8px; margin-bottom: 6px; }
+    .fmeta { display: flex; flex-direction: column; gap: 2px; width: 160px; flex: none; }
+    .fprev { height: 40px; image-rendering: pixelated; background: #000; border-radius: 6px; padding: 0 8px; object-fit: contain; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
   `;
 
-  protected firstUpdated(): void { this.loadDevices(); this.loadIcons(); }
+  protected firstUpdated(): void { this.loadDevices(); this.loadIcons(); this.loadFonts(); }
 
   private async loadIcons() {
     try {
@@ -236,6 +244,30 @@ export class PimoroniUnicornPanel extends LitElement {
     await this.hass.callWS({ type: "pimoroni_unicorn/icon_remove", name });
     this.status = `Removed icon "${name}".`;
     this.loadIcons();
+  }
+
+  private async loadFonts() {
+    try {
+      const r = await this.hass.callWS({ type: "pimoroni_unicorn/fonts" });
+      this.fonts = r.fonts ?? [];
+      this.refreshFontPreviews();
+    } catch { /* font catalog optional */ }
+  }
+  private onFontInput(text: string) {
+    this.fontText = text;
+    clearTimeout(this.fontTimer);
+    this.fontTimer = window.setTimeout(() => this.refreshFontPreviews(), 250);
+  }
+  private async refreshFontPreviews() {
+    const out: Record<string, string> = {};
+    await Promise.all(this.fonts.map(async (f) => {
+      const text = this.fontText.trim() || f.sample;
+      try {
+        const r = await this.hass.callWS({ type: "pimoroni_unicorn/font_preview", font: f.name, text });
+        out[f.name] = r.png;
+      } catch { /* skip unrenderable */ }
+    }));
+    this.fontPngs = out;
   }
 
   connectedCallback(): void {
@@ -855,6 +887,22 @@ export class PimoroniUnicornPanel extends LitElement {
               <span class="grow">${n}</span>
               <button class="danger zbtn" @click=${() => this.removeIcon(n)}>Remove</button></div>`)
           : html`<p class="hint">No custom icons installed yet.</p>`}
+      `)}
+
+      ${this._section("fonts", "Fonts", this.fonts.length, html`
+        <p class="hint">Type below to preview live in every font. Digit fonts (clock faces) show only numerals; alpha fonts cover A–Z. Fonts install automatically with any widget that needs them.</p>
+        <div class="panelrow">
+          <label>Preview text</label>
+          <input style="width:220px" placeholder="type to preview…" .value=${this.fontText}
+            @input=${(e: Event) => this.onFontInput((e.target as HTMLInputElement).value)} />
+        </div>
+        ${this.fonts.map((f) => html`<div class="frow">
+          <div class="fmeta"><span class="cell-name">${f.label}</span>
+            <span class="hint">${f.kind === "digits" ? "digits" : "A–Z 0–9"} · ${f.w}×${f.h}${f.builtin ? " · built-in" : ""}</span></div>
+          ${this.fontPngs[f.name]
+            ? html`<img class="fprev" src="data:image/png;base64,${this.fontPngs[f.name]}" />`
+            : html`<div class="fprev"></div>`}
+        </div>`)}
       `)}
       <p class="hint">Deploying a page installs any widgets/fonts it needs over the air first, then pushes it; the device reboots if files changed.</p>
     `;

@@ -36,6 +36,8 @@ WS_DELETE_SCREENSET = "pimoroni_unicorn/delete_screenset"
 WS_ICONS          = "pimoroni_unicorn/icons"
 WS_ICON_INSTALL   = "pimoroni_unicorn/icon_install"
 WS_ICON_REMOVE    = "pimoroni_unicorn/icon_remove"
+WS_FONTS          = "pimoroni_unicorn/fonts"
+WS_FONT_PREVIEW   = "pimoroni_unicorn/font_preview"
 
 
 @callback
@@ -47,7 +49,7 @@ def async_register(hass: HomeAssistant) -> None:
                     ws_widget_preview, ws_widget_save, ws_widget_import, ws_widget_delete,
                     ws_content_catalog, ws_deploy_layout, ws_deploy_screenset,
                     ws_publish_layout, ws_save_screenset, ws_delete_screenset, ws_icons,
-                    ws_icon_install, ws_icon_remove):
+                    ws_icon_install, ws_icon_remove, ws_fonts, ws_font_preview):
         websocket_api.async_register_command(hass, handler)
 
 
@@ -516,6 +518,28 @@ async def ws_icon_remove(hass, connection, msg):
     """Remove an installed custom/LaMetric icon."""
     await lametric.async_remove_icon(hass, msg["name"])
     connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({vol.Required("type"): WS_FONTS})
+@callback
+def ws_fonts(hass, connection, msg):
+    """Marketplace font catalog: alpha + digit fonts with a sample string each."""
+    connection.send_result(msg["id"], {"fonts": render_service.font_specs()})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_FONT_PREVIEW,
+    vol.Required("font"): vol.In([s["name"] for s in render_service.FONT_SPECS]),
+    vol.Required("text"): str,
+    vol.Optional("color"): [vol.Coerce(int)],
+})
+@websocket_api.async_response
+async def ws_font_preview(hass, connection, msg):
+    """Render arbitrary text in a font to a content-sized base64 PNG (type-to-preview)."""
+    color = tuple(msg.get("color") or (255, 255, 255))[:3]
+    png = await hass.async_add_executor_job(
+        render_service.render_text_png, msg["font"], msg["text"], color)
+    connection.send_result(msg["id"], {"png": png})
 
 
 def _parse_spec_text(text: str):
