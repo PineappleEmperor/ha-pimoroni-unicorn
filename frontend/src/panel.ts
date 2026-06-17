@@ -551,6 +551,16 @@ export class PimoroniUnicornPanel extends LitElement {
     this.selected = -1;
     this.edited();
   }
+  // Array order is z-order: later entries draw on top. dir -1 raises (toward front).
+  private moveWidget(i: number, dir: -1 | 1): void {
+    const j = i - dir;
+    const ws = this.layout.widgets;
+    if (j < 0 || j >= ws.length) return;
+    [ws[i], ws[j]] = [ws[j], ws[i]];
+    if (this.selected === i) this.selected = j;
+    else if (this.selected === j) this.selected = i;
+    this.edited();
+  }
   private toggleOverlay(id: string, on: boolean): void {
     const set = new Set(this.layout.overlays ?? []);
     if (on) set.add(id); else set.delete(id);
@@ -756,15 +766,24 @@ export class PimoroniUnicornPanel extends LitElement {
         </div>
 
         <div class="col">
-          <h3>Widgets</h3>
+          <h3>Layers</h3>
           <ul class="wlist">
-            ${this.layout.widgets.map((w, i) => html`
+            ${[...this.layout.widgets.keys()].reverse().map((i) => {
+              const w = this.layout.widgets[i];
+              const last = this.layout.widgets.length - 1;
+              return html`
               <li class="${i === this.selected ? "sel" : ""}" @click=${() => (this.selected = i)}>
-                <input type="checkbox" .checked=${w.enabled !== false}
+                <input type="checkbox" .checked=${w.enabled !== false} title="Show / hide"
                   @click=${(e: Event) => { e.stopPropagation(); w.enabled = (e.target as HTMLInputElement).checked; this.edited(); }} />
                 <span class="grow">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span>
-              </li>`)}
+                <button class="zbtn" title="Raise" ?disabled=${i === last}
+                  @click=${(e: Event) => { e.stopPropagation(); this.moveWidget(i, -1); }}>▲</button>
+                <button class="zbtn" title="Lower" ?disabled=${i === 0}
+                  @click=${(e: Event) => { e.stopPropagation(); this.moveWidget(i, 1); }}>▼</button>
+              </li>`;
+            })}
           </ul>
+          ${this.layout.widgets.length > 1 ? html`<p class="hint">Top of the list draws on top.</p>` : ""}
           ${addable.length ? html`<div class="panelrow">
             <select id="addsel"><option value="">add widget…</option>${addable.map((c) => html`<option value=${c.id}>${c.label}</option>`)}</select>
             <button class="secondary" @click=${() => { const sel = this.renderRoot.querySelector("#addsel") as HTMLSelectElement; this.addWidget(sel.value); sel.value = ""; }}>Add</button>
