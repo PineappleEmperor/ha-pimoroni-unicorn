@@ -121,6 +121,7 @@ def draw_text_fx(s, x, y, cfg, elapsed_ms=0):
     """Draw a string in the configured text font with solid / per-char / rainbow colouring."""
     table, upper = _text_font(cfg.get("font", "font3x5"))
     s = str(s).upper() if upper else str(s)
+    spacing = cfg.get("spacing", 0)
     colors = text_fx_colors(s, cfg, elapsed_ms)
     cx = x
     for i in range(len(s)):
@@ -129,7 +130,7 @@ def draw_text_fx(s, x, y, cfg, elapsed_ms=0):
             continue
         _g.set_pen(_g.create_pen(*colors[i]))
         _bitfont.draw_char(s[i], cx, y, table)
-        cx += glyph["w"] + glyph["s"]
+        cx += glyph["w"] + glyph["s"] + spacing
 
 
 def soc_colour(soc_pct, is_charging):
@@ -301,7 +302,7 @@ BIG_DIGIT_W = 5
 BIG_DIGIT_STEP = BIG_DIGIT_W + 1
 
 
-def text_width(s, d=1, font="font3x5"):
+def text_width(s, d=1, font="font3x5", spacing=0):
     """Pixel width of a string in the named text font (unknown glyphs skipped)."""
     table, upper = _text_font(font)
     seq = str(s).upper() if upper else str(s)
@@ -309,8 +310,8 @@ def text_width(s, d=1, font="font3x5"):
     for ch in seq:
         glyph = table.get(ch)
         if glyph:
-            total += glyph["w"] + d
-    return total - d if total else 0
+            total += glyph["w"] + d + spacing
+    return total - d - spacing if total else 0
 
 
 def draw_text(s, x, y, color=None):
