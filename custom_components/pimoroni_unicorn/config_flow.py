@@ -47,20 +47,22 @@ _MODEL_SELECTOR = SelectSelector(
 
 
 def _options_schema(current: dict) -> vol.Schema:
-    def _d(key, default=""):
-        return current.get(key) or default
+    def _sv(key, default=None):
+        # suggested_value (pre-fill) with NO default, so clearing a field omits the key.
+        v = current.get(key) or default
+        return {"suggested_value": v} if v is not None else {}
 
     return vol.Schema({
-        vol.Required(CONF_DEVICE_ID,               default=_d(CONF_DEVICE_ID)):               str,
-        vol.Required(CONF_MODEL,                   default=_d(CONF_MODEL, UNICORN_MODELS[0])): _MODEL_SELECTOR,
-        vol.Optional(CONF_SOLAR_ENTITY,            default=_d(CONF_SOLAR_ENTITY)):            EntitySelector(EntitySelectorConfig(device_class="power")),
-        vol.Optional(CONF_CONSUMPTION_ENTITY,      default=_d(CONF_CONSUMPTION_ENTITY)):      EntitySelector(EntitySelectorConfig(device_class="power")),
-        vol.Optional(CONF_BATTERY_SOC_ENTITY,      default=_d(CONF_BATTERY_SOC_ENTITY)):      EntitySelector(EntitySelectorConfig(device_class="battery")),
-        vol.Optional(CONF_BATTERY_CHARGING_ENTITY, default=_d(CONF_BATTERY_CHARGING_ENTITY)): EntitySelector(EntitySelectorConfig(domain="binary_sensor", device_class="battery_charging")),
-        vol.Optional(CONF_SUN_ENTITY,              default=_d(CONF_SUN_ENTITY, "sun.sun")):   EntitySelector(EntitySelectorConfig(domain="sun")),
-        vol.Optional(CONF_WEATHER_CODE_ENTITY,     default=_d(CONF_WEATHER_CODE_ENTITY)):     EntitySelector(EntitySelectorConfig(domain="sensor")),
-        vol.Optional(CONF_EXTRA_SENSORS,           default=_d(CONF_EXTRA_SENSORS)):           TextSelector(TextSelectorConfig(multiline=True)),
-        vol.Optional(CONF_SHOW_PANEL,              default=current.get(CONF_SHOW_PANEL, True)): BooleanSelector(),
+        vol.Required(CONF_DEVICE_ID, default=current.get(CONF_DEVICE_ID, "")):              str,
+        vol.Required(CONF_MODEL, default=current.get(CONF_MODEL) or UNICORN_MODELS[0]):     _MODEL_SELECTOR,
+        vol.Optional(CONF_SOLAR_ENTITY,            description=_sv(CONF_SOLAR_ENTITY)):            EntitySelector(EntitySelectorConfig(device_class="power")),
+        vol.Optional(CONF_CONSUMPTION_ENTITY,      description=_sv(CONF_CONSUMPTION_ENTITY)):      EntitySelector(EntitySelectorConfig(device_class="power")),
+        vol.Optional(CONF_BATTERY_SOC_ENTITY,      description=_sv(CONF_BATTERY_SOC_ENTITY)):      EntitySelector(EntitySelectorConfig(device_class="battery")),
+        vol.Optional(CONF_BATTERY_CHARGING_ENTITY, description=_sv(CONF_BATTERY_CHARGING_ENTITY)): EntitySelector(EntitySelectorConfig(domain="binary_sensor", device_class="battery_charging")),
+        vol.Optional(CONF_SUN_ENTITY,              description=_sv(CONF_SUN_ENTITY, "sun.sun")):   EntitySelector(EntitySelectorConfig(domain="sun")),
+        vol.Optional(CONF_WEATHER_CODE_ENTITY,     description=_sv(CONF_WEATHER_CODE_ENTITY)):     EntitySelector(EntitySelectorConfig(domain="sensor")),
+        vol.Optional(CONF_EXTRA_SENSORS,           description=_sv(CONF_EXTRA_SENSORS)):           TextSelector(TextSelectorConfig(multiline=True)),
+        vol.Optional(CONF_SHOW_PANEL,              default=current.get(CONF_SHOW_PANEL, True)):    BooleanSelector(),
     })
 
 
