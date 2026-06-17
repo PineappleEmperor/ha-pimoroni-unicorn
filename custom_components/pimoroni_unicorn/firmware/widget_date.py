@@ -24,6 +24,7 @@ WIDGET = {
         {"key": "colors", "type": "rgblist", "label": "Per-char colours"},
         {"key": "speed", "type": "number", "min": 0, "max": 10, "step": 1, "label": "Rainbow speed"},
     ],
+    "multi": True,
     "requires": [],
 }
 
