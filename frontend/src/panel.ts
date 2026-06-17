@@ -64,6 +64,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private dims: Size = [53, 11];
   @state() private zoom = 0;  // px per LED; 0 = auto-fit
   @state() private selected = -1;
+  @state() private dragIdx = -1;
   @state() private layoutName = "default";
   @state() private live = false;
   @state() private wireframe = false;
@@ -180,6 +181,9 @@ export class PimoroniUnicornPanel extends LitElement {
     .wlist li:hover { background: color-mix(in srgb, var(--pu-primary) 7%, transparent); }
     .wlist li.sel { background: color-mix(in srgb, var(--pu-primary) 14%, transparent); box-shadow: inset 3px 0 0 var(--pu-primary); }
     .wlist li .grow { flex: 1; }
+    .wlist li.dragging { opacity: .4; }
+    .wlist li .drag { cursor: grab; color: var(--secondary-text-color, #79747e); user-select: none; line-height: 1; }
+    .wlist li .drag:active { cursor: grabbing; }
     .panelrow { display: flex; gap: 10px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
     .panelrow > label:first-child { min-width: 64px; }
     h3 { margin: 4px 0 14px; font-size: 16px; font-weight: 500; letter-spacing: .1px; }
@@ -551,14 +555,15 @@ export class PimoroniUnicornPanel extends LitElement {
     this.selected = -1;
     this.edited();
   }
-  // Array order is z-order: later entries draw on top. dir -1 raises (toward front).
-  private moveWidget(i: number, dir: -1 | 1): void {
-    const j = i - dir;
+  // Array order is z-order: later entries draw on top. Drag a layer onto another to reorder.
+  private dropWidget(target: number): void {
+    const from = this.dragIdx;
+    this.dragIdx = -1;
+    if (from < 0 || from === target) return;
     const ws = this.layout.widgets;
-    if (j < 0 || j >= ws.length) return;
-    [ws[i], ws[j]] = [ws[j], ws[i]];
-    if (this.selected === i) this.selected = j;
-    else if (this.selected === j) this.selected = i;
+    const [item] = ws.splice(from, 1);
+    ws.splice(target, 0, item);
+    this.selected = ws.indexOf(item);
     this.edited();
   }
   private toggleOverlay(id: string, on: boolean): void {
@@ -770,16 +775,17 @@ export class PimoroniUnicornPanel extends LitElement {
           <ul class="wlist">
             ${[...this.layout.widgets.keys()].reverse().map((i) => {
               const w = this.layout.widgets[i];
-              const last = this.layout.widgets.length - 1;
               return html`
-              <li class="${i === this.selected ? "sel" : ""}" @click=${() => (this.selected = i)}>
+              <li class="${i === this.selected ? "sel" : ""} ${i === this.dragIdx ? "dragging" : ""}"
+                  @click=${() => (this.selected = i)}
+                  @dragover=${(e: DragEvent) => { e.preventDefault(); }}
+                  @drop=${(e: DragEvent) => { e.preventDefault(); this.dropWidget(i); }}>
+                <span class="drag" title="Drag to reorder" draggable="true"
+                  @dragstart=${(e: DragEvent) => { this.dragIdx = i; if (e.dataTransfer) e.dataTransfer.effectAllowed = "move"; }}
+                  @dragend=${() => { this.dragIdx = -1; }}>⣿</span>
                 <input type="checkbox" .checked=${w.enabled !== false} title="Show / hide"
                   @click=${(e: Event) => { e.stopPropagation(); w.enabled = (e.target as HTMLInputElement).checked; this.edited(); }} />
                 <span class="grow">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span>
-                <button class="zbtn" title="Raise" ?disabled=${i === last}
-                  @click=${(e: Event) => { e.stopPropagation(); this.moveWidget(i, -1); }}>▲</button>
-                <button class="zbtn" title="Lower" ?disabled=${i === 0}
-                  @click=${(e: Event) => { e.stopPropagation(); this.moveWidget(i, 1); }}>▼</button>
               </li>`;
             })}
           </ul>
