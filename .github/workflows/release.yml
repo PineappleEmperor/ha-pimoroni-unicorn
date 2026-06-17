@@ -25,7 +25,10 @@ jobs:
       - name: Create firmware ZIP
         run: |
           cd firmware
-          zip -r ../pimoroni_unicorn_firmware.zip . -x 'secrets.py'
+          # Ship a ready-to-edit secrets.py (from the template) so users don't rename.
+          cp secrets.example.py secrets.py
+          zip -r ../pimoroni_unicorn_firmware.zip . -x 'secrets.example.py'
+          rm secrets.py
           cd ..
           ls -la pimoroni_unicorn_firmware.zip
 

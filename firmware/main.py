@@ -805,8 +805,22 @@ async def connect_wifi():
     await sync_time()
 
 
+async def _show_unconfigured():
+    """secrets.py not filled in — show an alert instead of hanging on a blank WiFi connect."""
+    print("Secrets not configured — copy secrets.example.py to secrets.py and fill SSID/MQTT.")
+    while True:
+        graphics.set_pen(graphics.create_pen(60, 0, 0))
+        graphics.clear()
+        icons.draw_icon("alert", (width - 8) // 2, max(0, (height - 8) // 2))
+        unicorn.update(graphics)
+        await asyncio.sleep(1)
+
+
 async def main():
     """Entry point: connect WiFi, then run MQTT and display tasks concurrently."""
+    if not SSID or not MQTT_SERVER:
+        await _show_unconfigured()
+        return
     await connect_wifi()
     await asyncio.gather(mqtt_task(), main_loop())
 

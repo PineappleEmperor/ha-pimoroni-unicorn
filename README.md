@@ -63,9 +63,11 @@ After setup, open **Configure** to set optional data sources, currently these co
 
 ### 1. Fill in secrets
 
-Copy `firmware/secrets.example.py` to `firmware/secrets.py` and fill in your Wi-Fi
-credentials, MQTT broker details, `DEVICE_ID`, and `MODEL` (`galactic`/`cosmic`/`stellar`).
-`secrets.py` is gitignored and stays on your machine/device only.
+The firmware release zip already contains a ready-to-edit **`secrets.py`** — just open it and
+fill in your Wi-Fi credentials, MQTT broker details, `DEVICE_ID`, and `MODEL`
+(`galactic`/`cosmic`/`stellar`). (Working from the repo instead? Copy `firmware/secrets.example.py`
+to `firmware/secrets.py`.) `secrets.py` is gitignored and stays on your machine/device only.
+The device shows an alert and won't connect until `SSID`/`MQTT_SERVER` are set.
 
 ### 2. First flash (once, over USB)
 
