@@ -3,7 +3,6 @@ import hashlib
 from pathlib import Path
 
 from homeassistant.components.update import UpdateEntity, UpdateEntityFeature
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -18,6 +17,7 @@ from .const import (
     ENGINE_REFLASH_BELOW,
     ENGINE_VERSION,
     OTA_SOURCE_FILES,
+    PUConfigEntry,
 )
 
 _BUNDLE_DIR = Path(__file__).parent / "firmware"
@@ -44,7 +44,7 @@ def _engine_bundle_hashes() -> dict[str, str]:
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback,
+    hass: HomeAssistant, entry: PUConfigEntry, async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the firmware update entity."""
     opts = {**entry.data, **entry.options}
@@ -61,7 +61,7 @@ class PimoroniUnicornUpdate(UpdateEntity):
     _attr_supported_features = UpdateEntityFeature.INSTALL
     _attr_should_poll = False
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_id: str, model: str) -> None:
+    def __init__(self, hass: HomeAssistant, entry: PUConfigEntry, device_id: str, model: str) -> None:
         """Initialise the update entity."""
         self.hass = hass
         self._entry = entry
@@ -74,8 +74,7 @@ class PimoroniUnicornUpdate(UpdateEntity):
 
     def _sync(self) -> None:
         """Recompute installed/latest version from the device manifest, incl. file-hash drift."""
-        manifest = (self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id, {})
-                    .get("fw_manifest") or {})
+        manifest = (self._entry.runtime_data or {}).get("fw_manifest") or {}
         installed = manifest.get("engine_version")
         self._attr_installed_version = installed
         self._reflash = bool(installed) and _ver(installed) < _ver(ENGINE_REFLASH_BELOW)

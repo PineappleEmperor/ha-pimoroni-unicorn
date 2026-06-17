@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from propcache.api import cached_property
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, UnitOfInformation, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -13,7 +12,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
-from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN
+from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN, PUConfigEntry
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -48,7 +47,7 @@ SENSORS: tuple[PUSensorDescription, ...] = (
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback,
+    hass: HomeAssistant, entry: PUConfigEntry, async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the page + diagnostic sensors."""
     opts = {**entry.data, **entry.options}
@@ -63,7 +62,7 @@ class PimoroniUnicornSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_should_poll = False
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_id: str,
+    def __init__(self, hass: HomeAssistant, entry: PUConfigEntry, device_id: str,
                  model: str, description: PUSensorDescription) -> None:
         """Initialise the sensor."""
         self.hass = hass
@@ -78,7 +77,7 @@ class PimoroniUnicornSensor(SensorEntity):
     @cached_property
     def native_value(self) -> StateType:
         """Compute the value from the cached diag + firmware manifest payloads."""
-        data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id, {})
+        data = self._entry.runtime_data or {}
         return self._desc.value_fn(data.get("diag") or {}, data.get("fw_manifest") or {})
 
     async def async_added_to_hass(self) -> None:

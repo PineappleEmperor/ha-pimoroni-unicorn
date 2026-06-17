@@ -23,6 +23,7 @@ async def async_setup_entry(
 class PimoroniUnicornUpdateButton(ButtonEntity):
     """OTA firmware update button."""
 
+    _attr_has_entity_name = True
     _attr_icon = "mdi:upload"
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_id: str, model: str) -> None:

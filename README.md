@@ -59,6 +59,19 @@ After setup, open **Configure** to set optional data sources, currently these co
 | Weather condition entity | Sensor reporting OWM condition code |
 | Extra sensors | One `entity_id topic_suffix` pair per line |
 
+## Removal
+
+**Settings → Devices & Services → Pimoroni Unicorn → ⋮ → Delete**
+
+Deleting the config entry removes its entities and the `notify.pimoroni_unicorn_<device_id>`
+service; the sidebar panel is dropped once no remaining device wants it. Stored layouts,
+playlists and installed marketplace icons/fonts persist in HA storage (shared across
+devices) and are restored if you add the integration again — uninstall the integration via
+HACS to clear them fully. Nothing is left in `configuration.yaml`.
+
+The Pico keeps running its firmware until reflashed — power it off, or wipe it from Thonny
+(**File → Open device** → delete the files) if you want a clean board.
+
 ## Firmware setup
 
 ### 1. Fill in secrets

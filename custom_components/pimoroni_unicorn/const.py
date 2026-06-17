@@ -1,5 +1,12 @@
 """Constants for the Pimoroni Unicorn integration."""
 
+from typing import Any
+
+from homeassistant.config_entries import ConfigEntry
+
+# Per-entry runtime state lives on entry.runtime_data as this dict.
+type PUConfigEntry = ConfigEntry[dict[str, Any]]
+
 DOMAIN = "pimoroni_unicorn"
 CONF_DEVICE_ID = "device_id"
 CONF_MODEL = "model"

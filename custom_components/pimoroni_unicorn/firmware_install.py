@@ -8,7 +8,7 @@ from homeassistant.components.mqtt import async_publish
 from homeassistant.core import HomeAssistant
 
 from . import marketplace
-from .const import CONF_DEVICE_ID, DOMAIN
+from .const import CONF_DEVICE_ID
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ def _device_id(entry) -> str:
 
 
 def _device_files(hass: HomeAssistant, entry) -> dict:
-    manifest = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("fw_manifest")
+    manifest = (entry.runtime_data or {}).get("fw_manifest")
     return (manifest or {}).get("files", {})
 
 

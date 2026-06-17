@@ -100,7 +100,7 @@ def ws_capabilities(hass, connection, msg):
     entry = _entry(hass, msg["entry_id"]) if msg.get("entry_id") else None
     if entry is not None:
         model = _model_key(entry)
-        caps  = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("layout_caps")
+        caps  = (entry.runtime_data or {}).get("layout_caps")
     else:
         model = msg.get("model", "galactic")
     if not caps:
@@ -209,7 +209,8 @@ async def ws_push_screens(hass, connection, msg):
 
 
 def _fw_manifest(hass, entry_id):
-    return hass.data.get(DOMAIN, {}).get(entry_id, {}).get("fw_manifest")
+    entry = _entry(hass, entry_id)
+    return (entry.runtime_data or {}).get("fw_manifest") if entry else None
 
 
 @websocket_api.websocket_command({

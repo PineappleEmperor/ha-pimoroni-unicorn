@@ -39,6 +39,7 @@ from .const import (
     CONF_WEATHER_CODE_ENTITY,
     DOMAIN,
     OTA_SOURCE_FILES,
+    PUConfigEntry,
 )
 from .notify import (
     DISMISS_SCHEMA,
@@ -86,9 +87,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     """Set up Pimoroni Unicorn from a config entry."""
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"unsub": [], "sensor_entities": set(), "diag": {}}
+    hass.data.setdefault(DOMAIN, {})
+    entry.runtime_data = {"unsub": [], "sensor_entities": set(), "diag": {}}
 
     opts      = _merged_opts(entry)
     device_id = opts[CONF_DEVICE_ID]
@@ -117,11 +119,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     """Unload a config entry."""
     await hass.config_entries.async_unload_platforms(entry, ["button", "update", "sensor"])
-    store = hass.data[DOMAIN].pop(entry.entry_id, {})
-    for unsub in store.get("unsub", []):
+    for unsub in (entry.runtime_data or {}).get("unsub", []):
         unsub()
 
     opts      = _merged_opts(entry)
@@ -129,7 +130,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if device_id and hass.services.has_service(NOTIFY_DOMAIN, device_id):
         hass.services.async_remove(NOTIFY_DOMAIN, device_id)
 
-    if not hass.data.get(DOMAIN) and hass.data.pop(f"{DOMAIN}_panel_registered", False):
+    others = [e for e in hass.config_entries.async_entries(DOMAIN) if e.entry_id != entry.entry_id]
+    if not others and hass.data.pop(f"{DOMAIN}_panel_registered", False):
         frontend.async_remove_panel(hass, PANEL_URL_PATH)
 
     return True
@@ -191,7 +193,7 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     await _async_refresh_panel(hass)
 
 
-async def _async_subscribe_layout_caps(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def _async_subscribe_layout_caps(hass: HomeAssistant, entry: PUConfigEntry) -> None:
     """Subscribe to retained layout/capabilities and cache the widget catalogue."""
     device_id = _merged_opts(entry)[CONF_DEVICE_ID]
 
@@ -199,16 +201,16 @@ async def _async_subscribe_layout_caps(hass: HomeAssistant, entry: ConfigEntry) 
     def _on_caps(msg: Any) -> None:
         try:
             data = json.loads(msg.payload)
-            if isinstance(data, dict) and entry.entry_id in hass.data.get(DOMAIN, {}):
-                hass.data[DOMAIN][entry.entry_id]["layout_caps"] = data
+            if isinstance(data, dict):
+                entry.runtime_data["layout_caps"] = data
         except (json.JSONDecodeError, ValueError):
             pass
 
     unsub = await async_subscribe(hass, f"{device_id}/layout/capabilities", _on_caps)
-    hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
+    entry.runtime_data["unsub"].append(unsub)
 
 
-async def _async_subscribe_fw_manifest(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def _async_subscribe_fw_manifest(hass: HomeAssistant, entry: PUConfigEntry) -> None:
     """Subscribe to the retained fw/manifest and cache engine version + file hashes."""
     device_id = _merged_opts(entry)[CONF_DEVICE_ID]
 
@@ -216,8 +218,8 @@ async def _async_subscribe_fw_manifest(hass: HomeAssistant, entry: ConfigEntry) 
     def _on_manifest(msg: Any) -> None:
         try:
             data = json.loads(msg.payload)
-            if isinstance(data, dict) and entry.entry_id in hass.data.get(DOMAIN, {}):
-                hass.data[DOMAIN][entry.entry_id]["fw_manifest"] = data
+            if isinstance(data, dict):
+                entry.runtime_data["fw_manifest"] = data
                 # Device just (re)connected — push fresh time so its clock is right immediately.
                 hass.async_create_task(_async_publish_time(hass, device_id))
                 async_dispatcher_send(hass, f"{DOMAIN}_manifest_{entry.entry_id}")
@@ -225,10 +227,10 @@ async def _async_subscribe_fw_manifest(hass: HomeAssistant, entry: ConfigEntry) 
             pass
 
     unsub = await async_subscribe(hass, f"{device_id}/fw/manifest", _on_manifest)
-    hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
+    entry.runtime_data["unsub"].append(unsub)
 
 
-async def _async_subscribe_diag(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def _async_subscribe_diag(hass: HomeAssistant, entry: PUConfigEntry) -> None:
     """Subscribe to the retained diagnostics topic (current page, free memory, uptime)."""
     device_id = _merged_opts(entry)[CONF_DEVICE_ID]
 
@@ -236,17 +238,17 @@ async def _async_subscribe_diag(hass: HomeAssistant, entry: ConfigEntry) -> None
     def _on_diag(msg: Any) -> None:
         try:
             data = json.loads(msg.payload)
-            if isinstance(data, dict) and entry.entry_id in hass.data.get(DOMAIN, {}):
-                hass.data[DOMAIN][entry.entry_id]["diag"] = data
+            if isinstance(data, dict):
+                entry.runtime_data["diag"] = data
                 async_dispatcher_send(hass, f"{DOMAIN}_diag_{entry.entry_id}")
         except (json.JSONDecodeError, ValueError):
             pass
 
     unsub = await async_subscribe(hass, f"{device_id}/diag", _on_diag)
-    hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
+    entry.runtime_data["unsub"].append(unsub)
 
 
-async def _async_subscribe_notify_caps(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def _async_subscribe_notify_caps(hass: HomeAssistant, entry: PUConfigEntry) -> None:
     """Subscribe to retained notify/capabilities (used to downconvert for old firmware)."""
     device_id = _merged_opts(entry)[CONF_DEVICE_ID]
 
@@ -254,13 +256,13 @@ async def _async_subscribe_notify_caps(hass: HomeAssistant, entry: ConfigEntry) 
     def _on_caps(msg: Any) -> None:
         try:
             data = json.loads(msg.payload)
-            if isinstance(data, dict) and entry.entry_id in hass.data.get(DOMAIN, {}):
-                hass.data[DOMAIN][entry.entry_id]["notify_caps"] = data
+            if isinstance(data, dict):
+                entry.runtime_data["notify_caps"] = data
         except (json.JSONDecodeError, ValueError):
             pass
 
     unsub = await async_subscribe(hass, f"{device_id}/notify/capabilities", _on_caps)
-    hass.data[DOMAIN][entry.entry_id]["unsub"].append(unsub)
+    entry.runtime_data["unsub"].append(unsub)
 
 
 async def _async_publish_time(hass: HomeAssistant, device_id: str) -> None:
@@ -270,7 +272,7 @@ async def _async_publish_time(hass: HomeAssistant, device_id: str) -> None:
     await async_publish(hass, f"{device_id}/time", json.dumps(payload), retain=True)
 
 
-async def _async_setup_time_feed(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def _async_setup_time_feed(hass: HomeAssistant, entry: PUConfigEntry) -> None:
     """Publish HA local time now and on an interval; device sets its RTC from it."""
     device_id = _merged_opts(entry)[CONF_DEVICE_ID]
     await _async_publish_time(hass, device_id)
@@ -278,14 +280,14 @@ async def _async_setup_time_feed(hass: HomeAssistant, entry: ConfigEntry) -> Non
     async def _tick(_now) -> None:
         await _async_publish_time(hass, device_id)
 
-    hass.data[DOMAIN][entry.entry_id]["unsub"].append(
+    entry.runtime_data["unsub"].append(
         async_track_time_interval(hass, _tick, TIME_INTERVAL))
 
 
-async def _async_setup_sensor_feed(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def _async_setup_sensor_feed(hass: HomeAssistant, entry: PUConfigEntry) -> None:
     """Watch entities named by sensor widgets in the active layout; publish their on/off state."""
     device_id = _merged_opts(entry)[CONF_DEVICE_ID]
-    store     = hass.data[DOMAIN][entry.entry_id]
+    store     = entry.runtime_data
     active    = await layout.async_get_active(hass, entry) or {}
     entities: set[str] = set()
     for w in active.get("widgets", []):
@@ -318,10 +320,10 @@ def _merged_opts(entry: ConfigEntry) -> dict[str, Any]:
     return {**entry.data, **entry.options}
 
 
-def _setup_publishers(hass: HomeAssistant, entry: ConfigEntry) -> None:
+def _setup_publishers(hass: HomeAssistant, entry: PUConfigEntry) -> None:
     opts        = _merged_opts(entry)
     device_id   = opts[CONF_DEVICE_ID]
-    store       = hass.data[DOMAIN][entry.entry_id]
+    store       = entry.runtime_data
 
     for unsub in store["unsub"]:
         unsub()

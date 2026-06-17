@@ -17,19 +17,13 @@ rules:
   docs-actions: done
   docs-high-level-description: done
   docs-installation-instructions: done
-  docs-removal-instructions:
-    status: todo
-    comment: Add device/integration removal docs.
+  docs-removal-instructions: done
   entity-event-setup:
     status: todo
     comment: Audit subscribe in async_added_to_hass across button/update.
   entity-unique-id: done
-  has-entity-name:
-    status: todo
-    comment: Audit _attr_has_entity_name on all platforms.
-  runtime-data:
-    status: todo
-    comment: Uses hass.data[DOMAIN][entry_id]; migrate to entry.runtime_data.
+  has-entity-name: done
+  runtime-data: done
   test-before-configure:
     status: todo
     comment: Config flow does not yet test the MQTT/device connection.
