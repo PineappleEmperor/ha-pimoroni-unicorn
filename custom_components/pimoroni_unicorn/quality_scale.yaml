@@ -38,9 +38,7 @@ rules:
   test-before-setup:
     status: todo
     comment: Raise ConfigEntryNotReady when the device/broker is unavailable.
-  unique-config-entry:
-    status: todo
-    comment: Set unique_id (device_id) + abort on duplicate; pairs with #58 discovery.
+  unique-config-entry: done
   # Silver
   config-entry-unloading: done
   log-when-unavailable:
@@ -111,8 +109,8 @@ rules:
     status: exempt
     comment: Only dependency is Pillow (image encoding), run in the executor.
   inject-websession:
-    status: exempt
-    comment: No cloud HTTP session; firmware pulls OTA files device-side.
+    status: done
+    comment: LaMetric icon fetch uses async_get_clientsession; OTA pulls run device-side.
   strict-typing:
     status: todo
     comment: pyright standard passes; not strict mode yet.
