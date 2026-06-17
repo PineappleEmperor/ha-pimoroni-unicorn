@@ -125,12 +125,12 @@ async def ws_layouts(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_render(hass, connection, msg):
-    """Render a layout to a base64 PNG using the device's own render code."""
+    """Render a layout to animated base64 PNG frames using the device's own render code."""
     installed = await lametric.async_get_registry(hass)
-    png = await hass.async_add_executor_job(
-        render_service.render_layout_png, msg["model"], msg["layout"], installed)
+    frames = await hass.async_add_executor_job(
+        render_service.render_layout_frames, msg["model"], msg["layout"], installed)
     boxes = render_service.layout_boxes(msg["layout"])
-    connection.send_result(msg["id"], {"png": png, "boxes": boxes})
+    connection.send_result(msg["id"], {"png": frames[0], "frames": frames, "boxes": boxes})
 
 
 @websocket_api.websocket_command({
@@ -280,14 +280,14 @@ async def ws_fw_remove(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_widget_preview(hass, connection, msg):
-    """Render a declarative widget spec to a base64 PNG."""
+    """Render a declarative widget spec to animated base64 PNG frames."""
     err = marketplace.validate_spec(msg["spec"])
     if err:
         connection.send_error(msg["id"], "invalid", err)
         return
-    png = await hass.async_add_executor_job(
-        render_service.render_widget_png, msg["model"], msg["spec"])
-    connection.send_result(msg["id"], {"png": png})
+    frames = await hass.async_add_executor_job(
+        render_service.render_widget_frames, msg["model"], msg["spec"])
+    connection.send_result(msg["id"], {"png": frames[0], "frames": frames})
 
 
 @websocket_api.websocket_command({

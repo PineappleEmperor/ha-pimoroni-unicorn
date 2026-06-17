@@ -94,6 +94,7 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private renderTimer?: number;
   private pushTimer?: number;
+  private _frameTimers: Record<string, number> = {};
 
   static styles = css`
     :host {
@@ -313,11 +314,21 @@ export class PimoroniUnicornPanel extends LitElement {
     return !this.dirty || confirm("Discard unsaved changes to this page?");
   }
 
+  // Cycle base64 PNG frames into a setter so animated content (icons, weather) plays.
+  private playFrames(key: string, frames: string[], set: (f: string) => void): void {
+    window.clearInterval(this._frameTimers[key]);
+    set(frames[0] ?? "");
+    if (frames.length > 1) {
+      let i = 0;
+      this._frameTimers[key] = window.setInterval(() => { i = (i + 1) % frames.length; set(frames[i]); }, 200);
+    }
+  }
+
   private async renderPreview(): Promise<void> {
     try {
       const res = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: this.layout });
-      this.png = res.png;
       this.wboxes = res.boxes ?? [];
+      this.playFrames("layout", res.frames ?? (res.png ? [res.png] : []), (f) => { this.png = f; });
       if (this.status.startsWith("Render failed")) this.status = "";
     } catch (err: any) {
       this.png = "";
@@ -808,7 +819,7 @@ export class PimoroniUnicornPanel extends LitElement {
     catch (e) { this.specError = `JSON: ${(e as Error).message}`; return; }
     try {
       const r = await this.hass.callWS({ type: "pimoroni_unicorn/widget_preview", model: this.model, spec });
-      this.specPng = r.png; this.specError = "";
+      this.playFrames("spec", r.frames ?? (r.png ? [r.png] : []), (f) => { this.specPng = f; }); this.specError = "";
     } catch (err: any) { this.specError = err?.message ?? String(err); }
   }
 

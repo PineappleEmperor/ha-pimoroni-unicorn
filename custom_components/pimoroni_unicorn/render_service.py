@@ -134,11 +134,12 @@ def _prime_icons(m, installed: dict | None) -> None:
             m.icons._code_alias[str(data["code"])] = name  # noqa: SLF001
 
 
-def render_layout_png(model: str, layout: dict, installed_icons: dict | None = None) -> str:
-    """Render a layout for a model; return a base64 PNG."""
+def render_layout_png(model: str, layout: dict, installed_icons: dict | None = None,
+                      elapsed_ms: int = 0) -> str:
+    """Render a layout for a model at a point in time; return a base64 PNG."""
     m, g, width, height = _new_graphics(model)
     _prime_icons(m, installed_icons)
-    state = {**SAMPLE_STATE, "time": time.localtime()}
+    state = {**SAMPLE_STATE, "time": time.localtime(), "elapsed_ms": elapsed_ms}
     ds = dict(state.get("display_sensors") or {})
     for entry in layout.get("widgets", []):
         ent = (entry.get("cfg") or {}).get("entity")
@@ -147,6 +148,12 @@ def render_layout_png(model: str, layout: dict, installed_icons: dict | None = N
     state["display_sensors"] = ds
     m.widgets.render_layout(g, layout, state)
     return _encode(g, width, height)
+
+
+def render_layout_frames(model: str, layout: dict, installed_icons: dict | None = None,
+                         n: int = 8, step_ms: int = 200) -> list[str]:
+    """N base64 PNG frames stepped through time, so the panel can animate the preview."""
+    return [render_layout_png(model, layout, installed_icons, i * step_ms) for i in range(n)]
 
 
 def render_unit_thumb(model: str, unit_id: str, installed_icons: dict | None = None) -> str | None:
@@ -176,10 +183,10 @@ def render_unit_thumb(model: str, unit_id: str, installed_icons: dict | None = N
     return None
 
 
-def render_widget_png(model: str, spec: dict, cfg=None, state=None) -> str:
+def render_widget_png(model: str, spec: dict, cfg=None, state=None, elapsed_ms: int = 0) -> str:
     """Render a single declarative widget spec to a base64 PNG for authoring preview."""
     m, g, width, height = _new_graphics(model)
-    full = {**SAMPLE_STATE, "time": time.localtime(), **(state or {})}
+    full = {**SAMPLE_STATE, "time": time.localtime(), "elapsed_ms": elapsed_ms, **(state or {})}
     full["display_sensors"] = dict(full.get("display_sensors") or {})
     for op in spec.get("draw", []):
         bind = op.get("bind")
@@ -192,3 +199,8 @@ def render_widget_png(model: str, spec: dict, cfg=None, state=None) -> str:
     cfg = {**spec.get("default_cfg", {}), **(cfg or {})}
     m.declarative.render(g, spec, 0, 0, spec.get("w", width), spec.get("h", height), cfg, full)
     return _encode(g, width, height)
+
+
+def render_widget_frames(model: str, spec: dict, cfg=None, n: int = 8, step_ms: int = 200) -> list[str]:
+    """N base64 PNG frames of a widget spec stepped through time, for an animated preview."""
+    return [render_widget_png(model, spec, cfg, None, i * step_ms) for i in range(n)]
