@@ -1,7 +1,9 @@
 # Contributing to ha-pimoroni-unicorn
 
 Guidance for contributors (and for Claude/AI sessions) working on this repo. If you're
-using Claude, also invoke the `ha-integration` skill before changing integration code.
+using Claude, invoke the `ha-integration` skill before writing or changing integration
+code — and re-invoke it after any `/compact`, since compaction can drop the skill's
+guidance from context.
 
 ## What this is
 
