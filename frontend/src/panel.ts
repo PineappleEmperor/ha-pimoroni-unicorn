@@ -74,6 +74,9 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private contentScreensets: ContentUnit[] = [];
   @state() private showAllContent = false;
   @state() private iconNames: string[] = [];
+  @state() private installedIcons: string[] = [];
+  @state() private iconCode = "";
+  @state() private iconName = "";
   @state() private dirty = false;
   @state() private sectionsOpen: Record<string, boolean> = {};
   @state() private screenLayouts: string[] = [];
@@ -208,7 +211,23 @@ export class PimoroniUnicornPanel extends LitElement {
     try {
       const r = await this.hass.callWS({ type: "pimoroni_unicorn/icons" });
       this.iconNames = [...(r.builtin ?? []), ...(r.installed ?? [])];
+      this.installedIcons = r.installed ?? [];
     } catch { /* icons list optional */ }
+  }
+
+  private async installIcon() {
+    const code = parseInt(this.iconCode, 10);
+    if (!code || !this.iconName.trim()) return;
+    const r = await this.hass.callWS({ type: "pimoroni_unicorn/icon_install", code, name: this.iconName.trim() });
+    this.status = r.ok ? `Installed icon "${this.iconName.trim()}".` : "Couldn't fetch that LaMetric code.";
+    if (r.ok) { this.iconCode = ""; this.iconName = ""; }
+    this.loadIcons();
+  }
+  private async removeIcon(name: string) {
+    if (!confirm(`Remove icon "${name}"?`)) return;
+    await this.hass.callWS({ type: "pimoroni_unicorn/icon_remove", name });
+    this.status = `Removed icon "${name}".`;
+    this.loadIcons();
   }
 
   connectedCallback(): void {
@@ -753,6 +772,26 @@ export class PimoroniUnicornPanel extends LitElement {
             </div>`)}
           </div>`
         : html`<p class="hint">Select a device to manage installed widgets.</p>`)}
+
+      ${this._section("icons", "Icons", this.installedIcons.length, html`
+        <p class="hint">Built-in icons ship with the engine. Add LaMetric gallery icons by code — installed icons become selectable in the Icon widget on every device.</p>
+        <div class="panelrow">
+          <label>LaMetric code</label>
+          <input type="number" style="width:100px" .value=${this.iconCode}
+            @input=${(e: Event) => { this.iconCode = (e.target as HTMLInputElement).value; }} />
+          ${this.iconCode ? html`<img class="thumb" style="width:40px;height:40px"
+            src="https://developer.lametric.com/content/apps/icon_thumbs/${this.iconCode}" />` : ""}
+          <label>Name</label>
+          <input style="width:120px" .value=${this.iconName}
+            @input=${(e: Event) => { this.iconName = (e.target as HTMLInputElement).value; }} />
+          <button ?disabled=${!this.iconCode || !this.iconName.trim()} @click=${this.installIcon}>Add</button>
+        </div>
+        ${this.installedIcons.length
+          ? this.installedIcons.map((n) => html`<div class="panelrow">
+              <span class="grow">${n}</span>
+              <button class="danger zbtn" @click=${() => this.removeIcon(n)}>Remove</button></div>`)
+          : html`<p class="hint">No custom icons installed yet.</p>`}
+      `)}
       <p class="hint">Deploying a page installs any widgets/fonts it needs over the air first, then pushes it; the device reboots if files changed.</p>
     `;
   }

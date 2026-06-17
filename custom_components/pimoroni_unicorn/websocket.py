@@ -34,6 +34,8 @@ WS_PUBLISH_LAYOUT = "pimoroni_unicorn/publish_layout"
 WS_SAVE_SCREENSET = "pimoroni_unicorn/save_screenset"
 WS_DELETE_SCREENSET = "pimoroni_unicorn/delete_screenset"
 WS_ICONS          = "pimoroni_unicorn/icons"
+WS_ICON_INSTALL   = "pimoroni_unicorn/icon_install"
+WS_ICON_REMOVE    = "pimoroni_unicorn/icon_remove"
 
 
 @callback
@@ -44,7 +46,8 @@ def async_register(hass: HomeAssistant) -> None:
                     ws_catalog, ws_fw_manifest, ws_fw_install, ws_fw_remove,
                     ws_widget_preview, ws_widget_save, ws_widget_import, ws_widget_delete,
                     ws_content_catalog, ws_deploy_layout, ws_deploy_screenset,
-                    ws_publish_layout, ws_save_screenset, ws_delete_screenset, ws_icons):
+                    ws_publish_layout, ws_save_screenset, ws_delete_screenset, ws_icons,
+                    ws_icon_install, ws_icon_remove):
         websocket_api.async_register_command(hass, handler)
 
 
@@ -482,6 +485,33 @@ async def ws_icons(hass, connection, msg):
         "builtin": render_service.builtin_icon_names(),
         "installed": installed,
     })
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_ICON_INSTALL,
+    vol.Required("code"): vol.Coerce(int),
+    vol.Required("name"): str,
+})
+@websocket_api.async_response
+async def ws_icon_install(hass, connection, msg):
+    """Fetch a LaMetric gallery icon by code and install it on every device."""
+    icon = await lametric.async_fetch_icon(hass, msg["code"])
+    if not icon:
+        connection.send_error(msg["id"], "fetch_failed", "Could not fetch that LaMetric icon code")
+        return
+    await lametric.async_install_icon(hass, msg["name"], icon)
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_ICON_REMOVE,
+    vol.Required("name"): str,
+})
+@websocket_api.async_response
+async def ws_icon_remove(hass, connection, msg):
+    """Remove an installed custom/LaMetric icon."""
+    await lametric.async_remove_icon(hass, msg["name"])
+    connection.send_result(msg["id"], {"ok": True})
 
 
 def _parse_spec_text(text: str):
