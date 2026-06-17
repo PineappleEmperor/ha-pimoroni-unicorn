@@ -6,7 +6,10 @@ from secrets import DEVICE_ID, MQTT_PASSWORD, MQTT_PORT, MQTT_SERVER, MQTT_USER,
 try:
     from secrets import NTP_HOST
 except ImportError:
-    NTP_HOST = MQTT_SERVER
+    NTP_HOST = ""
+
+_time_synced = False
+_last_ntp_ms = 0
 
 try:
     from secrets import (
@@ -204,18 +207,25 @@ def is_bst(year, month, day):
 
 
 async def sync_time():
-    """Sync the RTC via NTP and apply a BST offset if applicable."""
-    ntptime.host = NTP_HOST
-    try:
-        ntptime.settime()
-        t  = time.time()
-        tm = time.localtime(t)
-        t += 3600 if is_bst(tm[0], tm[1], tm[2]) else 0
-        tm = time.localtime(t)
-        machine.RTC().datetime((tm[0], tm[1], tm[2], 0, tm[3], tm[4], tm[5], 0))
-        print("Time synced")
-    except Exception:
-        print("Time sync failed")
+    """Sync the RTC via NTP (retry a few times); apply a BST offset. Returns success."""
+    global _time_synced, _last_ntp_ms
+    ntptime.host = NTP_HOST or "pool.ntp.org"
+    for _ in range(3):
+        try:
+            ntptime.settime()
+            t  = time.time()
+            tm = time.localtime(t)
+            t += 3600 if is_bst(tm[0], tm[1], tm[2]) else 0
+            tm = time.localtime(t)
+            machine.RTC().datetime((tm[0], tm[1], tm[2], 0, tm[3], tm[4], tm[5], 0))
+            _time_synced = True
+            _last_ntp_ms = time.ticks_ms()
+            print("Time synced")
+            return True
+        except Exception:
+            await asyncio.sleep(2)
+    print("Time sync failed")
+    return False
 
 
 # --- OTA ---
@@ -662,6 +672,9 @@ async def mqtt_task():
                 mqtt_client.check_msg()
                 if time.ticks_ms() % 60000 < 500:
                     mqtt_client.publish(TOPIC_STATUS, b"online", retain=True)
+                    # Re-sync NTP if never synced, or hourly — time isn't battery-backed.
+                    if not _time_synced or time.ticks_diff(time.ticks_ms(), _last_ntp_ms) > 3600000:
+                        await sync_time()
                 await asyncio.sleep(0.1)
 
         except Exception as e:

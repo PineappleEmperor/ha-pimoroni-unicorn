@@ -6,7 +6,7 @@ MQTT_PORT     = 1883
 MQTT_USER     = ""
 MQTT_PASSWORD = ""
 DEVICE_ID     = "pimoroni_unicorn_1"
-NTP_HOST      = ""            # defaults to MQTT_SERVER if left blank
+NTP_HOST      = ""            # defaults to pool.ntp.org if blank (or set your router IP)
 MODEL         = "galactic"    # galactic | cosmic | stellar
 
 # Optional: pre-set HA entity IDs so the integration auto-fills on first setup.
