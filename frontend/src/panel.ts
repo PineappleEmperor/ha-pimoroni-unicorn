@@ -77,8 +77,10 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private showAllContent = false;
   @state() private iconNames: string[] = [];
   @state() private installedIcons: string[] = [];
+  @state() private iconThumbs: Record<string, string> = {};
   @state() private iconCode = "";
   @state() private iconName = "";
+  @state() private iconTargets: string[] = [];
   @state() private fonts: FontSpec[] = [];
   @state() private fontText = "";
   @state() private fontPngs: Record<string, string> = {};
@@ -205,6 +207,10 @@ export class PimoroniUnicornPanel extends LitElement {
     .cell-name { font-weight: 500; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .cell-action { display: flex; justify-content: flex-end; }
     .thumb { width: 100px; height: 64px; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .iconprev { width: 128px; height: 128px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .iconthumb { width: 40px; height: 40px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .targets { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .chk { display: inline-flex; gap: 4px; align-items: center; font-weight: 400; }
     .catalog { list-style: none; padding: 0; margin: 0; max-width: 680px; }
     .catalog li {
       display: flex; gap: 12px; align-items: center; padding: 12px 14px;
@@ -232,15 +238,31 @@ export class PimoroniUnicornPanel extends LitElement {
       const r = await this.hass.callWS({ type: "pimoroni_unicorn/icons" });
       this.iconNames = [...(r.builtin ?? []), ...(r.installed ?? [])];
       this.installedIcons = r.installed ?? [];
+      this.iconThumbs = r.thumbs ?? {};
     } catch { /* icons list optional */ }
   }
 
+  // Install targets default to every device; user can narrow the selection.
+  private iconTargetIds(): string[] {
+    return this.iconTargets.length ? this.iconTargets : this.devices.map((d) => d.entry_id);
+  }
+  private toggleIconTarget(entryId: string) {
+    const ids = new Set(this.iconTargetIds());
+    if (ids.has(entryId)) ids.delete(entryId); else ids.add(entryId);
+    this.iconTargets = this.devices.map((d) => d.entry_id).filter((id) => ids.has(id));
+  }
   private async installIcon() {
     const code = parseInt(this.iconCode, 10);
-    if (!code || !this.iconName.trim()) return;
-    const r = await this.hass.callWS({ type: "pimoroni_unicorn/icon_install", code, name: this.iconName.trim() });
-    this.status = r.ok ? `Installed icon "${this.iconName.trim()}".` : "Couldn't fetch that LaMetric code.";
-    if (r.ok) { this.iconCode = ""; this.iconName = ""; }
+    const name = this.iconName.trim();
+    if (!code || !name) return;
+    const entry_ids = this.iconTargetIds();
+    const r = await this.hass.callWS({ type: "pimoroni_unicorn/icon_install", code, name, entry_ids });
+    if (!r.ok) { this.status = "Couldn't fetch that LaMetric code."; return; }
+    const sent: string[] = r.sent ?? [];
+    this.status = sent.length
+      ? `Installed "${name}" → ${sent.join(", ")}.`
+      : `Saved "${name}" (no devices to push to).`;
+    this.iconCode = ""; this.iconName = "";
     this.loadIcons();
   }
   private async removeIcon(name: string) {
@@ -905,20 +927,39 @@ export class PimoroniUnicornPanel extends LitElement {
         : html`<p class="hint">Select a device to manage installed widgets.</p>`)}
 
       ${this._section("icons", "Icons", this.installedIcons.length, html`
-        <p class="hint">Built-in icons ship with the engine. Add LaMetric gallery icons by code — installed icons become selectable in the Icon widget on every device.</p>
+        <p class="hint">Built-in icons ship with the engine. Add LaMetric gallery icons by code, then choose which devices to install them on.</p>
         <div class="panelrow">
-          <label>LaMetric code</label>
-          <input type="number" style="width:100px" .value=${this.iconCode}
-            @input=${(e: Event) => { this.iconCode = (e.target as HTMLInputElement).value; }} />
-          ${this.iconCode ? html`<img class="thumb" style="width:40px;height:40px"
-            src="https://developer.lametric.com/content/apps/icon_thumbs/${this.iconCode}" />` : ""}
-          <label>Name</label>
-          <input style="width:120px" .value=${this.iconName}
-            @input=${(e: Event) => { this.iconName = (e.target as HTMLInputElement).value; }} />
-          <button ?disabled=${!this.iconCode || !this.iconName.trim()} @click=${this.installIcon}>Add</button>
+          ${this.iconCode ? html`<img class="iconprev"
+            src="https://developer.lametric.com/content/apps/icon_thumbs/${this.iconCode}" />`
+            : html`<div class="iconprev"></div>`}
+          <div class="grow">
+            <div class="panelrow">
+              <label>LaMetric code</label>
+              <input type="number" style="width:100px" .value=${this.iconCode}
+                @input=${(e: Event) => { this.iconCode = (e.target as HTMLInputElement).value; }} />
+              <label>Name</label>
+              <input style="width:120px" .value=${this.iconName}
+                @input=${(e: Event) => { this.iconName = (e.target as HTMLInputElement).value; }} />
+            </div>
+            ${this.devices.length ? html`<div class="panelrow">
+              <label>Install on</label>
+              <span class="targets">
+                ${this.devices.map((d) => html`<label class="chk">
+                  <input type="checkbox" ?checked=${this.iconTargetIds().includes(d.entry_id)}
+                    @change=${() => this.toggleIconTarget(d.entry_id)} />${d.name}</label>`)}
+              </span>
+            </div>` : ""}
+            <div class="panelrow">
+              <button ?disabled=${!this.iconCode || !this.iconName.trim() || (this.devices.length > 0 && this.iconTargetIds().length === 0)}
+                @click=${this.installIcon}>Add</button>
+            </div>
+          </div>
         </div>
         ${this.installedIcons.length
           ? this.installedIcons.map((n) => html`<div class="panelrow">
+              ${this.iconThumbs[n]
+                ? html`<img class="iconthumb" src="data:image/png;base64,${this.iconThumbs[n]}" />`
+                : html`<div class="iconthumb"></div>`}
               <span class="grow">${n}</span>
               <button class="danger zbtn" @click=${() => this.removeIcon(n)}>Remove</button></div>`)
           : html`<p class="hint">No custom icons installed yet.</p>`}

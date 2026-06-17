@@ -79,6 +79,25 @@ def builtin_icon_names() -> list[str]:
     return sorted(_modules().icons.STATIC_ICONS.keys())
 
 
+def render_icon_thumb(icon: dict, size: int = 8) -> str | None:
+    """First frame of a stored icon (raw size×size RGB) as a base64 PNG."""
+    frames = (icon or {}).get("frames") or []
+    if not frames:
+        return None
+    try:
+        raw = base64.b64decode(frames[0])
+    except (ValueError, binascii.Error):
+        return None
+    if len(raw) < size * size * 3:
+        return None
+    from PIL import Image
+
+    img = Image.frombytes("RGB", (size, size), raw[: size * size * 3])
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
 def layout_boxes(layout: dict) -> list:
     """Per-widget [w, h] boxes for the layout, computed by the real widget_box."""
     widgets = _modules().widgets

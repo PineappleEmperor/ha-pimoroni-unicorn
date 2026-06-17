@@ -68,25 +68,34 @@ async def async_get_registry(hass: HomeAssistant) -> dict[str, Any]:
     return domain_data["_icon_registry"]
 
 
-async def async_install_icon(hass: HomeAssistant, name: str, icon: dict[str, Any]) -> None:
-    """Persist an icon in the registry and install it on every configured device."""
+async def async_install_icon(hass: HomeAssistant, name: str, icon: dict[str, Any],
+                             entry_ids: list[str] | None = None) -> list[str]:
+    """Persist an icon and push it to the chosen devices; return their names."""
     registry = await async_get_registry(hass)
     registry[name] = icon
     await hass.data[DOMAIN]["_icon_store"].async_save(registry)
-    await _async_publish_cmd(hass, {"action": "install", "name": name, **icon})
+    return await _async_publish_cmd(
+        hass, {"action": "install", "name": name, **icon}, entry_ids)
 
 
-async def async_remove_icon(hass: HomeAssistant, name: str) -> None:
+async def async_remove_icon(hass: HomeAssistant, name: str) -> list[str]:
     """Remove an icon from the registry and from every configured device."""
     registry = await async_get_registry(hass)
     registry.pop(name, None)
     await hass.data[DOMAIN]["_icon_store"].async_save(registry)
-    await _async_publish_cmd(hass, {"action": "remove", "name": name})
+    return await _async_publish_cmd(hass, {"action": "remove", "name": name})
 
 
-async def _async_publish_cmd(hass: HomeAssistant, payload: dict[str, Any]) -> None:
+async def _async_publish_cmd(hass: HomeAssistant, payload: dict[str, Any],
+                             entry_ids: list[str] | None = None) -> list[str]:
+    """Publish an icons command to the chosen entries (all when None); return device names."""
     message = json.dumps(payload)
+    sent: list[str] = []
     for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry_ids is not None and entry.entry_id not in entry_ids:
+            continue
         device_id = {**entry.data, **entry.options}.get(CONF_DEVICE_ID, "")
         if device_id:
             await async_publish(hass, f"{device_id}/icons/cmd", message)
+            sent.append(entry.title or device_id)
+    return sent

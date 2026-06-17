@@ -485,11 +485,18 @@ async def ws_delete_screenset(hass, connection, msg):
 @websocket_api.websocket_command({vol.Required("type"): WS_ICONS})
 @websocket_api.async_response
 async def ws_icons(hass, connection, msg):
-    """Names available to the icon widget: engine built-ins + installed LaMetric/custom."""
-    installed = sorted((await lametric.async_get_registry(hass)).keys())
+    """Names available to the icon widget: engine built-ins + installed LaMetric/custom + thumbs."""
+    registry = await lametric.async_get_registry(hass)
+    installed = sorted(registry.keys())
+
+    def _thumbs():
+        return {n: render_service.render_icon_thumb(registry[n]) for n in installed}
+
+    thumbs = await hass.async_add_executor_job(_thumbs)
     connection.send_result(msg["id"], {
         "builtin": render_service.builtin_icon_names(),
         "installed": installed,
+        "thumbs": thumbs,
     })
 
 
@@ -497,16 +504,17 @@ async def ws_icons(hass, connection, msg):
     vol.Required("type"): WS_ICON_INSTALL,
     vol.Required("code"): vol.Coerce(int),
     vol.Required("name"): str,
+    vol.Optional("entry_ids"): [str],
 })
 @websocket_api.async_response
 async def ws_icon_install(hass, connection, msg):
-    """Fetch a LaMetric gallery icon by code and install it on every device."""
+    """Fetch a LaMetric gallery icon by code and install it on the chosen devices."""
     icon = await lametric.async_fetch_icon(hass, msg["code"])
     if not icon:
         connection.send_error(msg["id"], "fetch_failed", "Could not fetch that LaMetric icon code")
         return
-    await lametric.async_install_icon(hass, msg["name"], icon)
-    connection.send_result(msg["id"], {"ok": True})
+    sent = await lametric.async_install_icon(hass, msg["name"], icon, msg.get("entry_ids"))
+    connection.send_result(msg["id"], {"ok": True, "sent": sent})
 
 
 @websocket_api.websocket_command({
