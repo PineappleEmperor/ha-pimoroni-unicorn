@@ -156,7 +156,8 @@ export class PimoroniUnicornPanel extends LitElement {
     button.secondary { background: color-mix(in srgb, var(--pu-primary) 14%, var(--pu-surface)); color: var(--pu-primary); box-shadow: none; }
     button.danger { background: var(--error-color, #ba1a1a); color: #fff; }
     button.zbtn { padding: 6px 11px; min-width: 30px; line-height: 1; border-radius: 10px; }
-    .stagewrap { max-width: 100%; overflow: auto; padding-top: 18px; }
+    .stagewrap { max-width: 100%; max-height: 62vh; overflow: auto; overscroll-behavior: contain; padding-top: 18px; cursor: grab; }
+    .stagewrap.panning { cursor: grabbing; }
     .stage { position: relative; display: inline-block; background: #000; line-height: 0; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); overflow: hidden; }
     .stage img { image-rendering: pixelated; display: block; }
     .grid, .boxes { position: absolute; inset: 0; pointer-events: none; }
@@ -249,6 +250,12 @@ export class PimoroniUnicornPanel extends LitElement {
   private _onKey = (e: KeyboardEvent): void => {
     const tag = (e.target as HTMLElement)?.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if ((e.key === "Delete" || e.key === "Backspace") && this.tab === "layout"
+        && this.selected >= 0 && this.layout.widgets[this.selected]) {
+      e.preventDefault();
+      this.removeWidget(this.selected);
+      return;
+    }
     const d: Record<string, [number, number]> = {
       ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
     };
@@ -365,8 +372,29 @@ export class PimoroniUnicornPanel extends LitElement {
     this.zoom = Math.min(48, Math.max(4, this.scale + delta));
   }
   private onWheel(e: WheelEvent): void {
+    if (!e.ctrlKey && !e.metaKey) return;  // plain wheel/trackpad pans natively; ctrl/⌘+wheel zooms
     e.preventDefault();
     this.zoomBy(e.deltaY < 0 ? 2 : -2);
+  }
+  private startPan(e: PointerEvent): void {
+    if ((e.target as HTMLElement).closest(".box")) return;  // dragging a widget moves it, not pans
+    const wrap = e.currentTarget as HTMLElement;
+    e.preventDefault();
+    const sx = e.clientX, sy = e.clientY, sl = wrap.scrollLeft, st = wrap.scrollTop;
+    wrap.setPointerCapture(e.pointerId);
+    wrap.classList.add("panning");
+    const move = (ev: PointerEvent) => {
+      wrap.scrollLeft = sl - (ev.clientX - sx);
+      wrap.scrollTop = st - (ev.clientY - sy);
+    };
+    const up = (ev: PointerEvent) => {
+      wrap.releasePointerCapture(ev.pointerId);
+      wrap.classList.remove("panning");
+      wrap.removeEventListener("pointermove", move);
+      wrap.removeEventListener("pointerup", up);
+    };
+    wrap.addEventListener("pointermove", move);
+    wrap.addEventListener("pointerup", up);
   }
   // Box dims come from the backend (computed by the real widget_box), so any
   // cfg-driven sizing (variant, size, digits…) is correct without client logic.
@@ -621,9 +649,8 @@ export class PimoroniUnicornPanel extends LitElement {
 
       <div class="wrap">
         <div class="col">
-          <div class="stagewrap">
-            <div class="stage" style=${`width:${this.dims[0] * s}px;height:${this.dims[1] * s}px`}
-              @wheel=${this.onWheel}>
+          <div class="stagewrap" @wheel=${this.onWheel} @pointerdown=${this.startPan}>
+            <div class="stage" style=${`width:${this.dims[0] * s}px;height:${this.dims[1] * s}px`}>
               ${this.png ? html`<img src="data:image/png;base64,${this.png}" width=${this.dims[0] * s} height=${this.dims[1] * s} @load=${this.onImgLoad} />` : ""}
               <div class="grid" style=${gridStyle}></div>
               ${this.locked ? "" : html`<div class="boxes ${this.wireframe ? "wf" : ""}">${this.layout.widgets.map((w, i) => {
