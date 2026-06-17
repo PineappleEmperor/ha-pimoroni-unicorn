@@ -129,19 +129,21 @@ A notification with an `icon` shows it in a left panel beside the text; an `effe
 
 For bulk preview or generating firmware built-ins there is a dev-side helper: `python scripts/fetch_lametric_icon.py 100-160` renders a labelled preview grid; `--json`/`--builtin` emit device and firmware formats.
 
-### Layout editor
+### The panel — Designer, Marketplace, Widget editor, Playlists
 
-Each Unicorn model has a configurable display layout (which widgets — clock, calendar, weekday bars, solar/energy — sit where, with per-widget variant and colour). Edit it visually from the **Unicorn Layout** panel in the HA sidebar (**Layout** tab): pick a device, drag widgets on a pixel-accurate preview (rendered by the device's own code in the backend), then **Save & Push** to store the named layout and send it to the device over MQTT — no reflash. Layouts can also be authored in the terminal emulator (`scripts/emulate.py layout`) and imported under **Configure → Import layout**.
+The **Unicorn** sidebar panel has a persistent device selector (model + size shown) above four tabs. The frontend is a Lit/TypeScript bundle built from `frontend/` (`npm run build`) into `custom_components/pimoroni_unicorn/panel/editor.js`, and follows your HA light/dark theme.
 
-The panel frontend is a Lit/TypeScript bundle built from `frontend/` (`npm run build`) into `custom_components/pimoroni_unicorn/panel/editor.js`.
+- **Designer** — a **page** is one configured screen (which widgets sit where, with per-widget config/colour). Drag widgets on a pixel-accurate preview (rendered by the device's own code), then **Save & Push** to the device over MQTT (no reflash), or **Publish** to list it in the marketplace. Unsaved edits are guarded before switching page/device. Sensor widgets take an **entity** (lookup), can be added multiple times, and named per instance. Pages can also be authored in the terminal emulator (`scripts/emulate.py layout`) and imported under **Configure → Import layout**.
+- **Widget editor** — author a *declarative* widget in a **Form** (add/edit draw ops via fields) or raw **YAML/JSON** (toggle), with a live device-faithful preview; **Import** a pasted spec and **Save** to your custom catalogue (`<config>/pimoroni_unicorn/widgets/`). Draw ops: `value`, `bar`, `rect`, `pixel`, `icon`, `dot`, with state `bind` + `fmt`.
+- **Playlists** — compose a **playlist**: an ordered, timed cycle of pages (dwell + `fade` transition), reorder with ▲ ▼, preview the rotation, then **Push to device** or **Save as playlist**. Drive the live page/playlist from automations with the `show_page` / `set_playlist` services.
 
-### Widgets & marketplace
+### Marketplace
 
-Widgets are decoupled from the engine and managed like a small marketplace, from the panel's **Marketplace** and **Widget editor** tabs.
+The **Marketplace** tab lists installable content for the selected device in collapsible sections, with rendered thumbnails and per-device status; a **show all models** toggle reveals content for other models.
 
-- **Marketplace tab** — lists the widget catalogue (built-ins + your custom widgets) with per-device install status and the device's engine version. Install/Update/Remove a widget over the air; installing also pulls any fonts the widget needs (declared via `requires: ["font:<name>"]`) and the device reboots into the new set.
-- **Two widget kinds** — *code* widgets are MicroPython modules (`widget_<id>.py`); *declarative* widgets are a safe JSON/YAML spec (`widget_<id>.json`) interpreted on-device, with no code execution — the preferred format to author, import and share.
-- **Widget editor tab** — write a declarative spec with a live, device-faithful preview (rendered through the same code the device runs), **Import** a pasted YAML/JSON spec, and **Save** it to your custom catalogue (under `<config>/pimoroni_unicorn/widgets/`). Saved widgets appear in the Marketplace for install. Draw ops: `value`, `bar`, `rect`, `pixel`, `icon`, with state binding + `fmt` (binds: `solar`, `soc`, `consumption`, …).
+- **Pages** & **Playlists** — built-in starters plus your published ones. **Deploy** resolves and installs any widgets/fonts/icons the unit needs over the air, then pushes the page/playlist; a unit built for another model is blocked (with an explicit override).
+- **Widgets & fonts** — built-in + custom widgets with install status and the device's engine version; Install/Update/Remove over the air (installing pulls required fonts, declared via `requires: ["font:<name>"]`). *Code* widgets are MicroPython modules (`widget_<id>.py`); *declarative* widgets are a safe JSON spec (`widget_<id>.json`) interpreted on-device — the preferred format to share.
+- **Icons** — built-in 8×8 icons ship with the engine; add **LaMetric gallery icons by code** (preview, name, install). Installed icons are selectable in the **icon widget** and usable in notifications (animated GIFs included).
 
 Engine modules and the shipped catalogue are kept byte-identical to `firmware/` by `scripts/sync_render.py`, guarded in CI (`check_render_sync.py`, `check_engine_manifest.py`).
 
@@ -159,6 +161,14 @@ Stages firmware files in `www/pimoroni_unicorn/<device_id>/` and publishes an OT
 |-------|-------------|
 | `files` | List of file keys to push (e.g. `["main", "hardware"]`) |
 | `file_content` | Optional map of key → content to push inline without reading from disk, however it will replace the file on disk to keep parity |
+
+### `pimoroni_unicorn.show_page`
+
+Pin a specific page on a device (by `index` or `name`), or `clear` the pin to resume the playlist. Use from automations to switch the display on a trigger (time of day, an event, …).
+
+### `pimoroni_unicorn.set_playlist`
+
+Define a device's playlist from named `pages` (in order), with `dwell` seconds and a `transition`. The `notify.pimoroni_unicorn_<device_id>` entity remains the canonical notification surface.
 
 
 ## Development
