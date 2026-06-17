@@ -67,6 +67,60 @@ def lerp_colour(rgb_a, rgb_b, t):
     )
 
 
+def _hsv_to_rgb(h, s, v):
+    """HSV (h wrapped to [0,1)) to a 0-255 (r,g,b) tuple."""
+    h = h % 1.0
+    i = int(h * 6)
+    f = h * 6 - i
+    p = v * (1 - s)
+    q = v * (1 - f * s)
+    t = v * (1 - (1 - f) * s)
+    i = i % 6
+    if i == 0:
+        r, g, b = v, t, p
+    elif i == 1:
+        r, g, b = q, v, p
+    elif i == 2:
+        r, g, b = p, v, t
+    elif i == 3:
+        r, g, b = p, q, v
+    elif i == 4:
+        r, g, b = t, p, v
+    else:
+        r, g, b = v, p, q
+    return (int(r * 255), int(g * 255), int(b * 255))
+
+
+def text_fx_colors(s, cfg, elapsed_ms=0):
+    """Per-character (r,g,b) list for string s under cfg's colour mode."""
+    n = len(s)
+    mode = cfg.get("color_mode", "solid")
+    if mode == "rainbow":
+        speed = cfg.get("speed", 3)
+        spread = cfg.get("spread", 0.12)
+        phase = (elapsed_ms * speed) / 6000.0
+        return [_hsv_to_rgb(i * spread - phase, 1.0, 1.0) for i in range(n)]
+    if mode == "per_char":
+        palette = cfg.get("colors") or [cfg.get("color") or (255, 255, 255)]
+        return [tuple(palette[i % len(palette)]) for i in range(n)]
+    base = tuple(cfg.get("color") or (255, 255, 255))
+    return [base for _ in range(n)]
+
+
+def draw_text_fx(s, x, y, cfg, elapsed_ms=0):
+    """Draw an uppercase 3x5 string with solid / per-char / rainbow colouring."""
+    s = str(s).upper()
+    colors = text_fx_colors(s, cfg, elapsed_ms)
+    cx = x
+    for i in range(len(s)):
+        glyph = font3x5.get(s[i])
+        if glyph is None:
+            continue
+        _g.set_pen(_g.create_pen(*colors[i]))
+        _bitfont.draw_char(s[i], cx, y, font3x5)
+        cx += glyph["w"] + glyph["s"]
+
+
 def soc_colour(soc_pct, is_charging):
     """Return an (r,g,b) colour for the given battery SoC and charging state."""
     if is_charging:

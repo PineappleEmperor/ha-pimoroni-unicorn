@@ -14,10 +14,14 @@ _SAMPLE = {"weekday": "WWW", "day": "30", "month": "WWW", "month_full": "SEPTEMB
 
 WIDGET = {
     "id": "date", "label": "Date text", "w": 11, "h": 5, "variants": [],
-    "default_cfg": {"format": "weekday", "color": [255, 255, 255]},
+    "default_cfg": {"format": "weekday", "color": [255, 255, 255],
+                    "color_mode": "solid", "speed": 3},
     "cfg_fields": [
         {"key": "format", "type": "select", "options": _FORMATS, "label": "Format"},
         {"key": "color", "type": "rgb", "label": "Colour"},
+        {"key": "color_mode", "type": "select",
+         "options": ["solid", "rainbow", "per_char"], "label": "Colour mode"},
+        {"key": "speed", "type": "number", "min": 0, "max": 10, "step": 1, "label": "Rainbow speed"},
     ],
     "requires": [],
 }
@@ -45,4 +49,4 @@ def box(cfg):
 
 def render(g, x, y, w, h, cfg, state):
     """Draw the formatted date/time text from the current clock."""
-    drawing.draw_text(_format(cfg, state["time"]), x, y, cfg.get("color"))
+    drawing.draw_text_fx(_format(cfg, state["time"]), x, y, cfg, state.get("elapsed_ms", 0))
