@@ -75,9 +75,7 @@ rules:
     status: todo
     comment: MQTT auto-discovery pending (#58).
   stale-devices: done
-  diagnostics:
-    status: todo
-    comment: Add diagnostics.py.
+  diagnostics: done
   exception-translations:
     status: todo
   icon-translations:
