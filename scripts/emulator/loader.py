@@ -18,9 +18,17 @@ FIRMWARE_DIR = os.path.abspath(
 )
 ICONS_DIR = os.path.join(os.path.dirname(__file__), ".device_icons")
 
+# Foldered device tree -> repo firmware subdirs (mirrors the on-device layout).
+_ENGINE_DIR = os.path.join(FIRMWARE_DIR, "engine")
+_WIDGETS_DIR = os.path.join(FIRMWARE_DIR, "widgets")
+_FONTS_DIR = os.path.join(FIRMWARE_DIR, "assets", "fonts")
 _DEVICE_ROOTS = {
-    "/animations": os.path.join(FIRMWARE_DIR, "animations"),
-    "/icons":      ICONS_DIR,
+    "/animations":   os.path.join(_ENGINE_DIR, "animations"),
+    "/engine":       _ENGINE_DIR,
+    "/widgets":      _WIDGETS_DIR,
+    "/assets/fonts": _FONTS_DIR,
+    "/settings":     os.path.join(FIRMWARE_DIR, "settings"),
+    "/icons":        ICONS_DIR,
 }
 
 _orig_open = builtins.open
@@ -61,8 +69,9 @@ def install_mocks():
         time.ticks_diff = lambda a, b: a - b
         time.ticks_add  = lambda a, b: a + b
     os.makedirs(ICONS_DIR, exist_ok=True)
-    if FIRMWARE_DIR not in sys.path:
-        sys.path.insert(0, FIRMWARE_DIR)
+    for d in (FIRMWARE_DIR, _ENGINE_DIR, _WIDGETS_DIR, _FONTS_DIR):
+        if d not in sys.path:
+            sys.path.insert(0, d)
 
 
 def load_notify(graphics, width, height):
@@ -121,7 +130,7 @@ def watched_mtimes():
     snapshot = {}
     for name in ("notify_animations.py", "icons.py", "drawing.py",
                  "weather_fx.py", "bitfonts.py"):
-        path = os.path.join(FIRMWARE_DIR, name)
+        path = os.path.join(_ENGINE_DIR, name)
         snapshot[path] = os.path.getmtime(path)
     anim_dir = _DEVICE_ROOTS["/animations"]
     if os.path.isdir(anim_dir):

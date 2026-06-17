@@ -75,14 +75,27 @@ def builtin_overlays() -> list[dict]:
     return out
 
 
+# On-device content dirs (foldered layout). Widgets/overlays live in /widgets,
+# fonts in /assets/fonts; the device manifest still keys units by basename.
+_DIR_WIDGETS = "/widgets"
+_DIR_FONTS = "/assets/fonts"
+
+
+def device_path(basename: str) -> str:
+    """Full on-device path for a content unit, by its basename."""
+    if basename.startswith("monospace_"):
+        return _DIR_FONTS + "/" + basename
+    return _DIR_WIDGETS + "/" + basename
+
+
 def unit_device_file(item_id: str, custom_dir=None) -> str | None:
-    """Resolve a catalogue item id to its on-device filename (for removal)."""
+    """Resolve a catalogue item id to its on-device path (for removal)."""
     if _widget_path(item_id).is_file():
-        return "widget_" + item_id + ".py"
+        return device_path("widget_" + item_id + ".py")
     if custom_dir and (Path(custom_dir) / ("widget_" + item_id + ".json")).is_file():
-        return "widget_" + item_id + ".json"
+        return device_path("widget_" + item_id + ".json")
     if (_OVERLAYS / ("overlay_" + item_id + ".py")).is_file():
-        return "overlay_" + item_id + ".py"
+        return device_path("overlay_" + item_id + ".py")
     return None
 
 
@@ -126,7 +139,7 @@ def _font_deps(requires, device_files) -> list[tuple[str, str]]:
             continue
         fu = font_unit(req[5:])
         if fu and device_files.get(fu["device_file"]) != fu["hash"]:
-            files.append(("/" + fu["device_file"], fu["path"].read_text()))
+            files.append((device_path(fu["device_file"]), fu["path"].read_text()))
     return files
 
 
@@ -136,16 +149,16 @@ def resolve_install(widget_id: str, device_files: dict | None = None,
     device_files = device_files or {}
     builtin = _widget_path(widget_id)
     if builtin.is_file():
-        files = [("/" + builtin.name, builtin.read_text())]
+        files = [(device_path(builtin.name), builtin.read_text())]
         requires = (_parse_widget(builtin) or {}).get("requires", [])
     elif custom_dir and (cp := Path(custom_dir) / ("widget_" + widget_id + ".json")).is_file():
-        files = [("/" + cp.name, cp.read_text())]
+        files = [(device_path(cp.name), cp.read_text())]
         try:
             requires = json.loads(cp.read_text()).get("requires", [])
         except (ValueError, OSError):
             requires = []
     elif (op := _OVERLAYS / ("overlay_" + widget_id + ".py")).is_file():
-        files = [("/" + op.name, op.read_text())]
+        files = [(device_path(op.name), op.read_text())]
         requires = (_parse_descriptor(op, "OVERLAY") or {}).get("requires", [])
     else:
         return []

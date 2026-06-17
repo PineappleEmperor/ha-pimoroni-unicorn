@@ -51,43 +51,48 @@ def _declarative_meta(spec):
     }
 
 
+_UNIT_DIRS = ("/widgets", "/")  # foldered layout first; root kept as fallback
+
+
 def _discover_installed():
     """Find widget_<id> units (.py or declarative .json) on the device and register them."""
-    try:
-        import uos  # type: ignore  # noqa: PLC0415
-        names = uos.listdir("/")
-    except Exception:
-        return
-    for fn in names:
-        if not fn.startswith("widget_"):
+    import uos  # type: ignore  # noqa: PLC0415
+    for d in _UNIT_DIRS:
+        try:
+            names = uos.listdir(d)
+        except OSError:
             continue
-        if fn.endswith(".py"):
-            wid = fn[7:-3]
-            if wid not in WIDGET_REGISTRY:
-                try:
-                    mod = __import__(fn[:-3])
-                    if hasattr(mod, "WIDGET") and hasattr(mod, "render"):
-                        WIDGET_REGISTRY[wid] = _meta(mod)
-                except Exception:
-                    pass
-        elif fn.endswith(".json"):
-            wid = fn[7:-5]
-            if wid not in WIDGET_REGISTRY:
-                try:
-                    with open("/" + fn) as f:
-                        WIDGET_REGISTRY[wid] = _declarative_meta(json.load(f))
-                except Exception:
-                    pass
-    for fn in names:
-        if fn.startswith("overlay_") and fn.endswith(".py"):
-            oid = fn[8:-3]
-            if oid not in OVERLAY_REGISTRY:
-                try:
-                    mod = __import__(fn[:-3])
-                    if hasattr(mod, "OVERLAY") and hasattr(mod, "render"):
-                        OVERLAY_REGISTRY[oid] = _overlay_meta(mod)
-                except Exception:
-                    pass
+        base = "" if d == "/" else d
+        for fn in names:
+            if not fn.startswith("widget_"):
+                continue
+            if fn.endswith(".py"):
+                wid = fn[7:-3]
+                if wid not in WIDGET_REGISTRY:
+                    try:
+                        mod = __import__(fn[:-3])
+                        if hasattr(mod, "WIDGET") and hasattr(mod, "render"):
+                            WIDGET_REGISTRY[wid] = _meta(mod)
+                    except Exception:
+                        pass
+            elif fn.endswith(".json"):
+                wid = fn[7:-5]
+                if wid not in WIDGET_REGISTRY:
+                    try:
+                        with open(base + "/" + fn) as f:
+                            WIDGET_REGISTRY[wid] = _declarative_meta(json.load(f))
+                    except Exception:
+                        pass
+        for fn in names:
+            if fn.startswith("overlay_") and fn.endswith(".py"):
+                oid = fn[8:-3]
+                if oid not in OVERLAY_REGISTRY:
+                    try:
+                        mod = __import__(fn[:-3])
+                        if hasattr(mod, "OVERLAY") and hasattr(mod, "render"):
+                            OVERLAY_REGISTRY[oid] = _overlay_meta(mod)
+                    except Exception:
+                        pass
 
 
 _discover_installed()

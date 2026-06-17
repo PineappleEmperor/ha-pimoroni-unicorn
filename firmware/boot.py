@@ -4,8 +4,14 @@ an OTA; main.py clears the counter once it boots healthy, so repeated failures
 restore the .bak files an OTA kept."""
 import json
 import machine
+import sys
 import time
 import uos
+
+# Foldered layout: put engine + content dirs on sys.path before main.py imports them.
+for _p in ("/settings", "/assets/sounds", "/assets/icons", "/assets/fonts", "/widgets", "/engine"):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 OTA_PENDING = "/ota_pending"
 BOOT_COUNT = "/boot_attempts"

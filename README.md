@@ -63,17 +63,20 @@ After setup, open **Configure** to set optional data sources, currently these co
 
 ### 1. Fill in secrets
 
-The firmware release zip already contains a ready-to-edit **`secrets.py`** — just open it and
-fill in your Wi-Fi credentials, MQTT broker details, `DEVICE_ID`, and `MODEL`
-(`galactic`/`cosmic`/`stellar`). (Working from the repo instead? Copy `firmware/secrets.example.py`
-to `firmware/secrets.py`.) `secrets.py` is gitignored and stays on your machine/device only.
-The device shows an alert and won't connect until `SSID`/`MQTT_SERVER` are set.
+The firmware release zip already contains a ready-to-edit **`settings/secrets.py`** — just
+open it and fill in your Wi-Fi credentials, MQTT broker details, `DEVICE_ID`, and `MODEL`
+(`galactic`/`cosmic`/`stellar`). (Working from the repo instead? Copy
+`firmware/settings/secrets.example.py` to `firmware/settings/secrets.py`.) `secrets.py` is
+gitignored and stays on your machine/device only. The device shows an alert and won't
+connect until `SSID`/`MQTT_SERVER` are set.
 
 ### 2. First flash (once, over USB)
 
-A blank Pico has no network, so the first load must be physical. Copy every `.py`
-from `firmware/` (including your `secrets.py`) to the root of the Pico W using Thonny or
-similar. This is the only manual flash — everything after is over-the-air.
+A blank Pico has no network, so the first load must be physical. Copy the **whole
+`firmware/` tree** to the Pico W using Thonny or similar, preserving the folder layout:
+`boot.py` + `main.py` at the root, the runtime under `engine/`, widgets under `widgets/`,
+fonts under `assets/fonts/`, and your `secrets.py` under `settings/`. This is the only
+manual flash — everything after is over-the-air.
 
 ### 3. Boot, then manage over the air
 
