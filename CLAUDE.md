@@ -22,11 +22,11 @@ widget/font **marketplace**. See the README for the user-facing view.
   - `panel/editor.js` — built Lit/TS bundle. **Generated from `frontend/`.**
 - `firmware/` — MicroPython for the Pico W (the source of truth for render code).
 - `frontend/` — Lit + TypeScript panel source; `npm run build` → `panel/editor.js`.
-- `scripts/` — sync + CI-guard tooling and the terminal emulator.
+- `scripts/` — sync + CI-guard tooling.
 
 ## The core rule: one render path, kept in sync
 
-Device and emulator must render **identically**. The firmware render modules in `firmware/`
+Device and the HA preview must render **identically**. The firmware render modules in `firmware/`
 are the source; `scripts/sync_render.py` copies them into `render/` (import-transformed) and
 `catalog/` (verbatim). After editing any firmware render module, run:
 
@@ -42,9 +42,9 @@ CI guards enforce it — these must pass:
   catalog/ are excluded — lint the source in `firmware/`)
 - frontend: `cd frontend && npm run build`, committed `editor.js` must match
 
-**Emulator faithfulness:** only draw with primitives the shim reproduces exactly —
+**Preview faithfulness:** only draw with primitives the shim reproduces exactly —
 `pixel`, `rectangle`, and the bitmask fonts. No `circle`/`triangle`/non-bitmap fonts in
-firmware draw code (build shapes from pixels instead), or device and emulator diverge.
+firmware draw code (build shapes from pixels instead), or device and preview diverge.
 
 ## Widgets & fonts
 
@@ -82,7 +82,8 @@ model is heavily inspired by AWTRIX.
 
 ## Testing without hardware
 
-- `python scripts/emulate.py` — terminal emulator (renders via the same shim).
 - `render_service.render_layout_png` / `render_widget_png` — the panel's backend preview,
-  byte-faithful to the device.
+  byte-faithful to the device (the no-hardware render path; runs the firmware draw code via
+  `render/` + the shim).
+- `python scripts/check_widget_boxes.py` — renders every widget through the shim headless.
 - First device flash is physical (USB/Thonny) once; everything after is OTA.

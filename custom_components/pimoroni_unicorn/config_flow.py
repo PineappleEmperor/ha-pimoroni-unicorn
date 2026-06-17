@@ -1,5 +1,7 @@
 """Config flow for Pimoroni Unicorn."""
 
+import json
+
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -17,6 +19,7 @@ from homeassistant.helpers.selector import (
     TextSelector,
     TextSelectorConfig,
 )
+from homeassistant.helpers.service_info.mqtt import MqttServiceInfo
 from homeassistant.util import slugify
 
 from . import lametric, layout
@@ -33,11 +36,14 @@ from .const import (
     CONF_WEATHER_CODE_ENTITY,
     DOMAIN,
     NOTIFY_STATIC_ICONS,
+    UNICORN_MODEL_KEYS,
     UNICORN_MODELS,
 )
 
+_KEY_TO_LABEL = {key: label for label, key in UNICORN_MODEL_KEYS.items()}
+
 DATA_SCHEMA = vol.Schema({
-    vol.Required(CONF_DEVICE_ID, default="pimoroni_unicorn_studio"): str,
+    vol.Required(CONF_DEVICE_ID, default="pimoroni_unicorn_1"): str,
     vol.Required(CONF_MODEL,     default=UNICORN_MODELS[0]):          vol.In(UNICORN_MODELS),
 })
 
@@ -47,20 +53,22 @@ _MODEL_SELECTOR = SelectSelector(
 
 
 def _options_schema(current: dict) -> vol.Schema:
-    def _d(key, default=""):
-        return current.get(key) or default
+    def _sv(key, default=None):
+        # suggested_value (pre-fill) with NO default, so clearing a field omits the key.
+        v = current.get(key) or default
+        return {"suggested_value": v} if v is not None else {}
 
     return vol.Schema({
-        vol.Required(CONF_DEVICE_ID,               default=_d(CONF_DEVICE_ID)):               str,
-        vol.Required(CONF_MODEL,                   default=_d(CONF_MODEL, UNICORN_MODELS[0])): _MODEL_SELECTOR,
-        vol.Optional(CONF_SOLAR_ENTITY,            default=_d(CONF_SOLAR_ENTITY)):            EntitySelector(EntitySelectorConfig(device_class="power")),
-        vol.Optional(CONF_CONSUMPTION_ENTITY,      default=_d(CONF_CONSUMPTION_ENTITY)):      EntitySelector(EntitySelectorConfig(device_class="power")),
-        vol.Optional(CONF_BATTERY_SOC_ENTITY,      default=_d(CONF_BATTERY_SOC_ENTITY)):      EntitySelector(EntitySelectorConfig(device_class="battery")),
-        vol.Optional(CONF_BATTERY_CHARGING_ENTITY, default=_d(CONF_BATTERY_CHARGING_ENTITY)): EntitySelector(EntitySelectorConfig(domain="binary_sensor", device_class="battery_charging")),
-        vol.Optional(CONF_SUN_ENTITY,              default=_d(CONF_SUN_ENTITY, "sun.sun")):   EntitySelector(EntitySelectorConfig(domain="sun")),
-        vol.Optional(CONF_WEATHER_CODE_ENTITY,     default=_d(CONF_WEATHER_CODE_ENTITY)):     EntitySelector(EntitySelectorConfig(domain="sensor")),
-        vol.Optional(CONF_EXTRA_SENSORS,           default=_d(CONF_EXTRA_SENSORS)):           TextSelector(TextSelectorConfig(multiline=True)),
-        vol.Optional(CONF_SHOW_PANEL,              default=current.get(CONF_SHOW_PANEL, True)): BooleanSelector(),
+        vol.Required(CONF_DEVICE_ID, default=current.get(CONF_DEVICE_ID, "")):              str,
+        vol.Required(CONF_MODEL, default=current.get(CONF_MODEL) or UNICORN_MODELS[0]):     _MODEL_SELECTOR,
+        vol.Optional(CONF_SOLAR_ENTITY,            description=_sv(CONF_SOLAR_ENTITY)):            EntitySelector(EntitySelectorConfig(device_class="power")),
+        vol.Optional(CONF_CONSUMPTION_ENTITY,      description=_sv(CONF_CONSUMPTION_ENTITY)):      EntitySelector(EntitySelectorConfig(device_class="power")),
+        vol.Optional(CONF_BATTERY_SOC_ENTITY,      description=_sv(CONF_BATTERY_SOC_ENTITY)):      EntitySelector(EntitySelectorConfig(device_class="battery")),
+        vol.Optional(CONF_BATTERY_CHARGING_ENTITY, description=_sv(CONF_BATTERY_CHARGING_ENTITY)): EntitySelector(EntitySelectorConfig(domain="binary_sensor", device_class="battery_charging")),
+        vol.Optional(CONF_SUN_ENTITY,              description=_sv(CONF_SUN_ENTITY, "sun.sun")):   EntitySelector(EntitySelectorConfig(domain="sun")),
+        vol.Optional(CONF_WEATHER_CODE_ENTITY,     description=_sv(CONF_WEATHER_CODE_ENTITY)):     EntitySelector(EntitySelectorConfig(domain="sensor")),
+        vol.Optional(CONF_EXTRA_SENSORS,           description=_sv(CONF_EXTRA_SENSORS)):           TextSelector(TextSelectorConfig(multiline=True)),
+        vol.Optional(CONF_SHOW_PANEL,              default=current.get(CONF_SHOW_PANEL, True)):    BooleanSelector(),
     })
 
 
@@ -87,6 +95,35 @@ class PimoroniUnicornConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_mqtt(self, discovery_info: MqttServiceInfo):
+        """Auto-discover a device from its retained announcement (no manual entry)."""
+        try:
+            data = json.loads(discovery_info.payload)
+        except (ValueError, TypeError):
+            return self.async_abort(reason="invalid_discovery")
+        device_id = data.get("device_id")
+        if not device_id:
+            return self.async_abort(reason="invalid_discovery")
+        await self.async_set_unique_id(device_id)
+        self._abort_if_unique_id_configured()
+        label = _KEY_TO_LABEL.get(data.get("model", ""), UNICORN_MODELS[0])
+        self._discovered = {CONF_DEVICE_ID: device_id, CONF_MODEL: label}
+        self.context["title_placeholders"] = {"name": data.get("name") or device_id}
+        return await self.async_step_mqtt_confirm()
+
+    async def async_step_mqtt_confirm(self, user_input: dict | None = None):
+        """Confirm adding a discovered device."""
+        if user_input is not None:
+            return self.async_create_entry(
+                title=self._discovered[CONF_DEVICE_ID], data=self._discovered)
+        return self.async_show_form(
+            step_id="mqtt_confirm",
+            description_placeholders={
+                "device_id": self._discovered[CONF_DEVICE_ID],
+                "model": self._discovered[CONF_MODEL],
+            },
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
@@ -108,10 +145,7 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         if self._initialized:
             return
         self._initialized = True
-        store      = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
-        ha_config  = store.get("ha_config", {})
-        merged     = {**ha_config, **self._config_entry.data, **self._config_entry.options}
-        self._settings = merged
+        self._settings = {**self._config_entry.data, **self._config_entry.options}
 
     async def async_step_init(self, user_input=None):
         """Show main options menu."""
@@ -224,7 +258,7 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_import_layout(self, user_input=None):
-        """Import a layout JSON authored in the emulator and make it active."""
+        """Import a layout JSON authored in the panel Designer and make it active."""
         errors = {}
         if user_input is not None:
             parsed = layout.parse_layout(user_input["layout_json"])

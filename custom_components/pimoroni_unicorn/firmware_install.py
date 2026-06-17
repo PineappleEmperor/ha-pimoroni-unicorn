@@ -91,11 +91,11 @@ async def async_deploy_screenset(hass: HomeAssistant, entry, screenset: dict, la
 async def async_remove_widget(hass: HomeAssistant, entry, widget_id: str) -> bool:
     """Tell the device to delete a unit (widget/overlay, code or declarative) and reboot."""
     device_id = _device_id(entry)
-    fname = marketplace.unit_device_file(
+    path = marketplace.unit_device_file(
         widget_id, marketplace.widgets_dir(hass.config.config_dir))
-    if fname is None:
+    if path is None:
         return False
     await async_publish(
         hass, f"{device_id}/fw/remove",
-        json.dumps({"files": ["/" + fname]}), retain=False)
+        json.dumps({"files": [path]}), retain=False)
     return True

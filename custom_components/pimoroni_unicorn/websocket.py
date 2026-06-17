@@ -9,7 +9,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from . import firmware_install, lametric, layout, marketplace, render_service
-from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN
+from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN, UNICORN_MODEL_KEYS
 
 WS_DEVICES        = "pimoroni_unicorn/devices"
 WS_CAPABILITIES   = "pimoroni_unicorn/capabilities"
@@ -56,7 +56,8 @@ def _entry(hass, entry_id):
 
 
 def _model_key(entry) -> str:
-    model = {**entry.data, **entry.options}.get(CONF_MODEL, "")
+    raw = {**entry.data, **entry.options}.get(CONF_MODEL, "")
+    model = UNICORN_MODEL_KEYS.get(raw, raw)  # stored display label -> dims key (pass through if already a key)
     return model if model in render_service.MODEL_DIMS else "galactic"
 
 

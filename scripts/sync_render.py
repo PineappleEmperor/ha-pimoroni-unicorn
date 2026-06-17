@@ -27,6 +27,22 @@ ENGINE_DIR = PKG / "firmware"
 # (HACS delivers them with the integration). Excludes device-private/dev-only files.
 _ENGINE_EXCLUDE = {"secrets.py", "secrets.example.py", "__init__.py"}
 
+# Device tree is foldered (/engine, /widgets, /assets/fonts) but bundle + render/ stay
+# flat — basenames are unique. These dirs hold the OTA-able device .py (not the
+# animations/ subpackage or settings/, which are USB-flash-only / device-private).
+_FW = ROOT / "firmware"
+_SRC_DIRS = [_FW, _FW / "engine", _FW / "widgets", _FW / "assets" / "fonts"]
+
+
+def _sources() -> dict:
+    """Map basename -> source path for every OTA-able device module under firmware/."""
+    idx = {}
+    for d in _SRC_DIRS:
+        for src in sorted(d.glob("*.py")):
+            if src.name not in _ENGINE_EXCLUDE:
+                idx[src.name] = src
+    return idx
+
 # Verbatim (untransformed) device-installable units shipped for the marketplace.
 # Byte-identical to firmware/ so the device manifest hash matches.
 CATALOG_WIDGETS = [
@@ -71,23 +87,24 @@ def transform(source: str) -> str:
 
 
 def _pairs():
+    src = _sources()
     for name in FIRMWARE_MODULES:
-        yield ROOT / "firmware" / name, RENDER_DIR / name
+        yield src[name], RENDER_DIR / name
 
 
 def _catalog_pairs():
+    src = _sources()
     for name in CATALOG_WIDGETS:
-        yield ROOT / "firmware" / name, CATALOG_DIR / "widgets" / name
+        yield src[name], CATALOG_DIR / "widgets" / name
     for name in CATALOG_FONTS:
-        yield ROOT / "firmware" / name, CATALOG_DIR / "fonts" / name
+        yield src[name], CATALOG_DIR / "fonts" / name
     for name in CATALOG_OVERLAYS:
-        yield ROOT / "firmware" / name, CATALOG_DIR / "overlays" / name
+        yield src[name], CATALOG_DIR / "overlays" / name
 
 
 def _engine_pairs():
-    for src in sorted((ROOT / "firmware").glob("*.py")):
-        if src.name not in _ENGINE_EXCLUDE:
-            yield src, ENGINE_DIR / src.name
+    for name, src in sorted(_sources().items()):
+        yield src, ENGINE_DIR / name
 
 
 def do_sync() -> None:

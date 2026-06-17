@@ -8,10 +8,15 @@
           "device_id": "Device ID",
           "model": "Model"
         }
+      },
+      "mqtt_confirm": {
+        "title": "Pimoroni Unicorn discovered",
+        "description": "Set up {device_id} ({model})?"
       }
     },
     "abort": {
-      "already_configured": "Device already configured."
+      "already_configured": "Device already configured.",
+      "invalid_discovery": "The device's discovery message was invalid."
     }
   },
   "options": {
@@ -93,6 +98,22 @@
       "icon_not_found": "No icon found for that code, or the gallery is unreachable.",
       "name_taken": "That name is already used by a built-in icon.",
       "invalid_layout": "Not a valid layout JSON (needs a \"widgets\" list)."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "page": {
+        "name": "Current page"
+      },
+      "free_mem": {
+        "name": "Free memory"
+      },
+      "uptime": {
+        "name": "Uptime"
+      },
+      "engine_version": {
+        "name": "Engine version"
+      }
     }
   },
   "services": {
@@ -192,20 +213,44 @@
       "name": "Show page",
       "description": "Pin a specific page on a device, or clear the pin to resume the playlist.",
       "fields": {
-        "device_id": { "name": "Device", "description": "The Pimoroni Unicorn device." },
-        "index": { "name": "Page index", "description": "Zero-based index of the page to show." },
-        "name": { "name": "Page name", "description": "Name of the page to show (instead of index)." },
-        "clear": { "name": "Resume playlist", "description": "Clear the pinned page and resume the playlist." }
+        "device_id": {
+          "name": "Device",
+          "description": "The Pimoroni Unicorn device."
+        },
+        "index": {
+          "name": "Page index",
+          "description": "Zero-based index of the page to show."
+        },
+        "name": {
+          "name": "Page name",
+          "description": "Name of the page to show (instead of index)."
+        },
+        "clear": {
+          "name": "Resume playlist",
+          "description": "Clear the pinned page and resume the playlist."
+        }
       }
     },
     "set_playlist": {
       "name": "Set playlist",
       "description": "Define a device's playlist from named pages and how it cycles.",
       "fields": {
-        "device_id": { "name": "Device", "description": "The Pimoroni Unicorn device." },
-        "pages": { "name": "Pages", "description": "Names of saved pages to cycle through, in order." },
-        "dwell": { "name": "Dwell (seconds)", "description": "Seconds to show each page before advancing (0 disables cycling)." },
-        "transition": { "name": "Transition", "description": "Animation when switching pages." }
+        "device_id": {
+          "name": "Device",
+          "description": "The Pimoroni Unicorn device."
+        },
+        "pages": {
+          "name": "Pages",
+          "description": "Names of saved pages to cycle through, in order."
+        },
+        "dwell": {
+          "name": "Dwell (seconds)",
+          "description": "Seconds to show each page before advancing (0 disables cycling)."
+        },
+        "transition": {
+          "name": "Transition",
+          "description": "Animation when switching pages."
+        }
       }
     },
     "push_firmware": {

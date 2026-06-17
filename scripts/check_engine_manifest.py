@@ -20,7 +20,10 @@ def _manifest_sources() -> set[str]:
 
 
 def main() -> int:
-    on_disk = {p.name for p in (ROOT / "firmware").glob("*.py")} - EXCLUDE
+    # Foldered device tree: root (boot/main) + /engine + /widgets + /assets/fonts.
+    fw = ROOT / "firmware"
+    src_dirs = [fw, fw / "engine", fw / "widgets", fw / "assets" / "fonts"]
+    on_disk = {p.name for d in src_dirs for p in d.glob("*.py")} - EXCLUDE
     shipped = _manifest_sources()
     missing = sorted(on_disk - shipped)
     if missing:

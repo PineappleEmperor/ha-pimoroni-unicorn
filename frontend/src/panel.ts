@@ -65,7 +65,8 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private selected = -1;
   @state() private layoutName = "default";
   @state() private live = false;
-  @state() private wireframe = true;
+  @state() private wireframe = false;
+  @state() private locked = false;
   @state() private status = "";
   @state() private tab: "layout" | "market" | "edit" | "screens" = "layout";
   @state() private catalog: CatalogWidget[] = [];
@@ -155,12 +156,17 @@ export class PimoroniUnicornPanel extends LitElement {
     button.secondary { background: color-mix(in srgb, var(--pu-primary) 14%, var(--pu-surface)); color: var(--pu-primary); box-shadow: none; }
     button.danger { background: var(--error-color, #ba1a1a); color: #fff; }
     button.zbtn { padding: 6px 11px; min-width: 30px; line-height: 1; border-radius: 10px; }
+    .stagewrap { max-width: 100%; overflow: auto; padding-top: 18px; }
     .stage { position: relative; display: inline-block; background: #000; line-height: 0; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); overflow: hidden; }
     .stage img { image-rendering: pixelated; display: block; }
     .grid, .boxes { position: absolute; inset: 0; pointer-events: none; }
-    .box { position: absolute; box-sizing: border-box; border: 1px solid rgba(255,255,255,.35); cursor: grab; touch-action: none; pointer-events: auto; border-radius: 2px; }
-    .box.sel { border: 2px solid var(--pu-primary); background: color-mix(in srgb, var(--pu-primary) 14%, transparent); }
-    .box .tag { position: absolute; top: -17px; left: 0; font: 11px ui-monospace, monospace; color: #ddd; white-space: nowrap; }
+    /* Boxes are draggable hit-areas always (unless locked); only visible in wireframe mode or when selected. */
+    .box { position: absolute; box-sizing: border-box; border: 1px solid transparent; cursor: grab; touch-action: none; pointer-events: auto; border-radius: 2px; }
+    .box:hover { border-color: rgba(255,255,255,.25); }
+    .boxes.wf .box { border-color: rgba(255,255,255,.35); }
+    .box.sel, .boxes.wf .box.sel { border: 2px solid var(--pu-primary); background: color-mix(in srgb, var(--pu-primary) 14%, transparent); }
+    .box .tag { position: absolute; top: -17px; left: 0; font: 11px ui-monospace, monospace; color: #ddd; white-space: nowrap; display: none; }
+    .boxes.wf .box .tag, .box.sel .tag { display: block; }
     .wlist { list-style: none; padding: 0; margin: 0 0 12px; }
     .wlist li { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: background .12s; }
     .wlist li:hover { background: color-mix(in srgb, var(--pu-primary) 7%, transparent); }
@@ -591,6 +597,7 @@ export class PimoroniUnicornPanel extends LitElement {
         </div>
         <div class="group">
           <button @click=${this.save} ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to save/push"}>Save &amp; Push</button>
+          <button class="secondary" @click=${this.exportLayout} title="Copy this page's JSON to clipboard to share or import elsewhere">Export JSON</button>
           ${this.stored[this.layoutName] ? html`<button class="secondary" @click=${() => this.publishLayout(true)} title="List this page in the marketplace">Publish</button>` : ""}
           ${this.stored[this.layoutName] ? html`<button class="danger" @click=${this.deleteLayout}>Delete</button>` : ""}
         </div>
@@ -607,24 +614,27 @@ export class PimoroniUnicornPanel extends LitElement {
             <button class="zbtn" @click=${() => this.zoomBy(2)} title="Zoom in">+</button>
           </label>
           <label><input type="checkbox" .checked=${this.wireframe} @change=${(e: Event) => (this.wireframe = (e.target as HTMLInputElement).checked)} /> wireframe</label>
+          <label><input type="checkbox" .checked=${this.locked} @change=${(e: Event) => (this.locked = (e.target as HTMLInputElement).checked)} /> lock</label>
           <label><input type="checkbox" .checked=${this.live} ?disabled=${!this.entryId} @change=${(e: Event) => (this.live = (e.target as HTMLInputElement).checked)} /> live push</label>
         </div>
       </div>
 
       <div class="wrap">
         <div class="col">
-          <div class="stage" style=${`width:${this.dims[0] * s}px;height:${this.dims[1] * s}px`}
-            @wheel=${this.onWheel}>
-            ${this.png ? html`<img src="data:image/png;base64,${this.png}" width=${this.dims[0] * s} height=${this.dims[1] * s} @load=${this.onImgLoad} />` : ""}
-            <div class="grid" style=${gridStyle}></div>
-            ${this.wireframe ? html`<div class="boxes">${this.layout.widgets.map((w, i) => {
-              if (!this.capForEntry(w) || w.enabled === false) return "";
-              const [bw, bh] = this.boxDims(i);
-              return html`<div class="box ${i === this.selected ? "sel" : ""}"
-                style=${`left:${w.x * s}px;top:${w.y * s}px;width:${bw * s}px;height:${bh * s}px`}
-                @pointerdown=${(e: PointerEvent) => this.startDrag(i, e)}>
-                <span class="tag">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span></div>`;
-            })}</div>` : ""}
+          <div class="stagewrap">
+            <div class="stage" style=${`width:${this.dims[0] * s}px;height:${this.dims[1] * s}px`}
+              @wheel=${this.onWheel}>
+              ${this.png ? html`<img src="data:image/png;base64,${this.png}" width=${this.dims[0] * s} height=${this.dims[1] * s} @load=${this.onImgLoad} />` : ""}
+              <div class="grid" style=${gridStyle}></div>
+              ${this.locked ? "" : html`<div class="boxes ${this.wireframe ? "wf" : ""}">${this.layout.widgets.map((w, i) => {
+                if (!this.capForEntry(w) || w.enabled === false) return "";
+                const [bw, bh] = this.boxDims(i);
+                return html`<div class="box ${i === this.selected ? "sel" : ""}"
+                  style=${`left:${w.x * s}px;top:${w.y * s}px;width:${bw * s}px;height:${bh * s}px`}
+                  @pointerdown=${(e: PointerEvent) => this.startDrag(i, e)}>
+                  <span class="tag">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span></div>`;
+              })}</div>`}
+            </div>
           </div>
           <div class="status ${this.status.startsWith("Render failed") ? "err" : ""}">${this.status}</div>
         </div>
@@ -683,6 +693,22 @@ export class PimoroniUnicornPanel extends LitElement {
     const r = await this.hass.callWS({
       type: "pimoroni_unicorn/deploy_screenset", entry_id: this.entryId, id, override: !compatible });
     this.status = r.ok ? `Deployed screen set "${id}".` : `Deploy failed.`;
+  }
+
+  private async exportLayout(): Promise<void> {
+    const out = { ...this.layout, name: this.layoutName, model: this.model };
+    const json = JSON.stringify(out, null, 2);
+    try {
+      await navigator.clipboard.writeText(json);
+      this.status = `Copied "${this.layoutName}" JSON (${this.model}) to clipboard.`;
+    } catch {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+      a.download = `${this.layoutName || "layout"}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      this.status = `Downloaded "${this.layoutName}.json".`;
+    }
   }
 
   private async publishLayout(published: boolean) {
