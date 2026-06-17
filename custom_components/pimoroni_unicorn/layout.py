@@ -16,6 +16,7 @@ from homeassistant.helpers.storage import Store
 from .const import CONF_DEVICE_ID, DOMAIN
 
 STORAGE_KEY     = f"{DOMAIN}_layouts"
+SCREENSET_KEY   = f"{DOMAIN}_screensets"
 STORAGE_VERSION = 1
 CONF_ACTIVE_LAYOUT = "active_layout"
 
@@ -54,6 +55,43 @@ async def async_remove_layout(hass: HomeAssistant, name: str) -> None:
     registry = await async_get_registry(hass)
     registry.pop(name, None)
     await hass.data[DOMAIN]["_layout_store"].async_save(registry)
+
+
+async def async_set_published(hass: HomeAssistant, name: str, published: bool) -> None:
+    """Mark a stored layout as (un)published to the marketplace."""
+    registry = await async_get_registry(hass)
+    if name in registry:
+        registry[name] = {**registry[name], "published": bool(published)}
+        await hass.data[DOMAIN]["_layout_store"].async_save(registry)
+
+
+async def async_published_layouts(hass: HomeAssistant) -> dict[str, Any]:
+    """Stored layouts explicitly published as marketplace units."""
+    return {n: lay for n, lay in (await async_get_registry(hass)).items() if lay.get("published")}
+
+
+async def async_get_screensets(hass: HomeAssistant) -> dict[str, Any]:
+    """Load (once) and return the screenset registry: id -> screenset dict."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    if "_screenset_registry" not in domain_data:
+        store = Store(hass, STORAGE_VERSION, SCREENSET_KEY)
+        domain_data["_screenset_store"]    = store
+        domain_data["_screenset_registry"] = await store.async_load() or {}
+    return domain_data["_screenset_registry"]
+
+
+async def async_save_screenset(hass: HomeAssistant, sid: str, screenset: dict[str, Any]) -> None:
+    """Store a screenset (referenced layout ids + rotation + triggers) under an id."""
+    registry = await async_get_screensets(hass)
+    registry[sid] = {**screenset, "id": sid}
+    await hass.data[DOMAIN]["_screenset_store"].async_save(registry)
+
+
+async def async_remove_screenset(hass: HomeAssistant, sid: str) -> None:
+    """Remove a stored screenset."""
+    registry = await async_get_screensets(hass)
+    registry.pop(sid, None)
+    await hass.data[DOMAIN]["_screenset_store"].async_save(registry)
 
 
 async def async_push_layout(hass: HomeAssistant, device_id: str, layout: dict[str, Any]) -> None:

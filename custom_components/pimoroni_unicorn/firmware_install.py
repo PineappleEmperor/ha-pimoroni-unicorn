@@ -22,13 +22,15 @@ def _device_files(hass: HomeAssistant, entry) -> dict:
     return (manifest or {}).get("files", {})
 
 
-async def async_install_widget(hass: HomeAssistant, entry, widget_id: str) -> bool:
-    """Stage the widget (+ missing font deps) and trigger an OTA download."""
-    device_id = _device_id(entry)
-    files = marketplace.resolve_install(
-        widget_id, _device_files(hass, entry), marketplace.widgets_dir(hass.config.config_dir))
+async def _stage_and_ota(hass: HomeAssistant, entry, files: list[tuple[str, str]]) -> bool:
+    """Stage (device_path, content) files under www and trigger a device OTA pull.
+
+    An empty file list is a success (nothing to install); returns False only on a
+    real failure (no HA URL).
+    """
     if not files:
-        return False
+        return True
+    device_id = _device_id(entry)
     base_url = hass.config.internal_url or hass.config.external_url
     if not base_url:
         _LOGGER.error("Pimoroni Unicorn install: no internal/external HA URL configured")
@@ -50,6 +52,39 @@ async def async_install_widget(hass: HomeAssistant, entry, widget_id: str) -> bo
         for name, path in staged
     ]}
     await async_publish(hass, f"{device_id}/ota", json.dumps(payload), retain=False)
+    return True
+
+
+async def async_install_widget(hass: HomeAssistant, entry, widget_id: str) -> bool:
+    """Stage the widget (+ missing font deps) and trigger an OTA download."""
+    files = marketplace.resolve_install(
+        widget_id, _device_files(hass, entry), marketplace.widgets_dir(hass.config.config_dir))
+    if not files:
+        return False
+    return await _stage_and_ota(hass, entry, files)
+
+
+async def async_deploy_layout(hass: HomeAssistant, entry, layout: dict) -> bool:
+    """Install a layout's missing widget/font deps, then push it (retained) to the device."""
+    custom_dir = marketplace.widgets_dir(hass.config.config_dir)
+    files = marketplace.resolve_layout_install(layout, _device_files(hass, entry), custom_dir)
+    if not await _stage_and_ota(hass, entry, files):
+        return False
+    await async_publish(hass, f"{_device_id(entry)}/layout", json.dumps(layout), retain=True)
+    return True
+
+
+async def async_deploy_screenset(hass: HomeAssistant, entry, screenset: dict, layouts: dict) -> bool:
+    """Install every referenced app's deps, then push the screen rotation (retained)."""
+    custom_dir = marketplace.widgets_dir(hass.config.config_dir)
+    files = marketplace.resolve_screenset_install(
+        screenset, layouts, _device_files(hass, entry), custom_dir)
+    if not await _stage_and_ota(hass, entry, files):
+        return False
+    screens = [layouts[n] for n in screenset.get("layouts", []) if n in layouts]
+    payload = {"screens": screens, "dwell": screenset.get("dwell"),
+               "transition": screenset.get("transition")}
+    await async_publish(hass, f"{_device_id(entry)}/screens", json.dumps(payload), retain=True)
     return True
 
 

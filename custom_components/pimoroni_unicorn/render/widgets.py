@@ -8,11 +8,13 @@ from . import overlay_weather
 from . import widget_calendar
 from . import widget_clock
 from . import widget_energy
+from . import widget_icon
 from . import widget_sensor
 from . import widget_sun_moon
 from . import widget_weekdays
 
-_UNITS = [widget_clock, widget_calendar, widget_weekdays, widget_energy, widget_sun_moon, widget_sensor]
+_UNITS = [widget_clock, widget_calendar, widget_weekdays, widget_energy, widget_sun_moon,
+          widget_sensor, widget_icon]
 _OVERLAY_UNITS = [overlay_weather]
 
 
@@ -21,7 +23,7 @@ def _meta(mod):
     return {
         "label": w["label"], "w": w["w"], "h": w["h"],
         "variants": w.get("variants", []), "default_cfg": w["default_cfg"],
-        "cfg_fields": w.get("cfg_fields", []),
+        "cfg_fields": w.get("cfg_fields", []), "multi": w.get("multi", False),
         "box": getattr(mod, "box", None), "render": mod.render,
     }
 
@@ -45,7 +47,8 @@ def _declarative_meta(spec):
         "label": spec.get("label", spec.get("id", "")),
         "w": spec.get("w", 8), "h": spec.get("h", 8),
         "variants": [], "default_cfg": spec.get("default_cfg", {}),
-        "cfg_fields": spec.get("cfg_fields", []), "box": _box, "render": _render,
+        "cfg_fields": spec.get("cfg_fields", []), "multi": spec.get("multi", False),
+        "box": _box, "render": _render,
     }
 
 
@@ -104,11 +107,12 @@ def widget_box(widget_id, cfg):
 def render_layout(g, layout, state):
     """Render every widget then every overlay of a layout dict."""
     for entry in layout.get("widgets", []):
-        meta = WIDGET_REGISTRY.get(entry.get("id"))
+        wid = entry.get("type", entry.get("id"))
+        meta = WIDGET_REGISTRY.get(wid)
         if meta is None or entry.get("enabled") is False:
             continue
         cfg = {**meta["default_cfg"], **entry.get("cfg", {})}
-        w, h = widget_box(entry["id"], cfg)
+        w, h = widget_box(wid, cfg)
         meta["render"](g, entry.get("x", 0), entry.get("y", 0), w, h, cfg, state)
     for name in layout.get("overlays", []):
         overlay = OVERLAY_REGISTRY.get(name)
@@ -129,6 +133,7 @@ LAYOUT_CAPABILITIES = {
             "id": wid, "label": m["label"], "w": m["w"], "h": m["h"],
             "variants": m["variants"], "default_cfg": m["default_cfg"],
             "cfg_fields": m["cfg_fields"], "sizes": _variant_sizes(wid, m),
+            "multi": m["multi"],
         }
         for wid, m in WIDGET_REGISTRY.items()
     ],

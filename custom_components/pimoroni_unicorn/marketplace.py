@@ -9,6 +9,7 @@ _DIR = Path(__file__).parent / "catalog"
 _WIDGETS = _DIR / "widgets"
 _FONTS = _DIR / "fonts"
 _OVERLAYS = _DIR / "overlays"
+_LAYOUTS = _DIR / "layouts"
 
 # Logical font dependency name (font:<name>) -> unit filename.
 FONT_FILES = {
@@ -203,4 +204,134 @@ def device_diff(manifest: dict | None, custom_dir=None) -> list[dict]:
         dev = files.get(w["device_file"])
         status = "installed" if dev == w["hash"] else ("outdated" if dev else "not_installed")
         out.append({**w, "status": status})
+    return out
+
+
+# --- Layout & screenset units -------------------------------------------------
+
+MODEL_DIMS = {"galactic": (53, 11), "cosmic": (32, 32), "stellar": (16, 16)}
+
+
+def compatible(compat, model) -> bool:
+    """A unit with no compat tags is universal; otherwise model must be listed."""
+    return (not compat) or (model in compat)
+
+
+def _layout_widget_types(layout: dict) -> list[str]:
+    """Distinct widget types referenced by a layout's entries (type or legacy id)."""
+    types = []
+    for w in layout.get("widgets", []):
+        t = w.get("type", w.get("id"))
+        if t and t not in types:
+            types.append(t)
+    return types
+
+
+def _widget_requires(widget_type: str, custom_dir=None) -> list:
+    """Dependency tokens a widget/overlay type declares (e.g. font:tall)."""
+    bp = _widget_path(widget_type)
+    if bp.is_file():
+        return (_parse_widget(bp) or {}).get("requires", [])
+    if custom_dir:
+        cp = Path(custom_dir) / ("widget_" + widget_type + ".json")
+        if cp.is_file():
+            try:
+                return json.loads(cp.read_text()).get("requires", [])
+            except (ValueError, OSError):
+                return []
+    op = _OVERLAYS / ("overlay_" + widget_type + ".py")
+    if op.is_file():
+        return (_parse_descriptor(op, "OVERLAY") or {}).get("requires", [])
+    return []
+
+
+def layout_requires(layout: dict, custom_dir=None) -> list[str]:
+    """Dependency tokens for a layout: widget:<type> plus each widget's font:<name>."""
+    reqs: list[str] = []
+    for t in _layout_widget_types(layout) + list(layout.get("overlays", [])):
+        token = "widget:" + t
+        if token not in reqs:
+            reqs.append(token)
+        for r in _widget_requires(t, custom_dir):
+            if r not in reqs:
+                reqs.append(r)
+    return reqs
+
+
+def layout_unit(name: str, layout: dict, custom_dir=None) -> dict:
+    """Marketplace descriptor for a stored layout (one app/screen)."""
+    model = layout.get("model")
+    return {
+        "id": name, "kind": "layout", "label": layout.get("name", name),
+        "model": model, "compat": [model] if model else [],
+        "requires": layout_requires(layout, custom_dir),
+        "screens": 1,
+        "hash": _short_hash(json.dumps(layout, sort_keys=True).encode()),
+    }
+
+
+def layout_units(layouts: dict, custom_dir=None) -> list[dict]:
+    """Descriptors for every stored layout (name -> layout dict)."""
+    return [layout_unit(n, lay, custom_dir) for n, lay in sorted(layouts.items())]
+
+
+def builtin_layouts() -> dict:
+    """Shipped starter pages: name -> layout dict."""
+    out = {}
+    if _LAYOUTS.is_dir():
+        for p in sorted(_LAYOUTS.glob("*.json")):
+            try:
+                lay = json.loads(p.read_text())
+            except (ValueError, OSError):
+                continue
+            out[lay.get("name", p.stem)] = lay
+    return out
+
+
+def screenset_unit(sid: str, ss: dict, layouts: dict) -> dict:
+    """Marketplace descriptor for a screenset (references apps + rotation + triggers)."""
+    refs = ss.get("layouts", [])
+    models = sorted({layouts[n].get("model") for n in refs if n in layouts and layouts[n].get("model")})
+    return {
+        "id": sid, "kind": "screenset", "label": ss.get("label", sid),
+        "compat": models, "requires": ["layout:" + n for n in refs],
+        "layouts": refs, "dwell": ss.get("dwell"), "transition": ss.get("transition"),
+        "triggers": ss.get("triggers", []), "screens": len(refs),
+        "hash": _short_hash(json.dumps(ss, sort_keys=True).encode()),
+    }
+
+
+def screenset_units(screensets: dict, layouts: dict) -> list[dict]:
+    """Descriptors for every stored screenset."""
+    return [screenset_unit(sid, ss, layouts) for sid, ss in sorted(screensets.items())]
+
+
+def resolve_layout_install(layout: dict, device_files: dict | None = None,
+                           custom_dir=None) -> list[tuple[str, str]]:
+    """All (device_path, content) widget/font files the device lacks for a layout."""
+    device_files = device_files or {}
+    seen: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for t in _layout_widget_types(layout) + list(layout.get("overlays", [])):
+        for path, content in resolve_install(t, device_files, custom_dir):
+            if path not in seen:
+                seen.add(path)
+                out.append((path, content))
+    return out
+
+
+def resolve_screenset_install(screenset: dict, layouts: dict, device_files: dict | None = None,
+                              custom_dir=None) -> list[tuple[str, str]]:
+    """Union of the install files needed by every layout a screenset references."""
+    device_files = device_files or {}
+    seen: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for name in screenset.get("layouts", []):
+        lay = layouts.get(name)
+        if not lay:
+            continue
+        for path, content in resolve_layout_install(lay, device_files, custom_dir):
+            if path not in seen:
+                seen.add(path)
+                out.append((path, content))
     return out

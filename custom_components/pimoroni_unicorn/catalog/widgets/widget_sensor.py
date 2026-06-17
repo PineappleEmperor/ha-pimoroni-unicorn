@@ -7,10 +7,10 @@ _SPEC = {"draw": [{
 }]}
 
 WIDGET = {
-    "id": "sensor", "label": "Sensor", "w": 2, "h": 2, "variants": [],
+    "id": "sensor", "label": "Sensor", "w": 2, "h": 2, "variants": [], "multi": True,
     "default_cfg": {"entity": "", "on_color": [0, 255, 0], "off_color": [40, 40, 40], "w": 2, "h": 2},
     "cfg_fields": [
-        {"key": "entity", "type": "text", "label": "Entity"},
+        {"key": "entity", "type": "entity", "label": "Entity"},
         {"key": "on_color", "type": "rgb", "label": "On"},
         {"key": "off_color", "type": "rgb", "label": "Off"},
         {"key": "w", "type": "number", "min": 1, "max": 32, "step": 1, "label": "Width"},

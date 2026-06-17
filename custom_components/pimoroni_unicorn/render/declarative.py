@@ -1,6 +1,7 @@
 # AUTO-GENERATED from firmware/ by scripts/sync_render.py — do not edit.
 """Interpreter for declarative (JSON) widget specs, drawn with engine primitives."""
 from . import drawing
+from . import icons
 
 _FONTS = {
     "digits":   (drawing.DIGITS, 3),
@@ -94,7 +95,8 @@ def render(g, spec, x, y, w, h, cfg, state):
             g.set_pen(pen)
             g.pixel(ox, oy)
         elif kind == "icon":
-            drawing.draw_icon(op.get("name", ""), ox, oy)
+            elapsed = state.get("elapsed_ms", 0) if isinstance(state, dict) else 0
+            icons.draw_icon(op.get("name", ""), ox, oy, elapsed)
         elif kind == "value":
             _draw_value(g, op, ox, oy, state, pen)
         elif kind == "bar":

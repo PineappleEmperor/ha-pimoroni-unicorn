@@ -8,7 +8,7 @@ import yaml
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
-from . import firmware_install, layout, marketplace, render_service
+from . import firmware_install, lametric, layout, marketplace, render_service
 from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN
 
 WS_DEVICES        = "pimoroni_unicorn/devices"
@@ -27,6 +27,15 @@ WS_WIDGET_PREVIEW = "pimoroni_unicorn/widget_preview"
 WS_WIDGET_SAVE    = "pimoroni_unicorn/widget_save"
 WS_WIDGET_IMPORT  = "pimoroni_unicorn/widget_import"
 WS_WIDGET_DELETE  = "pimoroni_unicorn/widget_delete"
+WS_CONTENT        = "pimoroni_unicorn/content_catalog"
+WS_DEPLOY_LAYOUT  = "pimoroni_unicorn/deploy_layout"
+WS_DEPLOY_SCREENSET = "pimoroni_unicorn/deploy_screenset"
+WS_PUBLISH_LAYOUT = "pimoroni_unicorn/publish_layout"
+WS_SAVE_SCREENSET = "pimoroni_unicorn/save_screenset"
+WS_DELETE_SCREENSET = "pimoroni_unicorn/delete_screenset"
+WS_ICONS          = "pimoroni_unicorn/icons"
+WS_ICON_INSTALL   = "pimoroni_unicorn/icon_install"
+WS_ICON_REMOVE    = "pimoroni_unicorn/icon_remove"
 
 
 @callback
@@ -35,7 +44,10 @@ def async_register(hass: HomeAssistant) -> None:
     for handler in (ws_devices, ws_capabilities, ws_layouts, ws_render,
                     ws_save_layout, ws_push_layout, ws_delete_layout, ws_push_screens,
                     ws_catalog, ws_fw_manifest, ws_fw_install, ws_fw_remove,
-                    ws_widget_preview, ws_widget_save, ws_widget_import, ws_widget_delete):
+                    ws_widget_preview, ws_widget_save, ws_widget_import, ws_widget_delete,
+                    ws_content_catalog, ws_deploy_layout, ws_deploy_screenset,
+                    ws_publish_layout, ws_save_screenset, ws_delete_screenset, ws_icons,
+                    ws_icon_install, ws_icon_remove):
         websocket_api.async_register_command(hass, handler)
 
 
@@ -46,6 +58,14 @@ def _entry(hass, entry_id):
 def _model_key(entry) -> str:
     model = {**entry.data, **entry.options}.get(CONF_MODEL, "")
     return model if model in render_service.MODEL_DIMS else "galactic"
+
+
+def _safe_render(fn, *args):
+    """Render, returning None on failure — one bad unit mustn't break a catalogue."""
+    try:
+        return fn(*args)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 @websocket_api.websocket_command({vol.Required("type"): WS_DEVICES})
@@ -105,11 +125,12 @@ async def ws_layouts(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_render(hass, connection, msg):
-    """Render a layout to a base64 PNG using the device's own render code."""
-    png = await hass.async_add_executor_job(
-        render_service.render_layout_png, msg["model"], msg["layout"])
+    """Render a layout to animated base64 PNG frames using the device's own render code."""
+    installed = await lametric.async_get_registry(hass)
+    frames = await hass.async_add_executor_job(
+        render_service.render_layout_frames, msg["model"], msg["layout"], installed)
     boxes = render_service.layout_boxes(msg["layout"])
-    connection.send_result(msg["id"], {"png": png, "boxes": boxes})
+    connection.send_result(msg["id"], {"png": frames[0], "frames": frames, "boxes": boxes})
 
 
 @websocket_api.websocket_command({
@@ -192,12 +213,22 @@ def _fw_manifest(hass, entry_id):
     vol.Required("type"): WS_CATALOG,
     vol.Optional("entry_id"): str,
 })
-@callback
-def ws_catalog(hass, connection, msg):
-    """Catalogue of installable widgets (built-in + custom) with install status."""
+@websocket_api.async_response
+async def ws_catalog(hass, connection, msg):
+    """Catalogue of installable widgets (built-in + custom) with status + thumbnails."""
     manifest = _fw_manifest(hass, msg["entry_id"]) if msg.get("entry_id") else None
     custom = marketplace.widgets_dir(hass.config.config_dir)
-    connection.send_result(msg["id"], {"widgets": marketplace.device_diff(manifest, custom)})
+    widgets = marketplace.device_diff(manifest, custom)
+    model = _model_key(_entry(hass, msg["entry_id"])) if msg.get("entry_id") else "galactic"
+    installed_icons = await lametric.async_get_registry(hass)
+
+    def _thumbs():
+        return {w["id"]: _safe_render(render_service.render_unit_thumb, model, w["id"], installed_icons)
+                for w in widgets}
+
+    thumbs = await hass.async_add_executor_job(_thumbs)
+    connection.send_result(msg["id"], {
+        "widgets": [{**w, "thumb": thumbs.get(w["id"])} for w in widgets]})
 
 
 @websocket_api.websocket_command({
@@ -249,14 +280,14 @@ async def ws_fw_remove(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_widget_preview(hass, connection, msg):
-    """Render a declarative widget spec to a base64 PNG."""
+    """Render a declarative widget spec to animated base64 PNG frames."""
     err = marketplace.validate_spec(msg["spec"])
     if err:
         connection.send_error(msg["id"], "invalid", err)
         return
-    png = await hass.async_add_executor_job(
-        render_service.render_widget_png, msg["model"], msg["spec"])
-    connection.send_result(msg["id"], {"png": png})
+    frames = await hass.async_add_executor_job(
+        render_service.render_widget_frames, msg["model"], msg["spec"])
+    connection.send_result(msg["id"], {"png": frames[0], "frames": frames})
 
 
 @websocket_api.websocket_command({
@@ -302,6 +333,187 @@ async def ws_widget_delete(hass, connection, msg):
     """Delete a custom declarative widget."""
     await hass.async_add_executor_job(
         marketplace.delete_custom, hass.config.config_dir, msg["widget_id"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_CONTENT,
+    vol.Optional("entry_id"): str,
+})
+@websocket_api.async_response
+async def ws_content_catalog(hass, connection, msg):
+    """Marketplace content: published layouts + screensets, flagged compatible vs the device."""
+    custom = marketplace.widgets_dir(hass.config.config_dir)
+    all_layouts = await layout.async_get_registry(hass)
+    published = await layout.async_published_layouts(hass)
+    screensets = await layout.async_get_screensets(hass)
+    builtin = marketplace.builtin_layouts()
+    pages = {**builtin, **published}            # published wins on a name clash
+    thumb_source = {**builtin, **all_layouts}
+    model = None
+    if msg.get("entry_id"):
+        entry = _entry(hass, msg["entry_id"])
+        if entry is not None:
+            model = _model_key(entry)
+
+    # Thumbnail every catalogue page + the first page of each screenset.
+    installed_icons = await lametric.async_get_registry(hass)
+    thumb_names = set(pages) | {
+        ss["layouts"][0] for ss in screensets.values() if ss.get("layouts")}
+
+    def _thumbs():
+        out = {}
+        for name in thumb_names:
+            lay = thumb_source.get(name)
+            if lay:
+                png = _safe_render(render_service.render_layout_png,
+                                   lay.get("model", "galactic"), lay, installed_icons)
+                if png:
+                    out[name] = png
+        return out
+
+    thumbs = await hass.async_add_executor_job(_thumbs)
+
+    def _tag(units, first_key=None):
+        out = []
+        for u in units:
+            key = u["id"] if first_key is None else (u.get(first_key) or [None])[0]
+            out.append({**u, "compatible": marketplace.compatible(u["compat"], model),
+                        "thumb": thumbs.get(key)})
+        return out
+
+    connection.send_result(msg["id"], {
+        "model": model,
+        "layouts": _tag(marketplace.layout_units(pages, custom)),
+        "screensets": _tag(marketplace.screenset_units(screensets, all_layouts), first_key="layouts"),
+    })
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_DEPLOY_LAYOUT,
+    vol.Required("entry_id"): str,
+    vol.Required("name"): str,
+    vol.Optional("override", default=False): bool,
+})
+@websocket_api.async_response
+async def ws_deploy_layout(hass, connection, msg):
+    """Resolve a layout's deps, install missing ones, then deploy it to the device."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown device")
+        return
+    lay = (await layout.async_get_registry(hass)).get(msg["name"]) or marketplace.builtin_layouts().get(msg["name"])
+    if lay is None:
+        connection.send_error(msg["id"], "not_found", "Unknown layout")
+        return
+    custom = marketplace.widgets_dir(hass.config.config_dir)
+    unit = marketplace.layout_unit(msg["name"], lay, custom)
+    if not msg["override"] and not marketplace.compatible(unit["compat"], _model_key(entry)):
+        connection.send_error(msg["id"], "incompatible",
+                              f"Layout targets {unit['compat']}, device is {_model_key(entry)}")
+        return
+    ok = await firmware_install.async_deploy_layout(hass, entry, lay)
+    connection.send_result(msg["id"], {"ok": ok})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_DEPLOY_SCREENSET,
+    vol.Required("entry_id"): str,
+    vol.Required("id"): str,
+    vol.Optional("override", default=False): bool,
+})
+@websocket_api.async_response
+async def ws_deploy_screenset(hass, connection, msg):
+    """Resolve every referenced app's deps, install missing ones, then deploy the rotation."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown device")
+        return
+    screensets = await layout.async_get_screensets(hass)
+    ss = screensets.get(msg["id"])
+    if ss is None:
+        connection.send_error(msg["id"], "not_found", "Unknown screenset")
+        return
+    all_layouts = await layout.async_get_registry(hass)
+    unit = marketplace.screenset_unit(msg["id"], ss, all_layouts)
+    if not msg["override"] and not marketplace.compatible(unit["compat"], _model_key(entry)):
+        connection.send_error(msg["id"], "incompatible",
+                              f"Screenset targets {unit['compat']}, device is {_model_key(entry)}")
+        return
+    ok = await firmware_install.async_deploy_screenset(hass, entry, ss, all_layouts)
+    connection.send_result(msg["id"], {"ok": ok})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_PUBLISH_LAYOUT,
+    vol.Required("name"): str,
+    vol.Required("published"): bool,
+})
+@websocket_api.async_response
+async def ws_publish_layout(hass, connection, msg):
+    """Mark a stored layout (un)published to the marketplace."""
+    await layout.async_set_published(hass, msg["name"], msg["published"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_SAVE_SCREENSET,
+    vol.Required("id"): str,
+    vol.Required("screenset"): dict,
+})
+@websocket_api.async_response
+async def ws_save_screenset(hass, connection, msg):
+    """Store a screenset (referenced apps + rotation + triggers)."""
+    await layout.async_save_screenset(hass, msg["id"], msg["screenset"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_DELETE_SCREENSET,
+    vol.Required("id"): str,
+})
+@websocket_api.async_response
+async def ws_delete_screenset(hass, connection, msg):
+    """Remove a stored screenset."""
+    await layout.async_remove_screenset(hass, msg["id"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({vol.Required("type"): WS_ICONS})
+@websocket_api.async_response
+async def ws_icons(hass, connection, msg):
+    """Names available to the icon widget: engine built-ins + installed LaMetric/custom."""
+    installed = sorted((await lametric.async_get_registry(hass)).keys())
+    connection.send_result(msg["id"], {
+        "builtin": render_service.builtin_icon_names(),
+        "installed": installed,
+    })
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_ICON_INSTALL,
+    vol.Required("code"): vol.Coerce(int),
+    vol.Required("name"): str,
+})
+@websocket_api.async_response
+async def ws_icon_install(hass, connection, msg):
+    """Fetch a LaMetric gallery icon by code and install it on every device."""
+    icon = await lametric.async_fetch_icon(hass, msg["code"])
+    if not icon:
+        connection.send_error(msg["id"], "fetch_failed", "Could not fetch that LaMetric icon code")
+        return
+    await lametric.async_install_icon(hass, msg["name"], icon)
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_ICON_REMOVE,
+    vol.Required("name"): str,
+})
+@websocket_api.async_response
+async def ws_icon_remove(hass, connection, msg):
+    """Remove an installed custom/LaMetric icon."""
+    await lametric.async_remove_icon(hass, msg["name"])
     connection.send_result(msg["id"], {"ok": True})
 
 

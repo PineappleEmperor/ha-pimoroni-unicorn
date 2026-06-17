@@ -188,24 +188,24 @@
         }
       }
     },
-    "show_screen": {
-      "name": "Show screen",
-      "description": "Pin a specific screen on a device, or clear the pin to resume rotation.",
+    "show_page": {
+      "name": "Show page",
+      "description": "Pin a specific page on a device, or clear the pin to resume the playlist.",
       "fields": {
         "device_id": { "name": "Device", "description": "The Pimoroni Unicorn device." },
-        "index": { "name": "Screen index", "description": "Zero-based index of the screen to show." },
-        "name": { "name": "Screen name", "description": "Name of the screen to show (instead of index)." },
-        "clear": { "name": "Resume rotation", "description": "Clear the pinned screen and resume rotation." }
+        "index": { "name": "Page index", "description": "Zero-based index of the page to show." },
+        "name": { "name": "Page name", "description": "Name of the page to show (instead of index)." },
+        "clear": { "name": "Resume playlist", "description": "Clear the pinned page and resume the playlist." }
       }
     },
-    "set_screens": {
-      "name": "Set screens",
-      "description": "Define a device's screen set from named layouts and how it rotates.",
+    "set_playlist": {
+      "name": "Set playlist",
+      "description": "Define a device's playlist from named pages and how it cycles.",
       "fields": {
         "device_id": { "name": "Device", "description": "The Pimoroni Unicorn device." },
-        "layouts": { "name": "Layouts", "description": "Names of saved layouts to rotate through, in order." },
-        "dwell": { "name": "Dwell (seconds)", "description": "Seconds to show each screen before rotating (0 disables rotation)." },
-        "transition": { "name": "Transition", "description": "Animation when switching screens." }
+        "pages": { "name": "Pages", "description": "Names of saved pages to cycle through, in order." },
+        "dwell": { "name": "Dwell (seconds)", "description": "Seconds to show each page before advancing (0 disables cycling)." },
+        "transition": { "name": "Transition", "description": "Animation when switching pages." }
       }
     },
     "push_firmware": {
