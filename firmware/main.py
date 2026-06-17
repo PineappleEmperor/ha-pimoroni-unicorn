@@ -749,7 +749,7 @@ async def main_loop():
                 "soc": battery_soc, "charging": battery_charging,
                 "sun_below": sun_below_horizon, "energy_mode": energy_mode,
                 "weather": weather_condition, "display_sensors": display_sensors,
-                "battery_animation": battery_animation,
+                "battery_animation": battery_animation, "elapsed_ms": current_time,
             }
             _advance_screen()
             if _fade_left > 0:
