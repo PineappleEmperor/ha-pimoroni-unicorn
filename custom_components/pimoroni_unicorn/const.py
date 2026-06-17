@@ -68,8 +68,14 @@ OTA_SOURCE_FILES = {
 ENGINE_FILE_KEYS = list(OTA_SOURCE_FILES)
 
 # Bundled engine version (the update entity diffs the device's reported
-# engine_version against this). Keep in sync with firmware/version.py.
-ENGINE_VERSION = "1.0.0"
+# engine_version against this). Keep in sync with firmware/engine/version.py.
+# Versioned independently of the integration manifest version.
+ENGINE_VERSION = "1.1.0"
+
+# Engine builds below this need a one-time USB reflash (the foldered file layout
+# landed in 1.1.0); OTA cannot migrate a flat device, so the update entity refuses
+# to OTA across this boundary and tells the user to reflash.
+ENGINE_REFLASH_BELOW = "1.1.0"
 
 NOTIFY_ANIMATIONS = [
     "rainbow",
