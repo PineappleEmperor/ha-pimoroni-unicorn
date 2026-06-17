@@ -191,12 +191,8 @@ def draw_sun_moon(x, y, w, h, solar=0.0, sun_below_horizon=False):
     Uses explicit pixels (not _g.circle) so the device and the CPython shim
     render an identical shape.
     """
-    if solar >= 0.1:
-        _g.set_pen(_SUN_YELLOW)
-    elif sun_below_horizon:
-        _g.set_pen(_MOON_SILVER)
-    else:
-        return
+    # Day/night follows the horizon, not solar output: sun by day, moon at night.
+    _g.set_pen(_MOON_SILVER if sun_below_horizon else _SUN_YELLOW)
     d = min(w, h)
     r = (d - 1) / 2.0
     lim = (r + 0.5) * (r + 0.5)
@@ -250,6 +246,12 @@ def draw_clock(x, t=None, y=1, variant="big", color=None):
     if variant == "small":
         for i, digit in enumerate(digits):
             draw_custom_digit(digit, x + i * 4, y, pen)
+        return
+    if variant == "wide":
+        font, w = _CLOCK_FONTS["wide"]
+        offsets = (0, w, 2 * w + 2, 3 * w + 2)  # packed pairs, 2px between HH and MM -> 14 wide
+        for i in range(4):
+            _draw_font_digit(font, w, digits[i], x + offsets[i], y, pen)
         return
     if variant in _CLOCK_FONTS:
         font, w = _CLOCK_FONTS[variant]
