@@ -36,6 +36,8 @@ WS_DELETE_SCREENSET = "pimoroni_unicorn/delete_screenset"
 WS_ICONS          = "pimoroni_unicorn/icons"
 WS_ICON_INSTALL   = "pimoroni_unicorn/icon_install"
 WS_ICON_REMOVE    = "pimoroni_unicorn/icon_remove"
+WS_FONTS          = "pimoroni_unicorn/fonts"
+WS_FONT_PREVIEW   = "pimoroni_unicorn/font_preview"
 
 
 @callback
@@ -47,7 +49,7 @@ def async_register(hass: HomeAssistant) -> None:
                     ws_widget_preview, ws_widget_save, ws_widget_import, ws_widget_delete,
                     ws_content_catalog, ws_deploy_layout, ws_deploy_screenset,
                     ws_publish_layout, ws_save_screenset, ws_delete_screenset, ws_icons,
-                    ws_icon_install, ws_icon_remove):
+                    ws_icon_install, ws_icon_remove, ws_fonts, ws_font_preview):
         websocket_api.async_register_command(hass, handler)
 
 
@@ -98,7 +100,7 @@ def ws_capabilities(hass, connection, msg):
     entry = _entry(hass, msg["entry_id"]) if msg.get("entry_id") else None
     if entry is not None:
         model = _model_key(entry)
-        caps  = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("layout_caps")
+        caps  = (entry.runtime_data or {}).get("layout_caps")
     else:
         model = msg.get("model", "galactic")
     if not caps:
@@ -207,7 +209,8 @@ async def ws_push_screens(hass, connection, msg):
 
 
 def _fw_manifest(hass, entry_id):
-    return hass.data.get(DOMAIN, {}).get(entry_id, {}).get("fw_manifest")
+    entry = _entry(hass, entry_id)
+    return (entry.runtime_data or {}).get("fw_manifest") if entry else None
 
 
 @websocket_api.websocket_command({
@@ -483,11 +486,18 @@ async def ws_delete_screenset(hass, connection, msg):
 @websocket_api.websocket_command({vol.Required("type"): WS_ICONS})
 @websocket_api.async_response
 async def ws_icons(hass, connection, msg):
-    """Names available to the icon widget: engine built-ins + installed LaMetric/custom."""
-    installed = sorted((await lametric.async_get_registry(hass)).keys())
+    """Names available to the icon widget: engine built-ins + installed LaMetric/custom + thumbs."""
+    registry = await lametric.async_get_registry(hass)
+    installed = sorted(registry.keys())
+
+    def _thumbs():
+        return {n: render_service.render_icon_thumb(registry[n]) for n in installed}
+
+    thumbs = await hass.async_add_executor_job(_thumbs)
     connection.send_result(msg["id"], {
         "builtin": render_service.builtin_icon_names(),
         "installed": installed,
+        "thumbs": thumbs,
     })
 
 
@@ -495,16 +505,17 @@ async def ws_icons(hass, connection, msg):
     vol.Required("type"): WS_ICON_INSTALL,
     vol.Required("code"): vol.Coerce(int),
     vol.Required("name"): str,
+    vol.Optional("entry_ids"): [str],
 })
 @websocket_api.async_response
 async def ws_icon_install(hass, connection, msg):
-    """Fetch a LaMetric gallery icon by code and install it on every device."""
+    """Fetch a LaMetric gallery icon by code and install it on the chosen devices."""
     icon = await lametric.async_fetch_icon(hass, msg["code"])
     if not icon:
         connection.send_error(msg["id"], "fetch_failed", "Could not fetch that LaMetric icon code")
         return
-    await lametric.async_install_icon(hass, msg["name"], icon)
-    connection.send_result(msg["id"], {"ok": True})
+    sent = await lametric.async_install_icon(hass, msg["name"], icon, msg.get("entry_ids"))
+    connection.send_result(msg["id"], {"ok": True, "sent": sent})
 
 
 @websocket_api.websocket_command({
@@ -516,6 +527,28 @@ async def ws_icon_remove(hass, connection, msg):
     """Remove an installed custom/LaMetric icon."""
     await lametric.async_remove_icon(hass, msg["name"])
     connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({vol.Required("type"): WS_FONTS})
+@callback
+def ws_fonts(hass, connection, msg):
+    """Marketplace font catalog: alpha + digit fonts with a sample string each."""
+    connection.send_result(msg["id"], {"fonts": render_service.font_specs()})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_FONT_PREVIEW,
+    vol.Required("font"): vol.In([s["name"] for s in render_service.FONT_SPECS]),
+    vol.Required("text"): str,
+    vol.Optional("color"): [vol.Coerce(int)],
+})
+@websocket_api.async_response
+async def ws_font_preview(hass, connection, msg):
+    """Render arbitrary text in a font to a content-sized base64 PNG (type-to-preview)."""
+    color = tuple(msg.get("color") or (255, 255, 255))[:3]
+    png = await hass.async_add_executor_job(
+        render_service.render_text_png, msg["font"], msg["text"], color)
+    connection.send_result(msg["id"], {"png": png})
 
 
 def _parse_spec_text(text: str):

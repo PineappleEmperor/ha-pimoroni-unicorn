@@ -3,7 +3,7 @@ import { property, state } from "lit/decorators.js";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
-interface CfgField { key: string; type: "select" | "rgb" | "number" | "text" | "entity" | "icon"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
+interface CfgField { key: string; type: "select" | "rgb" | "rgblist" | "number" | "text" | "entity" | "icon"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
 interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; multi?: boolean; }
 interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; type?: string; name?: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
@@ -11,6 +11,7 @@ interface Layout { name?: string; model?: string; grid?: number; widgets: Widget
 interface Device { entry_id: string; device_id: string; model: string; name: string; active_layout?: string; }
 interface CatalogWidget { id: string; label: string; kind: string; requires: string[]; device_file: string; hash: string; status: string; thumb?: string; }
 interface ContentUnit { id: string; label: string; kind: string; compat: string[]; requires: string[]; screens: number; compatible: boolean; thumb?: string; }
+interface FontSpec { name: string; label: string; kind: "alpha" | "digits"; w: number; h: number; builtin?: boolean; sample: string; }
 interface FwManifest { engine_version?: string; files?: Record<string, string>; }
 
 const PREVIEW_TARGET_PX = 560;
@@ -76,8 +77,14 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private showAllContent = false;
   @state() private iconNames: string[] = [];
   @state() private installedIcons: string[] = [];
+  @state() private iconThumbs: Record<string, string> = {};
   @state() private iconCode = "";
   @state() private iconName = "";
+  @state() private iconTargets: string[] = [];
+  @state() private fonts: FontSpec[] = [];
+  @state() private fontText = "";
+  @state() private fontPngs: Record<string, string> = {};
+  private fontTimer = 0;
   @state() private dirty = false;
   @state() private sectionsOpen: Record<string, boolean> = {};
   @state() private screenLayouts: string[] = [];
@@ -156,7 +163,8 @@ export class PimoroniUnicornPanel extends LitElement {
     button.secondary { background: color-mix(in srgb, var(--pu-primary) 14%, var(--pu-surface)); color: var(--pu-primary); box-shadow: none; }
     button.danger { background: var(--error-color, #ba1a1a); color: #fff; }
     button.zbtn { padding: 6px 11px; min-width: 30px; line-height: 1; border-radius: 10px; }
-    .stagewrap { max-width: 100%; overflow: auto; padding-top: 18px; }
+    .stagewrap { max-width: 100%; max-height: 62vh; overflow: auto; overscroll-behavior: contain; padding-top: 18px; cursor: grab; }
+    .stagewrap.panning { cursor: grabbing; }
     .stage { position: relative; display: inline-block; background: #000; line-height: 0; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); overflow: hidden; }
     .stage img { image-rendering: pixelated; display: block; }
     .grid, .boxes { position: absolute; inset: 0; pointer-events: none; }
@@ -199,6 +207,10 @@ export class PimoroniUnicornPanel extends LitElement {
     .cell-name { font-weight: 500; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .cell-action { display: flex; justify-content: flex-end; }
     .thumb { width: 100px; height: 64px; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .iconprev { width: 128px; height: 128px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .iconthumb { width: 40px; height: 40px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .targets { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .chk { display: inline-flex; gap: 4px; align-items: center; font-weight: 400; }
     .catalog { list-style: none; padding: 0; margin: 0; max-width: 680px; }
     .catalog li {
       display: flex; gap: 12px; align-items: center; padding: 12px 14px;
@@ -210,24 +222,47 @@ export class PimoroniUnicornPanel extends LitElement {
     .badge.warn { background: color-mix(in srgb, var(--warning-color, #ed6c02) 20%, transparent); color: var(--warning-color, #ed6c02); }
     .spec { width: 380px; height: 320px; font: 13px ui-monospace, monospace; resize: vertical; }
     .opcard { border: 1px solid var(--pu-outline); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+    .frow { display: flex; align-items: center; gap: 14px; padding: 8px 10px; border: 1px solid var(--pu-outline); border-radius: 8px; margin-bottom: 6px; }
+    .fmeta { display: flex; flex-direction: column; gap: 2px; width: 160px; flex: none; }
+    .fprev { height: 40px; image-rendering: pixelated; background: #000; border-radius: 6px; padding: 0 8px; object-fit: contain; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .swatches { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+    .swatch { position: relative; display: inline-flex; }
+    .swatch .x { position: absolute; top: -6px; right: -6px; width: 14px; height: 14px; line-height: 12px; padding: 0; border-radius: 50%; border: none; background: var(--pu-outline); color: #fff; font-size: 11px; cursor: pointer; }
+    .swatches .add { width: 22px; height: 22px; padding: 0; border-radius: 6px; border: 1px dashed var(--pu-outline); background: transparent; color: inherit; font-size: 15px; cursor: pointer; }
   `;
 
-  protected firstUpdated(): void { this.loadDevices(); this.loadIcons(); }
+  protected firstUpdated(): void { this.loadDevices(); this.loadIcons(); this.loadFonts(); }
 
   private async loadIcons() {
     try {
       const r = await this.hass.callWS({ type: "pimoroni_unicorn/icons" });
       this.iconNames = [...(r.builtin ?? []), ...(r.installed ?? [])];
       this.installedIcons = r.installed ?? [];
+      this.iconThumbs = r.thumbs ?? {};
     } catch { /* icons list optional */ }
   }
 
+  // Install targets default to every device; user can narrow the selection.
+  private iconTargetIds(): string[] {
+    return this.iconTargets.length ? this.iconTargets : this.devices.map((d) => d.entry_id);
+  }
+  private toggleIconTarget(entryId: string) {
+    const ids = new Set(this.iconTargetIds());
+    if (ids.has(entryId)) ids.delete(entryId); else ids.add(entryId);
+    this.iconTargets = this.devices.map((d) => d.entry_id).filter((id) => ids.has(id));
+  }
   private async installIcon() {
     const code = parseInt(this.iconCode, 10);
-    if (!code || !this.iconName.trim()) return;
-    const r = await this.hass.callWS({ type: "pimoroni_unicorn/icon_install", code, name: this.iconName.trim() });
-    this.status = r.ok ? `Installed icon "${this.iconName.trim()}".` : "Couldn't fetch that LaMetric code.";
-    if (r.ok) { this.iconCode = ""; this.iconName = ""; }
+    const name = this.iconName.trim();
+    if (!code || !name) return;
+    const entry_ids = this.iconTargetIds();
+    const r = await this.hass.callWS({ type: "pimoroni_unicorn/icon_install", code, name, entry_ids });
+    if (!r.ok) { this.status = "Couldn't fetch that LaMetric code."; return; }
+    const sent: string[] = r.sent ?? [];
+    this.status = sent.length
+      ? `Installed "${name}" → ${sent.join(", ")}.`
+      : `Saved "${name}" (no devices to push to).`;
+    this.iconCode = ""; this.iconName = "";
     this.loadIcons();
   }
   private async removeIcon(name: string) {
@@ -235,6 +270,30 @@ export class PimoroniUnicornPanel extends LitElement {
     await this.hass.callWS({ type: "pimoroni_unicorn/icon_remove", name });
     this.status = `Removed icon "${name}".`;
     this.loadIcons();
+  }
+
+  private async loadFonts() {
+    try {
+      const r = await this.hass.callWS({ type: "pimoroni_unicorn/fonts" });
+      this.fonts = r.fonts ?? [];
+      this.refreshFontPreviews();
+    } catch { /* font catalog optional */ }
+  }
+  private onFontInput(text: string) {
+    this.fontText = text;
+    clearTimeout(this.fontTimer);
+    this.fontTimer = window.setTimeout(() => this.refreshFontPreviews(), 250);
+  }
+  private async refreshFontPreviews() {
+    const out: Record<string, string> = {};
+    await Promise.all(this.fonts.map(async (f) => {
+      const text = this.fontText.trim() || f.sample;
+      try {
+        const r = await this.hass.callWS({ type: "pimoroni_unicorn/font_preview", font: f.name, text });
+        out[f.name] = r.png;
+      } catch { /* skip unrenderable */ }
+    }));
+    this.fontPngs = out;
   }
 
   connectedCallback(): void {
@@ -249,6 +308,12 @@ export class PimoroniUnicornPanel extends LitElement {
   private _onKey = (e: KeyboardEvent): void => {
     const tag = (e.target as HTMLElement)?.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if ((e.key === "Delete" || e.key === "Backspace") && this.tab === "layout"
+        && this.selected >= 0 && this.layout.widgets[this.selected]) {
+      e.preventDefault();
+      this.removeWidget(this.selected);
+      return;
+    }
     const d: Record<string, [number, number]> = {
       ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
     };
@@ -365,8 +430,29 @@ export class PimoroniUnicornPanel extends LitElement {
     this.zoom = Math.min(48, Math.max(4, this.scale + delta));
   }
   private onWheel(e: WheelEvent): void {
+    if (!e.ctrlKey && !e.metaKey) return;  // plain wheel/trackpad pans natively; ctrl/⌘+wheel zooms
     e.preventDefault();
     this.zoomBy(e.deltaY < 0 ? 2 : -2);
+  }
+  private startPan(e: PointerEvent): void {
+    if ((e.target as HTMLElement).closest(".box")) return;  // dragging a widget moves it, not pans
+    const wrap = e.currentTarget as HTMLElement;
+    e.preventDefault();
+    const sx = e.clientX, sy = e.clientY, sl = wrap.scrollLeft, st = wrap.scrollTop;
+    wrap.setPointerCapture(e.pointerId);
+    wrap.classList.add("panning");
+    const move = (ev: PointerEvent) => {
+      wrap.scrollLeft = sl - (ev.clientX - sx);
+      wrap.scrollTop = st - (ev.clientY - sy);
+    };
+    const up = (ev: PointerEvent) => {
+      wrap.releasePointerCapture(ev.pointerId);
+      wrap.classList.remove("panning");
+      wrap.removeEventListener("pointermove", move);
+      wrap.removeEventListener("pointerup", up);
+    };
+    wrap.addEventListener("pointermove", move);
+    wrap.addEventListener("pointerup", up);
   }
   // Box dims come from the backend (computed by the real widget_box), so any
   // cfg-driven sizing (variant, size, digits…) is correct without client logic.
@@ -383,6 +469,21 @@ export class PimoroniUnicornPanel extends LitElement {
   private setCfg(entry: WidgetEntry, key: string, value: unknown): void {
     entry.cfg = { ...(entry.cfg ?? {}), [key]: value };
     this.edited();
+  }
+  private cfgPalette(entry: WidgetEntry, key: string): Rgb[] {
+    const p = this.cfgVal(entry, key) as Rgb[] | undefined;
+    if (p && p.length) return p.map((c) => [...c] as Rgb);
+    return [((this.cfgVal(entry, "color") as Rgb) ?? [255, 255, 255])];
+  }
+  private setCfgColor(entry: WidgetEntry, key: string, i: number, rgb: Rgb): void {
+    const p = this.cfgPalette(entry, key); p[i] = rgb; this.setCfg(entry, key, p);
+  }
+  private addCfgColor(entry: WidgetEntry, key: string): void {
+    const p = this.cfgPalette(entry, key); p.push([255, 255, 255]); this.setCfg(entry, key, p);
+  }
+  private removeCfgColor(entry: WidgetEntry, key: string, i: number): void {
+    const p = this.cfgPalette(entry, key);
+    if (p.length > 1) { p.splice(i, 1); this.setCfg(entry, key, p); }
   }
   private setName(entry: WidgetEntry, value: string): void {
     const name = value.trim();
@@ -450,6 +551,16 @@ export class PimoroniUnicornPanel extends LitElement {
     this.selected = -1;
     this.edited();
   }
+  // Array order is z-order: later entries draw on top. dir -1 raises (toward front).
+  private moveWidget(i: number, dir: -1 | 1): void {
+    const j = i - dir;
+    const ws = this.layout.widgets;
+    if (j < 0 || j >= ws.length) return;
+    [ws[i], ws[j]] = [ws[j], ws[i]];
+    if (this.selected === i) this.selected = j;
+    else if (this.selected === j) this.selected = i;
+    this.edited();
+  }
   private toggleOverlay(id: string, on: boolean): void {
     const set = new Set(this.layout.overlays ?? []);
     if (on) set.add(id); else set.delete(id);
@@ -491,6 +602,22 @@ export class PimoroniUnicornPanel extends LitElement {
           @change=${(e: Event) => this.setPos(entry, "y", +(e.target as HTMLInputElement).value)} />
       </div>
       ${cap.cfg_fields.map((f) => {
+        const mode = this.cfgVal(entry, "color_mode");
+        if (f.key === "speed" && mode !== "rainbow") return "";
+        if (f.type === "rgblist" && mode !== "per_char") return "";
+        if (f.type === "rgblist") {
+          const palette = this.cfgPalette(entry, f.key);
+          return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+            <span class="swatches">
+              ${palette.map((c, i) => html`<span class="swatch">
+                <input type="color" .value=${hex(c)}
+                  @input=${(e: Event) => this.setCfgColor(entry, f.key, i, unhex((e.target as HTMLInputElement).value))} />
+                ${palette.length > 1 ? html`<button class="x" title="Remove"
+                  @click=${() => this.removeCfgColor(entry, f.key, i)}>×</button>` : ""}
+              </span>`)}
+              <button class="add" title="Add colour" @click=${() => this.addCfgColor(entry, f.key)}>+</button>
+            </span></div>`;
+        }
         if (f.type === "select") {
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
             <select @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLSelectElement).value)}>
@@ -621,9 +748,8 @@ export class PimoroniUnicornPanel extends LitElement {
 
       <div class="wrap">
         <div class="col">
-          <div class="stagewrap">
-            <div class="stage" style=${`width:${this.dims[0] * s}px;height:${this.dims[1] * s}px`}
-              @wheel=${this.onWheel}>
+          <div class="stagewrap" @wheel=${this.onWheel} @pointerdown=${this.startPan}>
+            <div class="stage" style=${`width:${this.dims[0] * s}px;height:${this.dims[1] * s}px`}>
               ${this.png ? html`<img src="data:image/png;base64,${this.png}" width=${this.dims[0] * s} height=${this.dims[1] * s} @load=${this.onImgLoad} />` : ""}
               <div class="grid" style=${gridStyle}></div>
               ${this.locked ? "" : html`<div class="boxes ${this.wireframe ? "wf" : ""}">${this.layout.widgets.map((w, i) => {
@@ -640,15 +766,24 @@ export class PimoroniUnicornPanel extends LitElement {
         </div>
 
         <div class="col">
-          <h3>Widgets</h3>
+          <h3>Layers</h3>
           <ul class="wlist">
-            ${this.layout.widgets.map((w, i) => html`
+            ${[...this.layout.widgets.keys()].reverse().map((i) => {
+              const w = this.layout.widgets[i];
+              const last = this.layout.widgets.length - 1;
+              return html`
               <li class="${i === this.selected ? "sel" : ""}" @click=${() => (this.selected = i)}>
-                <input type="checkbox" .checked=${w.enabled !== false}
+                <input type="checkbox" .checked=${w.enabled !== false} title="Show / hide"
                   @click=${(e: Event) => { e.stopPropagation(); w.enabled = (e.target as HTMLInputElement).checked; this.edited(); }} />
                 <span class="grow">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span>
-              </li>`)}
+                <button class="zbtn" title="Raise" ?disabled=${i === last}
+                  @click=${(e: Event) => { e.stopPropagation(); this.moveWidget(i, -1); }}>▲</button>
+                <button class="zbtn" title="Lower" ?disabled=${i === 0}
+                  @click=${(e: Event) => { e.stopPropagation(); this.moveWidget(i, 1); }}>▼</button>
+              </li>`;
+            })}
           </ul>
+          ${this.layout.widgets.length > 1 ? html`<p class="hint">Top of the list draws on top.</p>` : ""}
           ${addable.length ? html`<div class="panelrow">
             <select id="addsel"><option value="">add widget…</option>${addable.map((c) => html`<option value=${c.id}>${c.label}</option>`)}</select>
             <button class="secondary" @click=${() => { const sel = this.renderRoot.querySelector("#addsel") as HTMLSelectElement; this.addWidget(sel.value); sel.value = ""; }}>Add</button>
@@ -811,23 +946,58 @@ export class PimoroniUnicornPanel extends LitElement {
         : html`<p class="hint">Select a device to manage installed widgets.</p>`)}
 
       ${this._section("icons", "Icons", this.installedIcons.length, html`
-        <p class="hint">Built-in icons ship with the engine. Add LaMetric gallery icons by code — installed icons become selectable in the Icon widget on every device.</p>
+        <p class="hint">Built-in icons ship with the engine. Add LaMetric gallery icons by code, then choose which devices to install them on.</p>
         <div class="panelrow">
-          <label>LaMetric code</label>
-          <input type="number" style="width:100px" .value=${this.iconCode}
-            @input=${(e: Event) => { this.iconCode = (e.target as HTMLInputElement).value; }} />
-          ${this.iconCode ? html`<img class="thumb" style="width:40px;height:40px"
-            src="https://developer.lametric.com/content/apps/icon_thumbs/${this.iconCode}" />` : ""}
-          <label>Name</label>
-          <input style="width:120px" .value=${this.iconName}
-            @input=${(e: Event) => { this.iconName = (e.target as HTMLInputElement).value; }} />
-          <button ?disabled=${!this.iconCode || !this.iconName.trim()} @click=${this.installIcon}>Add</button>
+          ${this.iconCode ? html`<img class="iconprev"
+            src="https://developer.lametric.com/content/apps/icon_thumbs/${this.iconCode}" />`
+            : html`<div class="iconprev"></div>`}
+          <div class="grow">
+            <div class="panelrow">
+              <label>LaMetric code</label>
+              <input type="number" style="width:100px" .value=${this.iconCode}
+                @input=${(e: Event) => { this.iconCode = (e.target as HTMLInputElement).value; }} />
+              <label>Name</label>
+              <input style="width:120px" .value=${this.iconName}
+                @input=${(e: Event) => { this.iconName = (e.target as HTMLInputElement).value; }} />
+            </div>
+            ${this.devices.length ? html`<div class="panelrow">
+              <label>Install on</label>
+              <span class="targets">
+                ${this.devices.map((d) => html`<label class="chk">
+                  <input type="checkbox" ?checked=${this.iconTargetIds().includes(d.entry_id)}
+                    @change=${() => this.toggleIconTarget(d.entry_id)} />${d.name}</label>`)}
+              </span>
+            </div>` : ""}
+            <div class="panelrow">
+              <button ?disabled=${!this.iconCode || !this.iconName.trim() || (this.devices.length > 0 && this.iconTargetIds().length === 0)}
+                @click=${this.installIcon}>Add</button>
+            </div>
+          </div>
         </div>
         ${this.installedIcons.length
           ? this.installedIcons.map((n) => html`<div class="panelrow">
+              ${this.iconThumbs[n]
+                ? html`<img class="iconthumb" src="data:image/png;base64,${this.iconThumbs[n]}" />`
+                : html`<div class="iconthumb"></div>`}
               <span class="grow">${n}</span>
               <button class="danger zbtn" @click=${() => this.removeIcon(n)}>Remove</button></div>`)
           : html`<p class="hint">No custom icons installed yet.</p>`}
+      `)}
+
+      ${this._section("fonts", "Fonts", this.fonts.length, html`
+        <p class="hint">Type below to preview live in every font. Digit fonts (clock faces) show only numerals; alpha fonts cover A–Z. Fonts install automatically with any widget that needs them.</p>
+        <div class="panelrow">
+          <label>Preview text</label>
+          <input style="width:220px" placeholder="type to preview…" .value=${this.fontText}
+            @input=${(e: Event) => this.onFontInput((e.target as HTMLInputElement).value)} />
+        </div>
+        ${this.fonts.map((f) => html`<div class="frow">
+          <div class="fmeta"><span class="cell-name">${f.label}</span>
+            <span class="hint">${f.kind === "digits" ? "digits" : "A–Z 0–9"} · ${f.w}×${f.h}${f.builtin ? " · built-in" : ""}</span></div>
+          ${this.fontPngs[f.name]
+            ? html`<img class="fprev" src="data:image/png;base64,${this.fontPngs[f.name]}" />`
+            : html`<div class="fprev"></div>`}
+        </div>`)}
       `)}
       <p class="hint">Deploying a page installs any widgets/fonts it needs over the air first, then pushes it; the device reboots if files changed.</p>
     `;

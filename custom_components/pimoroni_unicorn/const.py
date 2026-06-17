@@ -1,5 +1,12 @@
 """Constants for the Pimoroni Unicorn integration."""
 
+from typing import Any
+
+from homeassistant.config_entries import ConfigEntry
+
+# Per-entry runtime state lives on entry.runtime_data as this dict.
+type PUConfigEntry = ConfigEntry[dict[str, Any]]
+
 DOMAIN = "pimoroni_unicorn"
 CONF_DEVICE_ID = "device_id"
 CONF_MODEL = "model"
@@ -56,6 +63,8 @@ OTA_SOURCE_FILES = {
     "widget_sun_moon":     ("widget_sun_moon.py",      "/widgets/widget_sun_moon.py"),
     "widget_sensor":       ("widget_sensor.py",        "/widgets/widget_sensor.py"),
     "widget_icon":         ("widget_icon.py",          "/widgets/widget_icon.py"),
+    "widget_text":         ("widget_text.py",          "/widgets/widget_text.py"),
+    "widget_date":         ("widget_date.py",          "/widgets/widget_date.py"),
     "monospace_digits":    ("monospace_digits.py",     "/assets/fonts/monospace_digits.py"),
     "monospace_big_digits":("monospace_big_digits.py", "/assets/fonts/monospace_big_digits.py"),
     "monospace_blocky":    ("monospace_blocky.py",     "/assets/fonts/monospace_blocky.py"),
@@ -68,8 +77,14 @@ OTA_SOURCE_FILES = {
 ENGINE_FILE_KEYS = list(OTA_SOURCE_FILES)
 
 # Bundled engine version (the update entity diffs the device's reported
-# engine_version against this). Keep in sync with firmware/version.py.
-ENGINE_VERSION = "1.0.0"
+# engine_version against this). Keep in sync with firmware/engine/version.py.
+# Versioned independently of the integration manifest version.
+ENGINE_VERSION = "1.1.0"
+
+# Engine builds below this need a one-time USB reflash (the foldered file layout
+# landed in 1.1.0); OTA cannot migrate a flat device, so the update entity refuses
+# to OTA across this boundary and tells the user to reflash.
+ENGINE_REFLASH_BELOW = "1.1.0"
 
 NOTIFY_ANIMATIONS = [
     "rainbow",

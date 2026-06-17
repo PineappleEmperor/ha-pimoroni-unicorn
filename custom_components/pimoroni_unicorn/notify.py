@@ -14,7 +14,6 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import (
     CONF_DEVICE_ID,
-    DOMAIN,
     NOTIFY_EFFECTS,
     NOTIFY_ENTRANCES,
     NOTIFY_PAYLOAD_VERSION,
@@ -105,7 +104,7 @@ def _resolve_entry(hass: HomeAssistant, ha_device_id: str):
 
 def _maybe_downconvert(hass: HomeAssistant, entry, payload: dict[str, Any]) -> dict[str, Any]:
     """Downconvert when the device reported pre-v2 capabilities."""
-    caps = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("notify_caps")
+    caps = (entry.runtime_data or {}).get("notify_caps")
     if caps is not None and caps.get("v") != NOTIFY_PAYLOAD_VERSION:
         return _downconvert_v2(payload)
     return payload

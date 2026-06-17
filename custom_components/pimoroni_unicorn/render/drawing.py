@@ -2,7 +2,7 @@
 """Display drawing utilities for the Pimoroni Unicorn."""
 import time
 
-from .bitfonts import font3x5
+from .bitfonts import font3x5, font5x9
 from .monospace_big_digits import BIG_DIGITS
 from .monospace_blocky import BLOCKY
 from .monospace_digits import DIGITS
@@ -16,6 +16,16 @@ _CLOCK_FONTS = {
     "tall":     (TALL, 3),
     "humanist": (HUMANIST, 4),
 }
+
+# Selectable text fonts: name -> (glyph table, force-uppercase). font3x5 is
+# uppercase-only; font5x9 is mixed-case so case is preserved.
+_TEXT_FONTS = {"font3x5": (font3x5, True), "font5x9": (font5x9, False)}
+
+
+def _text_font(name):
+    """Resolve a text font name to (glyph table, force-uppercase)."""
+    return _TEXT_FONTS.get(name, _TEXT_FONTS["font3x5"])
+
 
 BATTERY_ROWS = 4
 
@@ -66,6 +76,61 @@ def lerp_colour(rgb_a, rgb_b, t):
         int(rgb_a[1] + (rgb_b[1] - rgb_a[1]) * t),
         int(rgb_a[2] + (rgb_b[2] - rgb_a[2]) * t),
     )
+
+
+def _hsv_to_rgb(h, s, v):
+    """HSV (h wrapped to [0,1)) to a 0-255 (r,g,b) tuple."""
+    h = h % 1.0
+    i = int(h * 6)
+    f = h * 6 - i
+    p = v * (1 - s)
+    q = v * (1 - f * s)
+    t = v * (1 - (1 - f) * s)
+    i = i % 6
+    if i == 0:
+        r, g, b = v, t, p
+    elif i == 1:
+        r, g, b = q, v, p
+    elif i == 2:
+        r, g, b = p, v, t
+    elif i == 3:
+        r, g, b = p, q, v
+    elif i == 4:
+        r, g, b = t, p, v
+    else:
+        r, g, b = v, p, q
+    return (int(r * 255), int(g * 255), int(b * 255))
+
+
+def text_fx_colors(s, cfg, elapsed_ms=0):
+    """Per-character (r,g,b) list for string s under cfg's colour mode."""
+    n = len(s)
+    mode = cfg.get("color_mode", "solid")
+    if mode == "rainbow":
+        speed = cfg.get("speed", 3)
+        spread = cfg.get("spread", 0.12)
+        phase = (elapsed_ms * speed) / 6000.0
+        return [_hsv_to_rgb(i * spread - phase, 1.0, 1.0) for i in range(n)]
+    if mode == "per_char":
+        palette = cfg.get("colors") or [cfg.get("color") or (255, 255, 255)]
+        return [tuple(palette[i % len(palette)]) for i in range(n)]
+    base = tuple(cfg.get("color") or (255, 255, 255))
+    return [base for _ in range(n)]
+
+
+def draw_text_fx(s, x, y, cfg, elapsed_ms=0):
+    """Draw a string in the configured text font with solid / per-char / rainbow colouring."""
+    table, upper = _text_font(cfg.get("font", "font3x5"))
+    s = str(s).upper() if upper else str(s)
+    colors = text_fx_colors(s, cfg, elapsed_ms)
+    cx = x
+    for i in range(len(s)):
+        glyph = table.get(s[i])
+        if glyph is None:
+            continue
+        _g.set_pen(_g.create_pen(*colors[i]))
+        _bitfont.draw_char(s[i], cx, y, table)
+        cx += glyph["w"] + glyph["s"]
 
 
 def soc_colour(soc_pct, is_charging):
@@ -191,12 +256,8 @@ def draw_sun_moon(x, y, w, h, solar=0.0, sun_below_horizon=False):
     Uses explicit pixels (not _g.circle) so the device and the CPython shim
     render an identical shape.
     """
-    if solar >= 0.1:
-        _g.set_pen(_SUN_YELLOW)
-    elif sun_below_horizon:
-        _g.set_pen(_MOON_SILVER)
-    else:
-        return
+    # Day/night follows the horizon, not solar output: sun by day, moon at night.
+    _g.set_pen(_MOON_SILVER if sun_below_horizon else _SUN_YELLOW)
     d = min(w, h)
     r = (d - 1) / 2.0
     lim = (r + 0.5) * (r + 0.5)
@@ -241,6 +302,24 @@ BIG_DIGIT_W = 5
 BIG_DIGIT_STEP = BIG_DIGIT_W + 1
 
 
+def text_width(s, d=1, font="font3x5"):
+    """Pixel width of a string in the named text font (unknown glyphs skipped)."""
+    table, upper = _text_font(font)
+    seq = str(s).upper() if upper else str(s)
+    total = 0
+    for ch in seq:
+        glyph = table.get(ch)
+        if glyph:
+            total += glyph["w"] + d
+    return total - d if total else 0
+
+
+def draw_text(s, x, y, color=None):
+    """Draw an uppercase string in the 3x5 bitmap font at (x, y)."""
+    _g.set_pen(_g.create_pen(*color) if color else _WHITE)
+    _bitfont.draw_text(str(s).upper(), x, y, font3x5, d=1)
+
+
 def draw_clock(x, t=None, y=1, variant="big", color=None):
     """Draw the time at (x, y). variant: big (HHMM row), small (3x5 row), stacked (HH over MM)."""
     if t is None:
@@ -250,6 +329,12 @@ def draw_clock(x, t=None, y=1, variant="big", color=None):
     if variant == "small":
         for i, digit in enumerate(digits):
             draw_custom_digit(digit, x + i * 4, y, pen)
+        return
+    if variant == "wide":
+        font, w = _CLOCK_FONTS["wide"]
+        offsets = (0, w, 2 * w + 2, 3 * w + 2)  # packed pairs, 2px between HH and MM -> 14 wide
+        for i in range(4):
+            _draw_font_digit(font, w, digits[i], x + offsets[i], y, pen)
         return
     if variant in _CLOCK_FONTS:
         font, w = _CLOCK_FONTS[variant]

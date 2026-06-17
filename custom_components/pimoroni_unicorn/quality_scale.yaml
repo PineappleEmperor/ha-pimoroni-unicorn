@@ -1,9 +1,7 @@
 # Tracking toward the HA integration quality scale. Honest current state — drives rc2+ work.
 rules:
   # Bronze
-  action-setup:
-    status: todo
-    comment: Services are registered in async_setup_entry; move to async_setup.
+  action-setup: done
   appropriate-polling:
     status: exempt
     comment: Local push over MQTT; no polling.
@@ -19,28 +17,20 @@ rules:
   docs-actions: done
   docs-high-level-description: done
   docs-installation-instructions: done
-  docs-removal-instructions:
-    status: todo
-    comment: Add device/integration removal docs.
+  docs-removal-instructions: done
   entity-event-setup:
     status: todo
     comment: Audit subscribe in async_added_to_hass across button/update.
   entity-unique-id: done
-  has-entity-name:
-    status: todo
-    comment: Audit _attr_has_entity_name on all platforms.
-  runtime-data:
-    status: todo
-    comment: Uses hass.data[DOMAIN][entry_id]; migrate to entry.runtime_data.
+  has-entity-name: done
+  runtime-data: done
   test-before-configure:
     status: todo
     comment: Config flow does not yet test the MQTT/device connection.
   test-before-setup:
     status: todo
     comment: Raise ConfigEntryNotReady when the device/broker is unavailable.
-  unique-config-entry:
-    status: todo
-    comment: Set unique_id (device_id) + abort on duplicate; pairs with #58 discovery.
+  unique-config-entry: done
   # Silver
   config-entry-unloading: done
   log-when-unavailable:
@@ -77,9 +67,7 @@ rules:
     status: todo
     comment: MQTT auto-discovery pending (#58).
   stale-devices: done
-  diagnostics:
-    status: todo
-    comment: Add diagnostics.py.
+  diagnostics: done
   exception-translations:
     status: todo
   icon-translations:
@@ -111,8 +99,8 @@ rules:
     status: exempt
     comment: Only dependency is Pillow (image encoding), run in the executor.
   inject-websession:
-    status: exempt
-    comment: No cloud HTTP session; firmware pulls OTA files device-side.
+    status: done
+    comment: LaMetric icon fetch uses async_get_clientsession; OTA pulls run device-side.
   strict-typing:
     status: todo
     comment: pyright standard passes; not strict mode yet.

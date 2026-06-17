@@ -623,6 +623,7 @@ async def mqtt_task():
                     "payload_on": "online", "payload_off": "offline",
                     "unique_id": f"{DEVICE_ID}_connectivity", "device": DEVICE_INFO,
                 }),
+                retain=True,
             )
             mqtt_client.publish(
                 f"{DISCOVERY_PREFIX}/light/{DEVICE_ID}/display/config",
@@ -634,11 +635,15 @@ async def mqtt_task():
                     "payload_available": "online", "payload_not_available": "offline",
                     "brightness": True, "brightness_scale": 100, "device": DEVICE_INFO,
                 }),
+                retain=True,
             )
-            # Energy-only entities — only advertise them when the energy widget is in use.
+            # Energy-only entities — advertise them only when the energy widget is in use;
+            # otherwise clear any stale retained discovery from a previous energy layout.
+            _anim_cfg = f"{DISCOVERY_PREFIX}/switch/{DEVICE_ID}/animation/config"
+            _energy_cfg = f"{DISCOVERY_PREFIX}/select/{DEVICE_ID}/energy_mode/config"
             if _uses_energy():
                 mqtt_client.publish(
-                    f"{DISCOVERY_PREFIX}/switch/{DEVICE_ID}/animation/config",
+                    _anim_cfg,
                     json.dumps({
                         "name": "Battery Animation",
                         "unique_id": f"{DEVICE_ID}_battery_animation",
@@ -647,9 +652,10 @@ async def mqtt_task():
                         "payload_available": "online", "payload_not_available": "offline",
                         "device": DEVICE_INFO,
                     }),
+                    retain=True,
                 )
                 mqtt_client.publish(
-                    f"{DISCOVERY_PREFIX}/select/{DEVICE_ID}/energy_mode/config",
+                    _energy_cfg,
                     json.dumps({
                         "name": "Energy Mode", "unique_id": f"{DEVICE_ID}_energy_mode",
                         "command_topic": TOPIC_ENERGY_MODE_CMD,
@@ -659,7 +665,11 @@ async def mqtt_task():
                         "payload_available": "online", "payload_not_available": "offline",
                         "device": DEVICE_INFO,
                     }),
+                    retain=True,
                 )
+            else:
+                mqtt_client.publish(_anim_cfg, b"", retain=True)
+                mqtt_client.publish(_energy_cfg, b"", retain=True)
 
             mqtt_client.subscribe(f"{DEVICE_ID}/display/#".encode())
             for topic in (
