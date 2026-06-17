@@ -106,7 +106,7 @@ To clear the current notification, call **`pimoroni_unicorn.dismiss_notification
 ```yaml
 action: notify.send_message
 target:
-  entity_id: notify.pimoroni_unicorn_studio
+  entity_id: notify.pimoroni_unicorn_1
 data:
   message: "Garage open"
   data:

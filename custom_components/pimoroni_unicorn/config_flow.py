@@ -37,7 +37,7 @@ from .const import (
 )
 
 DATA_SCHEMA = vol.Schema({
-    vol.Required(CONF_DEVICE_ID, default="pimoroni_unicorn_studio"): str,
+    vol.Required(CONF_DEVICE_ID, default="pimoroni_unicorn_1"): str,
     vol.Required(CONF_MODEL,     default=UNICORN_MODELS[0]):          vol.In(UNICORN_MODELS),
 })
 

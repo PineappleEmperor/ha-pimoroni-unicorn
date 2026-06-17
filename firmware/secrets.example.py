@@ -5,7 +5,7 @@ MQTT_SERVER   = ""
 MQTT_PORT     = 1883
 MQTT_USER     = ""
 MQTT_PASSWORD = ""
-DEVICE_ID     = "pimoroni_unicorn_studio"
+DEVICE_ID     = "pimoroni_unicorn_1"
 NTP_HOST      = ""            # defaults to MQTT_SERVER if left blank
 MODEL         = "galactic"    # galactic | cosmic | stellar
 
