@@ -64,6 +64,10 @@ OTA_SOURCE_FILES = {
 # Excludes secrets.py (device-private) and __init__.py.
 ENGINE_FILE_KEYS = list(OTA_SOURCE_FILES)
 
+# Bundled engine version (the update entity diffs the device's reported
+# engine_version against this). Keep in sync with firmware/version.py.
+ENGINE_VERSION = "1.0.0"
+
 NOTIFY_ANIMATIONS = [
     "rainbow",
     "fire",

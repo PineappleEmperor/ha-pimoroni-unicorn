@@ -17,6 +17,7 @@ from homeassistant.components.persistent_notification import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
@@ -80,7 +81,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _async_setup_sensor_feed(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-    await hass.config_entries.async_forward_entry_setups(entry, ["button"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["button", "update"])
 
     if not hass.data.get(f"{DOMAIN}_ws_registered"):
         ws_api.async_register(hass)
@@ -117,7 +118,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    await hass.config_entries.async_unload_platforms(entry, ["button"])
+    await hass.config_entries.async_unload_platforms(entry, ["button", "update"])
     store = hass.data[DOMAIN].pop(entry.entry_id, {})
     for unsub in store.get("unsub", []):
         unsub()
@@ -243,6 +244,7 @@ async def _async_subscribe_fw_manifest(hass: HomeAssistant, entry: ConfigEntry) 
                 hass.data[DOMAIN][entry.entry_id]["fw_manifest"] = data
                 # Device just (re)connected — push fresh time so its clock is right immediately.
                 hass.async_create_task(_async_publish_time(hass, device_id))
+                async_dispatcher_send(hass, f"{DOMAIN}_manifest_{entry.entry_id}")
         except (json.JSONDecodeError, ValueError):
             pass
 
