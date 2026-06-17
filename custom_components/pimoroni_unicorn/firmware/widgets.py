@@ -110,7 +110,8 @@ def render_layout(g, layout, state):
         meta = WIDGET_REGISTRY.get(wid)
         if meta is None or entry.get("enabled") is False:
             continue
-        cfg = {**meta["default_cfg"], **entry.get("cfg", {})}
+        cfg = dict(meta["default_cfg"])
+        cfg.update(entry.get("cfg") or {})
         w, h = widget_box(wid, cfg)
         meta["render"](g, entry.get("x", 0), entry.get("y", 0), w, h, cfg, state)
     for name in layout.get("overlays", []):
@@ -123,7 +124,12 @@ def _variant_sizes(wid, m):
     """Map each variant to its (w, h) box so editors draw accurate footprints."""
     if not m["variants"]:
         return {}
-    return {v: list(widget_box(wid, {**m["default_cfg"], "variant": v})) for v in m["variants"]}
+    sizes = {}
+    for v in m["variants"]:
+        cfg = dict(m["default_cfg"])
+        cfg["variant"] = v
+        sizes[v] = list(widget_box(wid, cfg))
+    return sizes
 
 
 LAYOUT_CAPABILITIES = {
