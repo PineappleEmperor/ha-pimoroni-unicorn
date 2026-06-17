@@ -897,6 +897,16 @@ export class PimoroniUnicornPanel extends LitElement {
     this.buildScreenPreview();
   }
 
+  private moveScreen(name: string, dir: -1 | 1) {
+    const order = [...this.screenLayouts];
+    const i = order.indexOf(name);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= order.length) return;
+    [order[i], order[j]] = [order[j], order[i]];
+    this.screenLayouts = order;
+    this.buildScreenPreview();
+  }
+
   private async buildScreenPreview() {
     clearInterval(this.screenTimer);
     const pngs: Record<string, string> = {};
@@ -945,11 +955,19 @@ export class PimoroniUnicornPanel extends LitElement {
       <div class="wrap">
         <div class="col">
           <h3>Pages in this playlist</h3>
-          <p class="hint">Tick pages to include; play order follows the order you tick.</p>
-          ${names.length ? names.map((n) => html`<div class="panelrow"><label>
-            <input type="checkbox" ?checked=${this.screenLayouts.includes(n)}
-              @change=${(e: Event) => this.toggleScreen(n, (e.target as HTMLInputElement).checked)} />
-            ${this.screenLayouts.includes(n) ? html`<span class="chip">${this.screenLayouts.indexOf(n) + 1}</span>` : ""} ${n}</label></div>`)
+          <p class="hint">Tick pages to include, then order them with ▲ ▼.</p>
+          ${names.length ? names.map((n) => {
+            const on = this.screenLayouts.includes(n);
+            const pos = this.screenLayouts.indexOf(n);
+            return html`<div class="panelrow">
+              <input type="checkbox" ?checked=${on}
+                @change=${(e: Event) => this.toggleScreen(n, (e.target as HTMLInputElement).checked)} />
+              ${on ? html`<span class="chip">${pos + 1}</span>` : ""}
+              <span class="grow">${n}</span>
+              ${on ? html`
+                <button class="zbtn secondary" ?disabled=${pos === 0} @click=${() => this.moveScreen(n, -1)} title="Move up">▲</button>
+                <button class="zbtn secondary" ?disabled=${pos === this.screenLayouts.length - 1} @click=${() => this.moveScreen(n, 1)} title="Move down">▼</button>` : ""}
+            </div>`; })
             : html`<p class="hint">No saved pages yet — create one on the Designer tab.</p>`}
           <div class="panelrow"><label>Dwell (s)
             <input type="number" style="width:60px" min="1" max="600" .value=${String(this.screenDwell)}
