@@ -343,7 +343,9 @@ def _setup_publishers(hass: HomeAssistant, entry: ConfigEntry) -> None:
     extra_sensors = _parse_extra_sensors(extra_sensors_raw)
     has_solar     = any([solar_entity, consumption_entity, battery_soc_entity, battery_charging_entity])
 
-    if has_solar or extra_sensors:
+    # Always feed sun_below (from sun.sun) so the sun/moon widget works without any
+    # solar config; solar/consumption fields are simply zero when unconfigured.
+    if has_solar or extra_sensors or sun_entity:
         solar_topic = f"{device_id}/solar"
 
         @callback
@@ -370,6 +372,9 @@ def _setup_publishers(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
         store["unsub"].append(
             async_track_time_interval(hass, _publish_solar, SOLAR_INTERVAL)
+        )
+        store["unsub"].append(
+            async_track_state_change_event(hass, [sun_entity], _publish_solar)
         )
 
     if weather_code_entity:
