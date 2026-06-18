@@ -6,6 +6,7 @@ from datetime import timedelta
 import json
 import logging
 from pathlib import Path
+import time
 from typing import Any
 
 from homeassistant.components import frontend, panel_custom
@@ -18,8 +19,10 @@ from homeassistant.components.persistent_notification import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
+    async_call_later,
     async_track_state_change_event,
     async_track_time_interval,
 )
@@ -67,6 +70,27 @@ SERVICE_SEND_NOTIFICATION = "send_notification"
 SERVICE_DISMISS_NOTIFICATION = "dismiss_notification"
 SERVICE_SHOW_PAGE         = "show_page"
 SERVICE_SET_PLAYLIST      = "set_playlist"
+
+OTA_STAGING_TTL = 3600  # seconds; OTA files staged under www/ are swept once older than this
+
+
+def _ota_www_dir(hass: HomeAssistant, device_id: str) -> Path:
+    """Per-device staging dir served at /local for the device's OTA HTTP pull."""
+    return Path(hass.config.config_dir) / "www" / "pimoroni_unicorn" / device_id
+
+
+def _purge_ota_staging(hass: HomeAssistant, device_id: str, ttl: int = OTA_STAGING_TTL) -> None:
+    """Delete staged OTA files older than ttl seconds (executor — does blocking file IO)."""
+    www_dir = _ota_www_dir(hass, device_id)
+    if not www_dir.is_dir():
+        return
+    cutoff = time.time() - ttl
+    for p in www_dir.iterdir():
+        try:
+            if p.is_file() and p.stat().st_mtime < cutoff:
+                p.unlink()
+        except OSError:
+            pass
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -118,6 +142,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
         hass.services.async_register(
             NOTIFY_DOMAIN, device_id, make_notify_handler(hass, device_id), schema=NOTIFY_SERVICE_SCHEMA
         )
+
+    if device_id:
+        await hass.async_add_executor_job(_purge_ota_staging, hass, device_id)
 
     return True
 
@@ -442,30 +469,40 @@ def _make_push_firmware_handler(
             return
 
         try:
-            base_url = get_url(hass, allow_internal=True, prefer_external=False)
+            base_url = get_url(
+                hass, allow_internal=True, allow_external=False,
+                allow_cloud=False, allow_ip=True)
         except NoURLAvailableError:
-            base_url = hass.config.internal_url or hass.config.external_url
+            base_url = hass.config.internal_url
         if not base_url:
-            notify_create(
-                hass,
-                title="Pimoroni Unicorn OTA failed",
-                message=(
-                    "Could not determine HA URL. Set an internal or external URL in "
-                    "Settings → System → Network → Home Assistant URL."
-                ),
-                notification_id="pimoroni_unicorn_ota_error",
+            msg = (
+                "No local HA URL available for OTA. The device fetches firmware over plain HTTP "
+                "on the LAN; an external/cloud URL is unreachable and HTTPS is unreliable on the "
+                "device (memory-constrained, no cert verification). Either set a plain-HTTP "
+                "internal URL (e.g. http://192.168.x.x:8123) in Settings → System → Network, or "
+                "flash the firmware/ tree once over USB (Thonny)."
             )
-            return
+            notify_create(
+                hass, title="Pimoroni Unicorn OTA failed", message=msg,
+                notification_id="pimoroni_unicorn_ota_error")
+            raise HomeAssistantError(msg)
+        _LOGGER.debug("Pimoroni Unicorn OTA: device will fetch files from %s", base_url)
+        if base_url.lower().startswith("https"):
+            _LOGGER.warning(
+                "Pimoroni Unicorn OTA: HA URL is HTTPS (%s). TLS is unreliable on the device "
+                "(memory-constrained); if the update fails, flash the firmware/ tree over USB "
+                "(Thonny) instead.", base_url)
 
         requested    = call.data.get("files", ["main"])
         file_content = call.data.get("file_content", {})
         source_dir   = Path(__file__).parent / "firmware"
 
         all_errors: list[str] = []
+        published = False
         for entry in entries:
             opts      = _merged_opts(entry)
             device_id = opts[CONF_DEVICE_ID]
-            www_dir   = Path(hass.config.config_dir) / "www" / "pimoroni_unicorn" / device_id
+            www_dir   = _ota_www_dir(hass, device_id)
 
             def _stage_files(www_dir: Path = www_dir) -> tuple[list[tuple[str, str]], list[str]]:
                 www_dir.mkdir(parents=True, exist_ok=True)
@@ -525,6 +562,12 @@ def _make_push_firmware_handler(
                 json.dumps(ota_payload),
                 retain=False,
             )
+            published = True
+
+            async def _sweep(_now: Any, did: str = device_id) -> None:
+                await hass.async_add_executor_job(_purge_ota_staging, hass, did)
+
+            async_call_later(hass, OTA_STAGING_TTL, _sweep)
 
             _LOGGER.info(
                 "Pimoroni Unicorn OTA: sent %s to %s",
@@ -535,6 +578,9 @@ def _make_push_firmware_handler(
         if all_errors:
             _LOGGER.warning(
                 "Pimoroni Unicorn OTA: skipped (syntax/missing): %s", ", ".join(all_errors))
+        if not published:
+            raise HomeAssistantError(
+                f"OTA published nothing (no files staged{'; skipped: ' + ', '.join(all_errors) if all_errors else ''}).")
         _LOGGER.info("Pimoroni Unicorn OTA: command sent for %s", ", ".join(requested))
 
     return _handle_push_firmware
