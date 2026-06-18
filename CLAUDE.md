@@ -5,6 +5,11 @@ using Claude, invoke the `ha-integration` skill before writing or changing integ
 code — and re-invoke it after any `/compact`, since compaction can drop the skill's
 guidance from context.
 
+When the change is to the **panel UI / display layer** — `frontend/` (the Lit/TS panel),
+the built `panel/editor.js`, or any CSS/markup sizing, typography, colour, or layout —
+also invoke the `ha-panel-design` skill first (Material 3 + HA theme tokens). Re-invoke it
+after `/compact` too.
+
 ## What this is
 
 A Home Assistant custom integration **plus** MicroPython firmware for Pimoroni Unicorn LED
