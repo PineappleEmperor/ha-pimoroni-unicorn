@@ -39,7 +39,7 @@ TIMES = [
 ]
 BASE = {
     "solar": 2.5, "consumption": 0.8, "soc": 100, "charging": True,
-    "sun_below": False, "energy_mode": "Net", "weather": "clear",
+    "sun_below": False, "energy_mode": "Net", "weather": "clear", "temp": 18.5,
     "display_sensors": {}, "battery_animation": False,
 }
 TIGHT = {"clock", "calendar", "weekdays"}  # must match exactly; solar may be looser

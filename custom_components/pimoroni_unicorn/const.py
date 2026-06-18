@@ -65,6 +65,8 @@ OTA_SOURCE_FILES = {
     "widget_icon":         ("widget_icon.py",          "/widgets/widget_icon.py"),
     "widget_text":         ("widget_text.py",          "/widgets/widget_text.py"),
     "widget_date":         ("widget_date.py",          "/widgets/widget_date.py"),
+    "widget_temperature":  ("widget_temperature.py",   "/widgets/widget_temperature.py"),
+    "widget_weather":      ("widget_weather.py",       "/widgets/widget_weather.py"),
     "monospace_digits":    ("monospace_digits.py",     "/assets/fonts/monospace_digits.py"),
     "monospace_big_digits":("monospace_big_digits.py", "/assets/fonts/monospace_big_digits.py"),
     "monospace_blocky":    ("monospace_blocky.py",     "/assets/fonts/monospace_blocky.py"),
@@ -102,11 +104,7 @@ NOTIFY_ANIMATIONS = [
 ]
 NOTIFY_SOUNDS = ["beep", "chime", "alert"]
 
-NOTIFY_STATIC_ICONS = [
-    "battery_full", "battery_half", "battery_low", "battery_charging",
-    "solar", "alert", "home", "lock", "unlock",
-    "thermometer", "sun", "cloud", "rain", "check",
-]
+NOTIFY_STATIC_ICONS: list[str] = []
 
 NOTIFY_ENTRANCES = ["none", "slide_left", "slide_right", "center_out", "fade"]
 

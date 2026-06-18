@@ -21,7 +21,7 @@ MODEL_DIMS = {
 
 SAMPLE_STATE = {
     "solar": 2.5, "consumption": 0.8, "soc": 75, "charging": True,
-    "sun_below": False, "energy_mode": "Net", "weather": "clear",
+    "sun_below": False, "energy_mode": "Net", "weather": "clear", "temp": 18.5,
     "display_sensors": {}, "battery_animation": False,
 }
 

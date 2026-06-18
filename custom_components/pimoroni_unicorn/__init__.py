@@ -420,7 +420,11 @@ def _setup_publishers(hass: HomeAssistant, entry: PUConfigEntry) -> None:
             state = hass.states.get(weather_code_entity)
             if state is None or state.state in ("unknown", "unavailable", ""):
                 return
-            payload = json.dumps({"condition": state.state})
+            data: dict[str, Any] = {"condition": state.state}
+            temp = state.attributes.get("temperature")
+            if isinstance(temp, (int, float)):
+                data["temp"] = round(float(temp), 1)
+            payload = json.dumps(data)
             hass.async_create_task(async_publish(hass, weather_topic, payload, retain=True))
 
         store["unsub"].append(

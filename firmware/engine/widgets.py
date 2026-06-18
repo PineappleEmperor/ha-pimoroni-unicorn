@@ -11,11 +11,14 @@ import widget_energy
 import widget_icon
 import widget_sensor
 import widget_sun_moon
+import widget_temperature
 import widget_text
+import widget_weather
 import widget_weekdays
 
 _UNITS = [widget_clock, widget_calendar, widget_weekdays, widget_energy, widget_sun_moon,
-          widget_sensor, widget_icon, widget_text, widget_date]
+          widget_sensor, widget_icon, widget_text, widget_date, widget_temperature,
+          widget_weather]
 _OVERLAY_UNITS = [overlay_weather]
 
 

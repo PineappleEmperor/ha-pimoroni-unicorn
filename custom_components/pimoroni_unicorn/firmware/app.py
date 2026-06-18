@@ -100,6 +100,7 @@ battery_charging  = False
 sun_below_horizon = False
 consumption_power = 0.0
 weather_condition = "clear"
+weather_temp      = None
 
 _notify_queue    = []
 _notify_active   = None
@@ -371,7 +372,7 @@ def on_message(topic, message):
     """Handle incoming MQTT messages and update global display state."""
     global msg, system_state, icon_type, brightness
     global solar_power, battery_soc, battery_charging
-    global sun_below_horizon, weather_condition, consumption_power
+    global sun_below_horizon, weather_condition, weather_temp, consumption_power
     global _ota_pending, _notify_active
     global _screens, _screen_dwell_ms, _screen_transition, _screen_idx, _screen_pinned, _screen_switch_ms
     try:
@@ -532,11 +533,12 @@ def on_message(topic, message):
 
         if topic_str == TOPIC_WEATHER:
             try:
-                code = json.loads(message).get("condition", 800)
+                code = data.get("condition", 800)
                 new_condition = map_owm_code(int(code))
                 if new_condition != weather_condition:
                     weather_condition = new_condition
                     init_weather_drops(weather_condition)
+                weather_temp = data.get("temp")
             except Exception as e:
                 print("Weather parse error:", e)
             return
@@ -747,7 +749,8 @@ async def main_loop():
                 "time": t, "solar": solar_power, "consumption": consumption_power,
                 "soc": battery_soc, "charging": battery_charging,
                 "sun_below": sun_below_horizon,
-                "weather": weather_condition, "display_sensors": display_sensors,
+                "weather": weather_condition, "temp": weather_temp,
+                "display_sensors": display_sensors,
                 "elapsed_ms": current_time,
             }
             _advance_screen()

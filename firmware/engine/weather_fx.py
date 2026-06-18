@@ -42,6 +42,12 @@ def map_owm_code(code):
         return "light_snow"
     if code in (602, 611, 612, 613, 615, 616, 622):
         return "snow"
+    if 701 <= code <= 781:
+        return "fog"
+    if code in (801, 802):
+        return "partly_cloudy"
+    if 803 <= code <= 804:
+        return "cloudy"
     return "clear"
 
 

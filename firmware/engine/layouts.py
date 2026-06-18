@@ -21,24 +21,22 @@ DEFAULT_LAYOUTS = {
     "cosmic": {
         "name": "default", "model": "cosmic", "grid": 2,
         "widgets": [
-            {"id": "clock",    "x": 5,  "y": 2,  "cfg": {"variant": "big", "color": [255, 255, 255]}},
-            {"id": "calendar", "x": 0,  "y": 11, "cfg": {"header_color": [200, 0, 0]}},
-            {"id": "energy",   "x": 10, "y": 13, "cfg": {}},
-            {"id": "sun_moon", "x": 24, "y": 2,  "cfg": {}},
-            {"id": "weekdays", "x": 6,  "y": 29, "cfg": {"variant": "big", "active": [0, 0, 128], "inactive": [60, 60, 60]}},
+            {"id": "date",        "x": 0,  "y": 0,  "cfg": {"format": "weekday", "font": "font5x9", "color": [200, 0, 0]}},
+            {"id": "date",        "x": 21, "y": 0,  "cfg": {"format": "day", "font": "font5x9", "color": [255, 255, 255]}},
+            {"id": "clock",       "x": 4,  "y": 12, "cfg": {"variant": "big", "color": [255, 255, 255]}},
+            {"id": "weather",     "x": 0,  "y": 24, "cfg": {}},
+            {"id": "temperature", "x": 17, "y": 26, "cfg": {"unit": "C"}},
         ],
-        "overlays": ["weather"],
+        "overlays": [],
     },
     "stellar": {
         "name": "default", "model": "stellar", "grid": 1,
         "widgets": [
-            {"id": "clock",    "x": 0, "y": 0, "cfg": {"variant": "wide", "color": [255, 255, 255]}},
-            {"id": "calendar", "x": 0, "y": 6, "cfg": {"header_color": [200, 0, 0]}},
-            {"id": "weekdays", "x": 0, "y": 1, "cfg": {"variant": "small", "active": [0, 0, 128], "inactive": [60, 60, 60]}, "enabled": False},
-            {"id": "energy",   "x": 0, "y": 0, "cfg": {}, "enabled": False},
-            {"id": "sun_moon", "x": 0, "y": 0, "cfg": {}, "enabled": False},
+            {"id": "weather", "x": 0, "y": 0,  "cfg": {}},
+            {"id": "date",    "x": 9, "y": 2,  "cfg": {"format": "day", "font": "font3x5", "color": [255, 255, 255]}},
+            {"id": "clock",   "x": 0, "y": 10, "cfg": {"variant": "wide", "color": [255, 255, 255]}},
         ],
-        "overlays": ["weather"],
+        "overlays": [],
     },
 }
 
