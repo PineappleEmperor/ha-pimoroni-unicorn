@@ -131,10 +131,14 @@ def do_check() -> int:
         if not dst.is_file() or dst.read_text() != expected:
             stale.append(str(dst.relative_to(ROOT)))
     for src, dst in _catalog_pairs():
-        if not dst.is_file() or dst.read_text() != src.read_text():
+        # Byte-exact too: marketplace units are installed verbatim and hash-matched
+        # against the device, so newline drift would break install/update detection.
+        if not dst.is_file() or dst.read_bytes() != src.read_bytes():
             stale.append(str(dst.relative_to(ROOT)))
     for src, dst in _engine_pairs():
-        if not dst.is_file() or dst.read_text() != src.read_text():
+        # Byte-exact: the device is flashed from these sources and hashes the raw
+        # bytes, so a CRLF/LF mismatch vs the bundle must be caught (read_text hides it).
+        if not dst.is_file() or dst.read_bytes() != src.read_bytes():
             stale.append(str(dst.relative_to(ROOT)))
     if stale:
         print("render/, catalog/ or firmware/ out of sync with firmware/ (run scripts/sync_render.py sync):")
