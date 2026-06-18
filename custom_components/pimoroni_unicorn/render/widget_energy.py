@@ -4,10 +4,12 @@ from . import drawing
 
 WIDGET = {
     "id": "energy", "label": "Energy (battery + value)", "w": 14, "h": 5, "variants": [],
-    "default_cfg": {"digits": 1, "decimals": 1},
+    "default_cfg": {"digits": 1, "decimals": 1, "mode": "Net", "animation": "off"},
     "cfg_fields": [
         {"key": "digits", "type": "number", "min": 1, "max": 3, "step": 1, "label": "Range (int digits)"},
         {"key": "decimals", "type": "number", "min": 0, "max": 2, "step": 1, "label": "Decimals"},
+        {"key": "mode", "type": "select", "options": ["Net", "Solar", "Consumption"], "label": "Value"},
+        {"key": "animation", "type": "select", "options": ["off", "on"], "label": "Battery animation"},
     ],
     "requires": ["font:digits"],
 }
@@ -27,6 +29,6 @@ def render(g, x, y, w, h, cfg, state):
     drawing.draw_energy(
         x, y, w, h,
         solar=state["solar"], battery_soc=state["soc"], is_charging=state["charging"],
-        mode=state["energy_mode"], consumption=state["consumption"],
-        battery_animation=state["battery_animation"], decimals=int(cfg.get("decimals", 1)),
+        mode=cfg.get("mode", "Net"), consumption=state["consumption"],
+        battery_animation=cfg.get("animation") == "on", decimals=int(cfg.get("decimals", 1)),
     )
