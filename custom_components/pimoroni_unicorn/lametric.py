@@ -86,6 +86,20 @@ async def async_remove_icon(hass: HomeAssistant, name: str) -> list[str]:
     return await _async_publish_cmd(hass, {"action": "remove", "name": name})
 
 
+async def async_push_icon_to_device(hass: HomeAssistant, name: str, entry_id: str) -> bool:
+    """Install an already-registered icon onto a single device (registry unchanged)."""
+    icon = (await async_get_registry(hass)).get(name)
+    if not icon:
+        return False
+    await _async_publish_cmd(hass, {"action": "install", "name": name, **icon}, [entry_id])
+    return True
+
+
+async def async_remove_icon_from_device(hass: HomeAssistant, name: str, entry_id: str) -> None:
+    """Remove an icon from a single device, leaving the registry and other devices intact."""
+    await _async_publish_cmd(hass, {"action": "remove", "name": name}, [entry_id])
+
+
 async def _async_publish_cmd(hass: HomeAssistant, payload: dict[str, Any],
                              entry_ids: list[str] | None = None) -> list[str]:
     """Publish an icons command to the chosen entries (all when None); return device names."""

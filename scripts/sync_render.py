@@ -48,7 +48,7 @@ def _sources() -> dict:
 CATALOG_WIDGETS = [
     "widget_clock.py", "widget_calendar.py", "widget_weekdays.py",
     "widget_energy.py", "widget_sun_moon.py", "widget_sensor.py", "widget_icon.py",
-    "widget_text.py", "widget_date.py",
+    "widget_text.py", "widget_date.py", "widget_temperature.py", "widget_weather.py",
 ]
 CATALOG_FONTS = [
     "monospace_digits.py", "monospace_big_digits.py",
@@ -65,13 +65,13 @@ FIRMWARE_MODULES = [
     "monospace_blocky.py", "monospace_tall.py", "monospace_humanist.py",
     "widget_clock.py", "widget_calendar.py", "widget_weekdays.py",
     "widget_energy.py", "widget_sun_moon.py", "widget_sensor.py", "widget_icon.py",
-    "widget_text.py", "widget_date.py",
+    "widget_text.py", "widget_date.py", "widget_temperature.py", "widget_weather.py",
     "declarative.py", "overlay_weather.py",
 ]
 
 _LOCAL = ("drawing|weather_fx|bitfonts|layouts|widgets|icons|sounds|declarative|overlay_weather|"
           "monospace_digits|monospace_big_digits|monospace_blocky|monospace_tall|monospace_humanist|"
-          "widget_clock|widget_calendar|widget_weekdays|widget_energy|widget_sun_moon|widget_sensor|widget_icon|widget_text|widget_date")
+          "widget_clock|widget_calendar|widget_weekdays|widget_energy|widget_sun_moon|widget_sensor|widget_icon|widget_text|widget_date|widget_temperature|widget_weather")
 _TRANSFORMS = [
     (re.compile(rf"^import ({_LOCAL})$", re.MULTILINE), r"from . import \1"),
     (re.compile(rf"^import ({_LOCAL}) as (\w+)$", re.MULTILINE), r"from . import \1 as \2"),
@@ -131,10 +131,14 @@ def do_check() -> int:
         if not dst.is_file() or dst.read_text() != expected:
             stale.append(str(dst.relative_to(ROOT)))
     for src, dst in _catalog_pairs():
-        if not dst.is_file() or dst.read_text() != src.read_text():
+        # Byte-exact too: marketplace units are installed verbatim and hash-matched
+        # against the device, so newline drift would break install/update detection.
+        if not dst.is_file() or dst.read_bytes() != src.read_bytes():
             stale.append(str(dst.relative_to(ROOT)))
     for src, dst in _engine_pairs():
-        if not dst.is_file() or dst.read_text() != src.read_text():
+        # Byte-exact: the device is flashed from these sources and hashes the raw
+        # bytes, so a CRLF/LF mismatch vs the bundle must be caught (read_text hides it).
+        if not dst.is_file() or dst.read_bytes() != src.read_bytes():
             stale.append(str(dst.relative_to(ROOT)))
     if stale:
         print("render/, catalog/ or firmware/ out of sync with firmware/ (run scripts/sync_render.py sync):")

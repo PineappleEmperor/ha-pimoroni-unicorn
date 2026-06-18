@@ -14,6 +14,7 @@ from homeassistant.components.mqtt import async_publish, async_subscribe
 from homeassistant.components.notify.const import DOMAIN as NOTIFY_DOMAIN
 from homeassistant.components.persistent_notification import (
     async_create as notify_create,
+    async_dismiss as notify_dismiss,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
@@ -22,6 +23,7 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
 )
+from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
@@ -100,6 +102,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await _async_subscribe_notify_caps(hass, entry)
     await _async_subscribe_fw_manifest(hass, entry)
     await _async_subscribe_diag(hass, entry)
+    await _async_subscribe_ota_result(hass, entry)
     await _async_setup_time_feed(hass, entry)
     await _async_setup_sensor_feed(hass, entry)
     await layout.async_push_active(hass, entry)
@@ -248,6 +251,40 @@ async def _async_subscribe_diag(hass: HomeAssistant, entry: PUConfigEntry) -> No
     entry.runtime_data["unsub"].append(unsub)
 
 
+async def _async_subscribe_ota_result(hass: HomeAssistant, entry: PUConfigEntry) -> None:
+    """Subscribe to the device's OTA result and surface failures in HA."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+    note_id = f"pimoroni_unicorn_ota_result_{device_id}"
+
+    @callback
+    def _on_result(msg: Any) -> None:
+        try:
+            data = json.loads(msg.payload)
+        except (json.JSONDecodeError, ValueError):
+            return
+        if not isinstance(data, dict):
+            return
+        entry.runtime_data["ota_result"] = data
+        failed = data.get("failed") or []
+        if failed:
+            notify_create(
+                hass,
+                title="Pimoroni Unicorn OTA failed",
+                message=(
+                    f"{device_id} could not download {len(failed)} file(s):\n"
+                    f"{', '.join(failed)}\n\n"
+                    "Usually the device can't reach Home Assistant's URL. Check "
+                    "Settings → System → Network → Home Assistant URL (a LAN http://… the device can reach)."
+                ),
+                notification_id=note_id,
+            )
+        else:
+            notify_dismiss(hass, note_id)
+
+    unsub = await async_subscribe(hass, f"{device_id}/ota/result", _on_result)
+    entry.runtime_data["unsub"].append(unsub)
+
+
 async def _async_subscribe_notify_caps(hass: HomeAssistant, entry: PUConfigEntry) -> None:
     """Subscribe to retained notify/capabilities (used to downconvert for old firmware)."""
     device_id = _merged_opts(entry)[CONF_DEVICE_ID]
@@ -383,7 +420,11 @@ def _setup_publishers(hass: HomeAssistant, entry: PUConfigEntry) -> None:
             state = hass.states.get(weather_code_entity)
             if state is None or state.state in ("unknown", "unavailable", ""):
                 return
-            payload = json.dumps({"condition": state.state})
+            data: dict[str, Any] = {"condition": state.state}
+            temp = state.attributes.get("temperature")
+            if isinstance(temp, (int, float)):
+                data["temp"] = round(float(temp), 1)
+            payload = json.dumps(data)
             hass.async_create_task(async_publish(hass, weather_topic, payload, retain=True))
 
         store["unsub"].append(
@@ -400,7 +441,10 @@ def _make_push_firmware_handler(
             _LOGGER.error("Pimoroni Unicorn: no configured entries found")
             return
 
-        base_url = hass.config.internal_url or hass.config.external_url
+        try:
+            base_url = get_url(hass, allow_internal=True, prefer_external=False)
+        except NoURLAvailableError:
+            base_url = hass.config.internal_url or hass.config.external_url
         if not base_url:
             notify_create(
                 hass,
@@ -488,16 +532,10 @@ def _make_push_firmware_handler(
                 device_id,
             )
 
-        error_note = f"\n\nSkipped (syntax/missing): {', '.join(all_errors)}" if all_errors else ""
-        notify_create(
-            hass,
-            title="Pimoroni Unicorn OTA sent",
-            message=(
-                f"OTA command sent for: {', '.join(requested)}.\n"
-                f"Device will download files and reboot automatically.{error_note}"
-            ),
-            notification_id="pimoroni_unicorn_ota_sent",
-        )
+        if all_errors:
+            _LOGGER.warning(
+                "Pimoroni Unicorn OTA: skipped (syntax/missing): %s", ", ".join(all_errors))
+        _LOGGER.info("Pimoroni Unicorn OTA: command sent for %s", ", ".join(requested))
 
     return _handle_push_firmware
 

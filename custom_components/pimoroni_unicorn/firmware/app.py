@@ -68,10 +68,6 @@ TOPIC_COMMAND           = f"{DEVICE_ID}/set"
 TOPIC_STATE             = f"{DEVICE_ID}/state"
 TOPIC_SOLAR             = f"{DEVICE_ID}/solar"
 TOPIC_WEATHER           = f"{DEVICE_ID}/weather"
-TOPIC_ANIM_CMD          = f"{DEVICE_ID}/animation/set"
-TOPIC_ANIM_STATE        = f"{DEVICE_ID}/animation/state"
-TOPIC_ENERGY_MODE_CMD   = f"{DEVICE_ID}/energy_mode/set"
-TOPIC_ENERGY_MODE_STATE = f"{DEVICE_ID}/energy_mode/state"
 TOPIC_NOTIFY            = f"{DEVICE_ID}/notify"
 TOPIC_NOTIFY_DISMISS    = f"{DEVICE_ID}/notify/dismiss"
 TOPIC_ICONS_CMD         = f"{DEVICE_ID}/icons/cmd"
@@ -101,11 +97,10 @@ mqtt_client       = None
 solar_power       = 0.0
 battery_soc       = 0
 battery_charging  = False
-battery_animation = False
 sun_below_horizon = False
-energy_mode       = "Net"
 consumption_power = 0.0
 weather_condition = "clear"
+weather_temp      = None
 
 _notify_queue    = []
 _notify_active   = None
@@ -145,13 +140,6 @@ def _load_screens():
 _screens, _screen_dwell_ms, _screen_transition = _load_screens()
 
 
-def _uses_energy():
-    """True if any page uses the energy widget (gates the energy-only HA entities)."""
-    for s in _screens:
-        for w in s.get("widgets", []):
-            if w.get("type", w.get("id")) == "energy":
-                return True
-    return False
 _screen_idx = 0
 _screen_pinned = False
 _screen_switch_ms = 0
@@ -246,11 +234,14 @@ def _show_ota_screen(label, n, total):
 
 
 def _run_ota(payload):
+    global _ota_pending
+    _ota_pending = None  # one-shot: don't retry-loop on failure, report it instead
     import urequests  # noqa: PLC0415
     files     = payload.get("files", [])
     total     = len(files)
     succeeded = 0
     written   = []
+    failed    = []
     for i, item in enumerate(files):
         url  = item.get("url", "")
         path = item.get("path", "")
@@ -307,6 +298,14 @@ def _run_ota(payload):
             except Exception:
                 pass
     _show_ota_screen(f"Done {succeeded}/{total}", total, total)
+    failed = [it.get("path", "") for it in files if it.get("path") and it.get("path") not in written]
+    try:
+        mqtt_client.publish(
+            f"{DEVICE_ID}/ota/result",
+            json.dumps({"ok": not failed, "succeeded": succeeded, "total": total, "failed": failed}),
+            retain=True)
+    except Exception:
+        pass
     if written:
         try:
             with open("/ota_pending", "w") as f:
@@ -347,7 +346,7 @@ def _file_hash(path):
     return ubinascii.hexlify(h.digest()).decode()[:16]
 
 
-_MANIFEST_DIRS = ("/engine", "/widgets", "/assets/fonts", "/assets/icons")
+_MANIFEST_DIRS = ("/engine", "/widgets", "/assets/fonts", "/icons")
 
 
 def _fw_manifest():
@@ -372,8 +371,8 @@ def _fw_manifest():
 def on_message(topic, message):
     """Handle incoming MQTT messages and update global display state."""
     global msg, system_state, icon_type, brightness
-    global solar_power, battery_soc, battery_charging, battery_animation
-    global sun_below_horizon, weather_condition, energy_mode, consumption_power
+    global solar_power, battery_soc, battery_charging
+    global sun_below_horizon, weather_condition, weather_temp, consumption_power
     global _ota_pending, _notify_active
     global _screens, _screen_dwell_ms, _screen_transition, _screen_idx, _screen_pinned, _screen_switch_ms
     try:
@@ -407,18 +406,6 @@ def on_message(topic, message):
                 elif msg_type == "state":
                     if sensor_id in display_sensors:
                         display_sensors[sensor_id]["state"] = message.decode().upper() == "ON"
-            return
-
-        if topic_str == TOPIC_ANIM_CMD:
-            battery_animation = message != b"OFF"
-            mqtt_client.publish(TOPIC_ANIM_STATE, b"ON" if battery_animation else b"OFF", retain=True)
-            return
-
-        if topic_str == TOPIC_ENERGY_MODE_CMD:
-            mode = message.decode()
-            if mode in ("Solar", "Consumption", "Net"):
-                energy_mode = mode
-                mqtt_client.publish(TOPIC_ENERGY_MODE_STATE, mode.encode(), retain=True)
             return
 
         if topic_str == TOPIC_NOTIFY:
@@ -546,11 +533,12 @@ def on_message(topic, message):
 
         if topic_str == TOPIC_WEATHER:
             try:
-                code = json.loads(message).get("condition", 800)
+                code = data.get("condition", 800)
                 new_condition = map_owm_code(int(code))
                 if new_condition != weather_condition:
                     weather_condition = new_condition
                     init_weather_drops(weather_condition)
+                weather_temp = data.get("temp")
             except Exception as e:
                 print("Weather parse error:", e)
             return
@@ -637,52 +625,19 @@ async def mqtt_task():
                 }),
                 retain=True,
             )
-            # Energy-only entities — advertise them only when the energy widget is in use;
-            # otherwise clear any stale retained discovery from a previous energy layout.
-            _anim_cfg = f"{DISCOVERY_PREFIX}/switch/{DEVICE_ID}/animation/config"
-            _energy_cfg = f"{DISCOVERY_PREFIX}/select/{DEVICE_ID}/energy_mode/config"
-            if _uses_energy():
-                mqtt_client.publish(
-                    _anim_cfg,
-                    json.dumps({
-                        "name": "Battery Animation",
-                        "unique_id": f"{DEVICE_ID}_battery_animation",
-                        "command_topic": TOPIC_ANIM_CMD, "state_topic": TOPIC_ANIM_STATE,
-                        "availability_topic": TOPIC_STATUS,
-                        "payload_available": "online", "payload_not_available": "offline",
-                        "device": DEVICE_INFO,
-                    }),
-                    retain=True,
-                )
-                mqtt_client.publish(
-                    _energy_cfg,
-                    json.dumps({
-                        "name": "Energy Mode", "unique_id": f"{DEVICE_ID}_energy_mode",
-                        "command_topic": TOPIC_ENERGY_MODE_CMD,
-                        "state_topic": TOPIC_ENERGY_MODE_STATE,
-                        "options": ["Solar", "Consumption", "Net"],
-                        "availability_topic": TOPIC_STATUS,
-                        "payload_available": "online", "payload_not_available": "offline",
-                        "device": DEVICE_INFO,
-                    }),
-                    retain=True,
-                )
-            else:
-                mqtt_client.publish(_anim_cfg, b"", retain=True)
-                mqtt_client.publish(_energy_cfg, b"", retain=True)
+            # Energy mode + battery animation are now per-widget config; clear any
+            # select/switch discovery a previous firmware advertised so the entities vanish.
+            mqtt_client.publish(f"{DISCOVERY_PREFIX}/switch/{DEVICE_ID}/animation/config", b"", retain=True)
+            mqtt_client.publish(f"{DISCOVERY_PREFIX}/select/{DEVICE_ID}/energy_mode/config", b"", retain=True)
 
             mqtt_client.subscribe(f"{DEVICE_ID}/display/#".encode())
             for topic in (
-                TOPIC_COMMAND, TOPIC_SOLAR, TOPIC_WEATHER,
-                TOPIC_ANIM_CMD, TOPIC_ENERGY_MODE_CMD, TOPIC_NOTIFY,
+                TOPIC_COMMAND, TOPIC_SOLAR, TOPIC_WEATHER, TOPIC_NOTIFY,
                 TOPIC_NOTIFY_DISMISS, TOPIC_ICONS_CMD, TOPIC_LAYOUT, TOPIC_OTA,
                 TOPIC_SCREENS, TOPIC_SCREEN_SHOW, TOPIC_FW_REMOVE, TOPIC_TIME,
             ):
                 mqtt_client.subscribe(topic.encode())
 
-            if _uses_energy():
-                mqtt_client.publish(TOPIC_ANIM_STATE, b"ON" if battery_animation else b"OFF", retain=True)
-                mqtt_client.publish(TOPIC_ENERGY_MODE_STATE, energy_mode.encode(), retain=True)
             mqtt_client.publish(
                 f"{DEVICE_ID}/notify/capabilities", json.dumps(NOTIFY_CAPABILITIES), retain=True
             )
@@ -793,9 +748,10 @@ async def main_loop():
             state = {
                 "time": t, "solar": solar_power, "consumption": consumption_power,
                 "soc": battery_soc, "charging": battery_charging,
-                "sun_below": sun_below_horizon, "energy_mode": energy_mode,
-                "weather": weather_condition, "display_sensors": display_sensors,
-                "battery_animation": battery_animation, "elapsed_ms": current_time,
+                "sun_below": sun_below_horizon,
+                "weather": weather_condition, "temp": weather_temp,
+                "display_sensors": display_sensors,
+                "elapsed_ms": current_time,
             }
             _advance_screen()
             if _fade_left > 0:
