@@ -11,7 +11,7 @@ DEFAULT_LAYOUTS = {
         "name": "default", "model": "galactic", "grid": 2,
         "widgets": [
             {"id": "calendar", "x": 0,  "y": 0, "cfg": {"header_color": [200, 0, 0]}},
-            {"id": "clock",    "x": 11, "y": 1, "cfg": {"variant": "big", "color": [255, 255, 255]}},
+            {"id": "clock",    "x": 11, "y": 1, "cfg": {"font": "big", "color": [255, 255, 255]}},
             {"id": "weekdays", "x": 12, "y": 9, "cfg": {"variant": "big", "active": [0, 0, 128], "inactive": [60, 60, 60]}},
             {"id": "energy",   "x": 34, "y": 6, "cfg": {}},
             {"id": "sun_moon", "x": 46, "y": 0, "cfg": {}},
@@ -23,7 +23,7 @@ DEFAULT_LAYOUTS = {
         "widgets": [
             {"id": "date",        "x": 0,  "y": 0,  "cfg": {"format": "weekday", "font": "font5x9", "color": [200, 0, 0]}},
             {"id": "date",        "x": 21, "y": 0,  "cfg": {"format": "day", "font": "font5x9", "color": [255, 255, 255]}},
-            {"id": "clock",       "x": 4,  "y": 12, "cfg": {"variant": "big", "color": [255, 255, 255]}},
+            {"id": "clock",       "x": 4,  "y": 12, "cfg": {"font": "big", "color": [255, 255, 255]}},
             {"id": "weather",     "x": 0,  "y": 24, "cfg": {}},
             {"id": "temperature", "x": 17, "y": 26, "cfg": {"unit": "C"}},
         ],
@@ -34,7 +34,7 @@ DEFAULT_LAYOUTS = {
         "widgets": [
             {"id": "weather", "x": 0, "y": 0,  "cfg": {}},
             {"id": "date",    "x": 9, "y": 2,  "cfg": {"format": "day", "font": "font3x5", "color": [255, 255, 255]}},
-            {"id": "clock",   "x": 0, "y": 10, "cfg": {"variant": "wide", "color": [255, 255, 255]}},
+            {"id": "clock",   "x": 0, "y": 10, "cfg": {"font": "digits", "color": [255, 255, 255]}},
         ],
         "overlays": [],
     },

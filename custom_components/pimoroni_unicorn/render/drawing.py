@@ -10,12 +10,20 @@ from .monospace_humanist import HUMANIST
 from .monospace_tall import TALL
 
 # Single-row clock faces: (glyph table, glyph width).
-_CLOCK_FONTS = {
-    "wide":     (DIGITS, 3),
+# Clock digit faces: name -> (glyph table, glyph width). Height derives from the table.
+_CLOCK_FACES = {
+    "big":      (BIG_DIGITS, 5),
+    "digits":   (DIGITS, 3),
     "blocky":   (BLOCKY, 4),
     "tall":     (TALL, 3),
     "humanist": (HUMANIST, 4),
 }
+
+
+def _clock_face(name):
+    """Resolve a clock face name to (glyph table, width, height)."""
+    table, w = _CLOCK_FACES.get(name, _CLOCK_FACES["big"])
+    return table, w, len(table[0]) // w
 
 # Selectable text fonts: name -> (glyph table, force-uppercase). font3x5 is
 # uppercase-only; font5x9 is mixed-case so case is preserved.
@@ -321,36 +329,32 @@ def draw_text(s, x, y, color=None):
     _bitfont.draw_text(str(s).upper(), x, y, font3x5, d=1)
 
 
-def draw_clock(x, t=None, y=1, variant="big", color=None):
-    """Draw the time at (x, y). variant: big (HHMM row), small (3x5 row), stacked (HH over MM)."""
+def clock_box(font="big", layout="row", digit_gap=1, pair_gap=2):
+    """Footprint (w, h) for a clock face + layout + gaps."""
+    _table, w, h = _clock_face(font)
+    if layout == "stacked":
+        return (2 * w + digit_gap, 2 * h + pair_gap)
+    return (4 * w + 2 * digit_gap + pair_gap, h)
+
+
+def draw_clock(x, t=None, y=1, font="big", layout="row", color=None, digit_gap=1, pair_gap=2):
+    """Draw the time at (x, y) in a digit face. layout: row (HHMM) or stacked (HH over MM)."""
     if t is None:
         t = time.localtime()
     pen = _g.create_pen(*color) if color else _WHITE
     digits = (t[3] // 10, t[3] % 10, t[4] // 10, t[4] % 10)
-    if variant == "small":
-        for i, digit in enumerate(digits):
-            draw_custom_digit(digit, x + i * 4, y, pen)
+    table, w, h = _clock_face(font)
+    if layout == "stacked":
+        dx = w + digit_gap
+        dy = h + pair_gap
+        _draw_font_digit(table, w, digits[0], x,      y,      pen)
+        _draw_font_digit(table, w, digits[1], x + dx, y,      pen)
+        _draw_font_digit(table, w, digits[2], x,      y + dy, pen)
+        _draw_font_digit(table, w, digits[3], x + dx, y + dy, pen)
         return
-    if variant == "wide":
-        font, w = _CLOCK_FONTS["wide"]
-        offsets = (0, w + 1, 2 * w + 3, 3 * w + 4)  # 1px within pairs, 2px between HH and MM -> 16 wide
-        for i in range(4):
-            _draw_font_digit(font, w, digits[i], x + offsets[i], y, pen)
-        return
-    if variant in _CLOCK_FONTS:
-        font, w = _CLOCK_FONTS[variant]
-        offsets = (0, w + 1, 2 * w + 3, 3 * w + 4)
-        for i in range(4):
-            _draw_font_digit(font, w, digits[i], x + offsets[i], y, pen)
-        return
-    if variant == "stacked":
-        draw_big_custom_digit(digits[0], x,                  y,     pen)
-        draw_big_custom_digit(digits[1], x + BIG_DIGIT_STEP, y,     pen)
-        draw_big_custom_digit(digits[2], x,                  y + 8, pen)
-        draw_big_custom_digit(digits[3], x + BIG_DIGIT_STEP, y + 8, pen)
-        return
-    for i, digit in enumerate(digits):
-        draw_big_custom_digit(digit, x + i * BIG_DIGIT_STEP, y, pen)
+    offsets = (0, w + digit_gap, 2 * w + digit_gap + pair_gap, 3 * w + 2 * digit_gap + pair_gap)
+    for i in range(4):
+        _draw_font_digit(table, w, digits[i], x + offsets[i], y, pen)
 
 
 def draw_calendar(day_val, x, y, header_color):

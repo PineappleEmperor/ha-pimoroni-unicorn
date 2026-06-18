@@ -42,10 +42,10 @@ def _color(cfg, temp):
 
 
 def box(cfg):
-    """Worst-case width for the sign, two int digits, decimals, degree and unit."""
+    """Worst-case width for two int digits, decimals, degree and unit (no sign: rare ≤-10°)."""
     dec = max(0, int(cfg.get("decimals", 0)))
     unit = cfg.get("unit", "C")
-    sample = "-99" + ("." + "9" * dec if dec else "") + "°" + ("" if unit == "none" else unit)
+    sample = "99" + ("." + "9" * dec if dec else "") + "°" + ("" if unit == "none" else unit)
     return (max(1, drawing.text_width(sample, font="font3x5")), 5)
 
 
