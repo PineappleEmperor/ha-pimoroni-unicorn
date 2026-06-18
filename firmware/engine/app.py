@@ -246,11 +246,14 @@ def _show_ota_screen(label, n, total):
 
 
 def _run_ota(payload):
+    global _ota_pending
+    _ota_pending = None  # one-shot: don't retry-loop on failure, report it instead
     import urequests  # noqa: PLC0415
     files     = payload.get("files", [])
     total     = len(files)
     succeeded = 0
     written   = []
+    failed    = []
     for i, item in enumerate(files):
         url  = item.get("url", "")
         path = item.get("path", "")
@@ -307,6 +310,14 @@ def _run_ota(payload):
             except Exception:
                 pass
     _show_ota_screen(f"Done {succeeded}/{total}", total, total)
+    failed = [it.get("path", "") for it in files if it.get("path") and it.get("path") not in written]
+    try:
+        mqtt_client.publish(
+            f"{DEVICE_ID}/ota/result",
+            json.dumps({"ok": not failed, "succeeded": succeeded, "total": total, "failed": failed}),
+            retain=True)
+    except Exception:
+        pass
     if written:
         try:
             with open("/ota_pending", "w") as f:
@@ -347,7 +358,7 @@ def _file_hash(path):
     return ubinascii.hexlify(h.digest()).decode()[:16]
 
 
-_MANIFEST_DIRS = ("/engine", "/widgets", "/assets/fonts", "/assets/icons")
+_MANIFEST_DIRS = ("/engine", "/widgets", "/assets/fonts", "/icons")
 
 
 def _fw_manifest():
