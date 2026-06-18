@@ -79,6 +79,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private iconNames: string[] = [];
   @state() private installedIcons: string[] = [];
   @state() private iconThumbs: Record<string, string> = {};
+  @state() private deviceIcons: string[] = [];
   @state() private iconCode = "";
   @state() private iconName = "";
   @state() private iconTargets: string[] = [];
@@ -239,11 +240,26 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private async loadIcons() {
     try {
-      const r = await this.hass.callWS({ type: "pimoroni_unicorn/icons" });
+      const q: Record<string, unknown> = { type: "pimoroni_unicorn/icons" };
+      if (this.entryId) q.entry_id = this.entryId;
+      const r = await this.hass.callWS(q);
       this.iconNames = [...(r.builtin ?? []), ...(r.installed ?? [])];
       this.installedIcons = r.installed ?? [];
       this.iconThumbs = r.thumbs ?? {};
+      this.deviceIcons = r.device_installed ?? [];
     } catch { /* icons list optional */ }
+  }
+  private async pushIconToDevice(name: string) {
+    if (!this.entryId) return;
+    await this.hass.callWS({ type: "pimoroni_unicorn/icon_push", entry_id: this.entryId, name });
+    this.status = `Installing "${name}" on this device…`;
+    this.loadIcons();
+  }
+  private async removeIconFromDevice(name: string) {
+    if (!this.entryId) return;
+    await this.hass.callWS({ type: "pimoroni_unicorn/icon_device_remove", entry_id: this.entryId, name });
+    this.status = `Removed "${name}" from this device.`;
+    this.loadIcons();
   }
 
   // Install targets default to every device; user can narrow the selection.
@@ -270,7 +286,7 @@ export class PimoroniUnicornPanel extends LitElement {
     this.loadIcons();
   }
   private async removeIcon(name: string) {
-    if (!confirm(`Remove icon "${name}"?`)) return;
+    if (!confirm(`Delete icon "${name}" from all devices?`)) return;
     await this.hass.callWS({ type: "pimoroni_unicorn/icon_remove", name });
     this.status = `Removed icon "${name}".`;
     this.loadIcons();
@@ -360,6 +376,7 @@ export class PimoroniUnicornPanel extends LitElement {
     if (!dev || !this.guardDiscard()) return;
     this.entryId = entryId;
     await this.loadCaps({ entry_id: entryId });
+    this.loadIcons();
     const active = dev.active_layout ? this.stored[dev.active_layout] : undefined;
     this.loadLayout(active ?? this.defaultLayout);
   }
@@ -368,6 +385,7 @@ export class PimoroniUnicornPanel extends LitElement {
     if (!this.guardDiscard()) return;
     this.entryId = "";
     await this.loadCaps({ model });
+    this.loadIcons();
     this.loadLayout(this.defaultLayout);
   }
 
@@ -980,13 +998,25 @@ export class PimoroniUnicornPanel extends LitElement {
             </div>
           </div>
         </div>
+        ${this.entryId ? html`<p class="hint">On-device status is shown for the selected device. “Install” pushes a registry icon to just this device; “Remove” takes it off this device only. “Delete” removes it everywhere.</p>` : ""}
         ${this.installedIcons.length
-          ? this.installedIcons.map((n) => html`<div class="panelrow">
+          ? this.installedIcons.map((n) => {
+              const onDevice = this.deviceIcons.includes(n);
+              return html`<div class="panelrow">
               ${this.iconThumbs[n]
                 ? html`<img class="iconthumb" src="data:image/png;base64,${this.iconThumbs[n]}" />`
                 : html`<div class="iconthumb"></div>`}
               <span class="grow">${n}</span>
-              <button class="danger zbtn" @click=${() => this.removeIcon(n)}>Remove</button></div>`)
+              ${this.entryId
+                ? (onDevice
+                  ? html`<button class="zbtn" title="Remove from this device"
+                      @click=${() => this.removeIconFromDevice(n)}>On device ✓</button>`
+                  : html`<button class="zbtn" title="Install on this device"
+                      @click=${() => this.pushIconToDevice(n)}>Install</button>`)
+                : ""}
+              <button class="danger zbtn" title="Delete from all devices"
+                @click=${() => this.removeIcon(n)}>Delete</button></div>`;
+            })
           : html`<p class="hint">No custom icons installed yet.</p>`}
       `)}
 

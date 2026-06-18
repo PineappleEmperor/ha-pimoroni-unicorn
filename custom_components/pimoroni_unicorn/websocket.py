@@ -36,6 +36,8 @@ WS_DELETE_SCREENSET = "pimoroni_unicorn/delete_screenset"
 WS_ICONS          = "pimoroni_unicorn/icons"
 WS_ICON_INSTALL   = "pimoroni_unicorn/icon_install"
 WS_ICON_REMOVE    = "pimoroni_unicorn/icon_remove"
+WS_ICON_PUSH      = "pimoroni_unicorn/icon_push"
+WS_ICON_DEV_REMOVE = "pimoroni_unicorn/icon_device_remove"
 WS_FONTS          = "pimoroni_unicorn/fonts"
 WS_FONT_PREVIEW   = "pimoroni_unicorn/font_preview"
 
@@ -49,7 +51,8 @@ def async_register(hass: HomeAssistant) -> None:
                     ws_widget_preview, ws_widget_save, ws_widget_import, ws_widget_delete,
                     ws_content_catalog, ws_deploy_layout, ws_deploy_screenset,
                     ws_publish_layout, ws_save_screenset, ws_delete_screenset, ws_icons,
-                    ws_icon_install, ws_icon_remove, ws_fonts, ws_font_preview):
+                    ws_icon_install, ws_icon_remove, ws_icon_push, ws_icon_device_remove,
+                    ws_fonts, ws_font_preview):
         websocket_api.async_register_command(hass, handler)
 
 
@@ -483,10 +486,13 @@ async def ws_delete_screenset(hass, connection, msg):
     connection.send_result(msg["id"], {"ok": True})
 
 
-@websocket_api.websocket_command({vol.Required("type"): WS_ICONS})
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_ICONS,
+    vol.Optional("entry_id"): str,
+})
 @websocket_api.async_response
 async def ws_icons(hass, connection, msg):
-    """Names available to the icon widget: engine built-ins + installed LaMetric/custom + thumbs."""
+    """Engine built-ins + installed LaMetric/custom + thumbs; per-device installed when entry_id given."""
     registry = await lametric.async_get_registry(hass)
     installed = sorted(registry.keys())
 
@@ -494,10 +500,15 @@ async def ws_icons(hass, connection, msg):
         return {n: render_service.render_icon_thumb(registry[n]) for n in installed}
 
     thumbs = await hass.async_add_executor_job(_thumbs)
+    device_installed = []
+    if msg.get("entry_id"):
+        files = (_fw_manifest(hass, msg["entry_id"]) or {}).get("files") or {}
+        device_installed = [n for n in installed if f"{n}.json" in files]
     connection.send_result(msg["id"], {
         "builtin": render_service.builtin_icon_names(),
         "installed": installed,
         "thumbs": thumbs,
+        "device_installed": device_installed,
     })
 
 
@@ -524,8 +535,32 @@ async def ws_icon_install(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_icon_remove(hass, connection, msg):
-    """Remove an installed custom/LaMetric icon."""
+    """Remove an installed custom/LaMetric icon from the registry and every device."""
     await lametric.async_remove_icon(hass, msg["name"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_ICON_PUSH,
+    vol.Required("entry_id"): str,
+    vol.Required("name"): str,
+})
+@websocket_api.async_response
+async def ws_icon_push(hass, connection, msg):
+    """Install an already-registered icon onto a single device."""
+    ok = await lametric.async_push_icon_to_device(hass, msg["name"], msg["entry_id"])
+    connection.send_result(msg["id"], {"ok": ok})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_ICON_DEV_REMOVE,
+    vol.Required("entry_id"): str,
+    vol.Required("name"): str,
+})
+@websocket_api.async_response
+async def ws_icon_device_remove(hass, connection, msg):
+    """Remove an icon from a single device, keeping it in the registry for others."""
+    await lametric.async_remove_icon_from_device(hass, msg["name"], msg["entry_id"])
     connection.send_result(msg["id"], {"ok": True})
 
 
