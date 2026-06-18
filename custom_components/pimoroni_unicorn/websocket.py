@@ -98,16 +98,11 @@ def ws_devices(hass, connection, msg):
 })
 @callback
 def ws_capabilities(hass, connection, msg):
-    """Widget catalogue + model default layout, for a device or a bare model (mock)."""
-    caps = None
+    """Widget catalogue (backend built-ins + HA custom widgets) + model default layout."""
     entry = _entry(hass, msg["entry_id"]) if msg.get("entry_id") else None
-    if entry is not None:
-        model = _model_key(entry)
-        caps  = (entry.runtime_data or {}).get("layout_caps")
-    else:
-        model = msg.get("model", "galactic")
-    if not caps:
-        caps = render_service.layout_capabilities()
+    model = _model_key(entry) if entry is not None else msg.get("model", "galactic")
+    custom_dir = marketplace.widgets_dir(hass.config.config_dir)
+    caps = render_service.layout_capabilities(custom_dir)
     connection.send_result(msg["id"], {
         "model": model,
         "widgets": caps.get("widgets", []),

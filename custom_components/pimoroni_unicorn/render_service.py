@@ -69,9 +69,35 @@ def default_layout(model: str) -> dict:
     return _modules().layouts.default_layout(model)
 
 
-def layout_capabilities() -> dict:
-    """Return the widget catalogue from the render package."""
-    return _modules().widgets.LAYOUT_CAPABILITIES
+def layout_capabilities(custom_dir=None) -> dict:
+    """Backend widget catalogue: built-ins plus HA-side custom widgets (device-independent)."""
+    import json
+    from pathlib import Path
+    base = _modules().widgets.LAYOUT_CAPABILITIES
+    d = Path(custom_dir) if custom_dir else None
+    if d is None or not d.is_dir():
+        return base
+    known = {w["id"] for w in base["widgets"]}
+    extra = []
+    for p in sorted(d.glob("widget_*.json")):
+        try:
+            spec = json.loads(p.read_text())
+        except (ValueError, OSError):
+            continue
+        wid = spec.get("id", p.stem[7:])
+        if wid in known:
+            continue
+        known.add(wid)
+        extra.append({
+            "id": wid, "label": spec.get("label", wid),
+            "w": spec.get("w", 8), "h": spec.get("h", 8),
+            "variants": [], "default_cfg": spec.get("default_cfg", {}),
+            "cfg_fields": spec.get("cfg_fields", []), "sizes": {},
+            "multi": spec.get("multi", False),
+        })
+    if not extra:
+        return base
+    return {"widgets": [*base["widgets"], *extra], "overlays": base["overlays"]}
 
 
 def builtin_icon_names() -> list[str]:
