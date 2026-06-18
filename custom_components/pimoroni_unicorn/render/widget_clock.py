@@ -16,7 +16,7 @@ WIDGET = {
 
 _BOXES = {
     "small":    (15, 5),
-    "wide":     (14, 5),
+    "wide":     (16, 5),
     "blocky":   (20, 5),
     "tall":     (16, 7),
     "humanist": (20, 7),

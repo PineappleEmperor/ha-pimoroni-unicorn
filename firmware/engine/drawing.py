@@ -332,7 +332,7 @@ def draw_clock(x, t=None, y=1, variant="big", color=None):
         return
     if variant == "wide":
         font, w = _CLOCK_FONTS["wide"]
-        offsets = (0, w, 2 * w + 2, 3 * w + 2)  # packed pairs, 2px between HH and MM -> 14 wide
+        offsets = (0, w + 1, 2 * w + 3, 3 * w + 4)  # 1px within pairs, 2px between HH and MM -> 16 wide
         for i in range(4):
             _draw_font_digit(font, w, digits[i], x + offsets[i], y, pen)
         return
