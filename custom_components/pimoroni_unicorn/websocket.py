@@ -141,22 +141,13 @@ async def ws_render(hass, connection, msg):
 
 @websocket_api.websocket_command({
     vol.Required("type"): WS_SAVE_LAYOUT,
-    vol.Required("entry_id"): str,
     vol.Required("name"): str,
     vol.Required("layout"): dict,
 })
 @websocket_api.async_response
 async def ws_save_layout(hass, connection, msg):
-    """Store a named layout, make it the device's active layout, and push it."""
-    entry = _entry(hass, msg["entry_id"])
-    if entry is None:
-        connection.send_error(msg["id"], "not_found", "Unknown device")
-        return
-    name = msg["name"]
-    await layout.async_save_layout(hass, name, msg["layout"])
-    hass.config_entries.async_update_entry(
-        entry, options={**entry.options, layout.CONF_ACTIVE_LAYOUT: name})
-    await layout.async_push_layout(hass, layout.entry_device_id(entry), msg["layout"])
+    """Store a named layout in the library (no device needed; does not push)."""
+    await layout.async_save_layout(hass, msg["name"], msg["layout"])
     connection.send_result(msg["id"], {"ok": True})
 
 
@@ -164,15 +155,20 @@ async def ws_save_layout(hass, connection, msg):
     vol.Required("type"): WS_PUSH_LAYOUT,
     vol.Required("entry_id"): str,
     vol.Required("layout"): dict,
+    vol.Optional("set_active", default=False): bool,
+    vol.Optional("name"): str,
 })
 @websocket_api.async_response
 async def ws_push_layout(hass, connection, msg):
-    """Push a layout to a device without storing it (live preview)."""
+    """Push a layout to a device (live preview); optionally mark it the active page."""
     entry = _entry(hass, msg["entry_id"])
     if entry is None:
         connection.send_error(msg["id"], "not_found", "Unknown device")
         return
     await layout.async_push_layout(hass, layout.entry_device_id(entry), msg["layout"])
+    if msg["set_active"] and msg.get("name"):
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, layout.CONF_ACTIVE_LAYOUT: msg["name"]})
     connection.send_result(msg["id"], {"ok": True})
 
 

@@ -214,6 +214,9 @@ export class PimoroniUnicornPanel extends LitElement {
     .thumb { width: 100px; height: 64px; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
     .iconprev { width: 128px; height: 128px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
     .iconthumb { width: 64px; height: 64px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .addchips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+    .addchip { font-size: 14px; font-weight: 500; line-height: 20px; padding: 9px 14px; min-height: 40px; border-radius: 20px; border: 1px solid var(--pu-outline); background: transparent; color: inherit; cursor: pointer; }
+    .addchip:hover { background: color-mix(in srgb, var(--pu-primary) 12%, transparent); border-color: var(--pu-primary); color: var(--pu-primary); }
     .targets { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
     .chk { display: inline-flex; gap: 4px; align-items: center; font-weight: 400; }
     .catalog { list-style: none; padding: 0; margin: 0; max-width: 680px; }
@@ -592,12 +595,24 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private async save(): Promise<void> {
-    if (!this.entryId) return;
+    if (!this.layoutName.trim()) { this.status = "Name the page before saving."; return; }
     this.layout.name = this.layoutName;
-    await this.hass.callWS({ type: "pimoroni_unicorn/save_layout", entry_id: this.entryId, name: this.layoutName, layout: this.layout });
+    await this.hass.callWS({ type: "pimoroni_unicorn/save_layout", name: this.layoutName, layout: this.layout });
     await this.refreshStored();
     this.dirty = false;
-    this.status = `Saved "${this.layoutName}" and pushed to device.`;
+    this.status = `Saved "${this.layoutName}" to the library.`;
+  }
+  private newPage(): void {
+    if (!this.guardDiscard()) return;
+    this.loadLayout(this.defaultLayout);
+    this.layoutName = "";
+    this.switchTab("layout");
+  }
+  private async deploy(): Promise<void> {
+    if (!this.entryId) return;
+    this.layout.name = this.layoutName;
+    await this.hass.callWS({ type: "pimoroni_unicorn/push_layout", entry_id: this.entryId, layout: this.layout, set_active: true, name: this.layoutName });
+    this.status = `Pushed "${this.layoutName}" to the device.`;
   }
   private async deleteLayout(): Promise<void> {
     if (!this.stored[this.layoutName]) return;
@@ -746,7 +761,8 @@ export class PimoroniUnicornPanel extends LitElement {
           <label>Name <input .value=${this.layoutName} @input=${(e: Event) => (this.layoutName = (e.target as HTMLInputElement).value)} /></label>
         </div>
         <div class="group">
-          <button @click=${this.save} ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to save/push"}>Save &amp; Push</button>
+          <button @click=${this.save} title="Save this page to the library (no device needed)">Save</button>
+          <button class="secondary" @click=${this.deploy} ?disabled=${!this.entryId} title=${this.entryId ? "Push this page to the selected device now" : "Select a device to push"}>Push to device</button>
           <button class="secondary" @click=${this.exportLayout} title="Copy this page's JSON to clipboard to share or import elsewhere">Export JSON</button>
           ${this.stored[this.layoutName] ? html`<button class="secondary" @click=${() => this.publishLayout(true)} title="List this page in the marketplace">Publish</button>` : ""}
           ${this.stored[this.layoutName] ? html`<button class="danger" @click=${this.deleteLayout}>Delete</button>` : ""}
@@ -808,9 +824,8 @@ export class PimoroniUnicornPanel extends LitElement {
             })}
           </ul>
           ${this.layout.widgets.length > 1 ? html`<p class="hint">Top of the list draws on top.</p>` : ""}
-          ${addable.length ? html`<div class="panelrow">
-            <select id="addsel"><option value="">add widget…</option>${addable.map((c) => html`<option value=${c.id}>${c.label}</option>`)}</select>
-            <button class="secondary" @click=${() => { const sel = this.renderRoot.querySelector("#addsel") as HTMLSelectElement; this.addWidget(sel.value); sel.value = ""; }}>Add</button>
+          ${addable.length ? html`<div class="addchips">
+            ${addable.map((c) => html`<button class="addchip" @click=${() => this.addWidget(c.id)} title="Add ${c.label}">+ ${c.label}</button>`)}
           </div>` : ""}
           <h3>Overlays</h3>
           ${this.overlayCaps.map((o) => html`<div class="panelrow"><label>
@@ -947,9 +962,11 @@ export class PimoroniUnicornPanel extends LitElement {
         <button class="secondary" @click=${this.loadCatalog}>Refresh</button>
       </div>
 
-      ${this._section("pages", "Pages", apps.length, apps.length
-        ? html`<div class="mtable">${this._mhead()}${apps.map((a) => this._contentRow(a, "layout"))}</div>`
-        : html`<p class="hint">No published pages${all ? "" : " for this device"}. Publish one from the Designer tab.</p>`)}
+      ${this._section("pages", "Pages", apps.length, html`
+        <div class="panelrow"><button @click=${this.newPage} title="Start a new page in the Designer">+ New page</button></div>
+        ${apps.length
+          ? html`<div class="mtable">${this._mhead()}${apps.map((a) => this._contentRow(a, "layout"))}</div>`
+          : html`<p class="hint">No published pages${all ? "" : " for this device"} yet. Create one above, then Publish it from the Designer.</p>`}`)}
 
       ${this._section("playlists", "Playlists", sets.length, sets.length
         ? html`<div class="mtable">${this._mhead()}${sets.map((s) => this._contentRow(s, "screenset"))}</div>`
