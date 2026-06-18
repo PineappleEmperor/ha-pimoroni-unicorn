@@ -200,11 +200,11 @@ export class PimoroniUnicornPanel extends LitElement {
     .tab:hover:not(.on) { background: color-mix(in srgb, var(--pu-primary) 7%, transparent); filter: none; }
     .tab.on { color: var(--pu-primary); border-bottom-color: var(--pu-primary); }
     .section { margin-bottom: 8px; }
-    .shead { display: flex; gap: 10px; align-items: center; cursor: pointer; padding: 10px 4px; user-select: none; }
+    .shead { display: flex; gap: 10px; align-items: center; cursor: pointer; padding: 12px 4px; min-height: 48px; box-sizing: border-box; user-select: none; }
     .shead:hover .stitle { color: var(--pu-primary); }
-    .chev { display: inline-block; transition: transform .15s; color: var(--secondary-text-color, #79747e); font-size: 12px; }
+    .chev { width: 24px; height: 24px; flex: none; transition: transform .15s; fill: var(--secondary-text-color, #79747e); }
     .chev.open { transform: rotate(90deg); }
-    .stitle { font-size: 16px; font-weight: 500; }
+    .stitle { font-size: 22px; line-height: 28px; font-weight: 400; letter-spacing: 0; }
     .mtable { max-width: 780px; margin-bottom: 8px; }
     .mhead, .mrow { display: grid; grid-template-columns: 108px minmax(120px,1fr) minmax(80px,0.9fr) 120px 110px; gap: 12px; align-items: center; }
     .mhead { font-size: 12px; font-weight: 600; color: var(--secondary-text-color, #79747e); padding: 0 14px 6px; }
@@ -213,7 +213,7 @@ export class PimoroniUnicornPanel extends LitElement {
     .cell-action { display: flex; justify-content: flex-end; }
     .thumb { width: 100px; height: 64px; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
     .iconprev { width: 128px; height: 128px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
-    .iconthumb { width: 40px; height: 40px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .iconthumb { width: 64px; height: 64px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
     .targets { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
     .chk { display: inline-flex; gap: 4px; align-items: center; font-weight: 400; }
     .catalog { list-style: none; padding: 0; margin: 0; max-width: 680px; }
@@ -913,7 +913,7 @@ export class PimoroniUnicornPanel extends LitElement {
     const open = this.sectionsOpen[key] !== false;
     return html`<div class="section">
       <div class="shead" @click=${() => { this.sectionsOpen = { ...this.sectionsOpen, [key]: !open }; }}>
-        <span class="chev ${open ? "open" : ""}">▸</span>
+        <svg class="chev ${open ? "open" : ""}" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z" /></svg>
         <span class="stitle">${title}</span>
         <span class="chip dim">${count}</span>
       </div>
@@ -1027,7 +1027,7 @@ export class PimoroniUnicornPanel extends LitElement {
           <input style="width:220px" placeholder="type to preview…" .value=${this.fontText}
             @input=${(e: Event) => this.onFontInput((e.target as HTMLInputElement).value)} />
         </div>
-        ${this.fonts.map((f) => html`<div class="frow">
+        ${[...this.fonts].sort((a, b) => a.h - b.h || a.w - b.w || a.label.localeCompare(b.label)).map((f) => html`<div class="frow">
           <div class="fmeta"><span class="cell-name">${f.label}</span>
             <span class="hint">${f.kind === "digits" ? "digits" : "A–Z 0–9"} · ${f.w}×${f.h}${f.builtin ? " · built-in" : ""}</span></div>
           ${this.fontPngs[f.name]
