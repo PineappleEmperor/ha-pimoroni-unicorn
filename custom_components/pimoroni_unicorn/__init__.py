@@ -488,16 +488,10 @@ def _make_push_firmware_handler(
                 device_id,
             )
 
-        error_note = f"\n\nSkipped (syntax/missing): {', '.join(all_errors)}" if all_errors else ""
-        notify_create(
-            hass,
-            title="Pimoroni Unicorn OTA sent",
-            message=(
-                f"OTA command sent for: {', '.join(requested)}.\n"
-                f"Device will download files and reboot automatically.{error_note}"
-            ),
-            notification_id="pimoroni_unicorn_ota_sent",
-        )
+        if all_errors:
+            _LOGGER.warning(
+                "Pimoroni Unicorn OTA: skipped (syntax/missing): %s", ", ".join(all_errors))
+        _LOGGER.info("Pimoroni Unicorn OTA: command sent for %s", ", ".join(requested))
 
     return _handle_push_firmware
 
