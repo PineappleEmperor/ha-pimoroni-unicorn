@@ -108,4 +108,4 @@ class PimoroniUnicornUpdate(UpdateEntity):
                 "This engine update changes the on-device file layout and cannot be applied "
                 "over the air. Reflash the firmware/ tree via USB (Thonny) once; OTA works after.")
         await self.hass.services.async_call(
-            DOMAIN, "push_firmware", {"files": ENGINE_FILE_KEYS}, blocking=False)
+            DOMAIN, "push_firmware", {"files": ENGINE_FILE_KEYS}, blocking=True)
