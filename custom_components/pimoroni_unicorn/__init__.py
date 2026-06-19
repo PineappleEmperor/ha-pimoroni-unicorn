@@ -134,7 +134,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await _async_publish_orientation(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-    await hass.config_entries.async_forward_entry_setups(entry, ["button", "update", "sensor"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["update", "sensor"])
 
     if not hass.data.get(f"{DOMAIN}_ws_registered"):
         ws_api.async_register(hass)
@@ -154,7 +154,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     """Unload a config entry."""
-    await hass.config_entries.async_unload_platforms(entry, ["button", "update", "sensor"])
+    await hass.config_entries.async_unload_platforms(entry, ["update", "sensor"])
     for unsub in (entry.runtime_data or {}).get("unsub", []):
         unsub()
 
@@ -174,7 +174,7 @@ async def async_remove_config_entry_device(hass, config_entry, device_entry) -> 
     """Allow deleting a stale device from the UI.
 
     The active device (matching the entry's current device_id) is recreated by
-    the button platform, so deletion is blocked; any other device left behind by
+    the entity platforms, so deletion is blocked; any other device left behind by
     an earlier device_id is orphaned and may be removed.
     """
     current = _merged_opts(config_entry).get(CONF_DEVICE_ID)
