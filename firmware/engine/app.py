@@ -609,7 +609,7 @@ async def mqtt_task():
     global mqtt_client, _wdt
     mqtt_client = MQTTClient(
         DEVICE_ID, MQTT_BROKER,
-        port=MQTT_PORT, user=MQTT_USER, password=MQTT_PASSWORD, keepalive=45,
+        port=MQTT_PORT, user=MQTT_USER, password=MQTT_PASSWORD, keepalive=60,
     )
     mqtt_client.set_last_will(TOPIC_STATUS, b"offline", retain=True)
     mqtt_client.set_callback(on_message)
@@ -681,9 +681,18 @@ async def mqtt_task():
             send_ha_state()
             print("MQTT Connected & Discovery Published")
 
+            last_ping = time.ticks_ms()
+            last_diag = last_ping
             while True:
                 mqtt_client.check_msg()
-                if time.ticks_ms() % 60000 < 500:
+                now = time.ticks_ms()
+                # Keep the connection alive: ping at keepalive/2 (60s) since check_msg never
+                # sends PINGREQ and the 60s diag publish alone races the broker's grace window.
+                if time.ticks_diff(now, last_ping) >= 30000:
+                    mqtt_client.ping()
+                    last_ping = now
+                if time.ticks_diff(now, last_diag) >= 60000:
+                    last_diag = now
                     mqtt_client.publish(TOPIC_STATUS, b"online", retain=True)
                     page = _screens[_screen_idx].get("name", str(_screen_idx)) if _screens else ""
                     mqtt_client.publish(TOPIC_DIAG, json.dumps({

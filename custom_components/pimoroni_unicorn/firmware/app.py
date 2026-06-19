@@ -681,9 +681,18 @@ async def mqtt_task():
             send_ha_state()
             print("MQTT Connected & Discovery Published")
 
+            last_ping = time.ticks_ms()
+            last_diag = last_ping
             while True:
                 mqtt_client.check_msg()
-                if time.ticks_ms() % 60000 < 500:
+                now = time.ticks_ms()
+                # Keep the connection alive: ping well within keepalive (45s) since check_msg
+                # never sends PINGREQ and the diag publish alone is too infrequent.
+                if time.ticks_diff(now, last_ping) >= 20000:
+                    mqtt_client.ping()
+                    last_ping = now
+                if time.ticks_diff(now, last_diag) >= 60000:
+                    last_diag = now
                     mqtt_client.publish(TOPIC_STATUS, b"online", retain=True)
                     page = _screens[_screen_idx].get("name", str(_screen_idx)) if _screens else ""
                     mqtt_client.publish(TOPIC_DIAG, json.dumps({
