@@ -235,8 +235,8 @@ def _show_ota_screen(label, n, total):
     graphics.set_pen(graphics.create_pen(0, 0, 30))
     graphics.clear()
     graphics.set_pen(WHITE)
-    bitfont.text("OTA", 1, 1, font3x5)
-    bitfont.text(label[:14], 1, 7, font3x5)
+    bitfont.draw_text("OTA", 1, 1, font3x5)
+    bitfont.draw_text(label[:14], 1, 7, font3x5)
     if total > 0:
         graphics.set_pen(ENERGY_CYAN)
         surface.rectangle(1, 5, max(1, int((n / total) * (width - 2))), 1)
@@ -559,7 +559,10 @@ def on_message(topic, message):
         if topic_str == TOPIC_WEATHER:
             try:
                 code = data.get("condition", 800)
-                new_condition = map_owm_code(int(code))
+                try:
+                    new_condition = map_owm_code(int(code))   # numeric OWM code
+                except (ValueError, TypeError):
+                    new_condition = str(code)                 # already a condition string from HA
                 if new_condition != weather_condition:
                     weather_condition = new_condition
                     init_weather_drops(weather_condition)

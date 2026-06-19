@@ -3,11 +3,14 @@
 import ast
 from collections.abc import Callable, Coroutine
 from datetime import timedelta
+import ipaddress
 import json
 import logging
 from pathlib import Path
+import socket
 import time
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
@@ -134,7 +137,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await _async_publish_orientation(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-    await hass.config_entries.async_forward_entry_setups(entry, ["button", "update", "sensor"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["update", "sensor"])
 
     if not hass.data.get(f"{DOMAIN}_ws_registered"):
         ws_api.async_register(hass)
@@ -154,7 +157,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     """Unload a config entry."""
-    await hass.config_entries.async_unload_platforms(entry, ["button", "update", "sensor"])
+    await hass.config_entries.async_unload_platforms(entry, ["update", "sensor"])
     for unsub in (entry.runtime_data or {}).get("unsub", []):
         unsub()
 
@@ -174,7 +177,7 @@ async def async_remove_config_entry_device(hass, config_entry, device_entry) -> 
     """Allow deleting a stale device from the UI.
 
     The active device (matching the entry's current device_id) is recreated by
-    the button platform, so deletion is blocked; any other device left behind by
+    the entity platforms, so deletion is blocked; any other device left behind by
     an earlier device_id is orphaned and may be removed.
     """
     current = _merged_opts(config_entry).get(CONF_DEVICE_ID)
@@ -409,6 +412,36 @@ def _merged_opts(entry: ConfigEntry) -> dict[str, Any]:
     return {**entry.data, **entry.options}
 
 
+# HA weather-entity condition strings -> the firmware's simplified condition vocabulary
+# (matches weather_fx.map_owm_code outputs). Lets users pick a weather.* entity, not just an
+# OWM-code sensor.
+_HA_CONDITION_MAP = {
+    "sunny": "clear", "clear-night": "clear",
+    "partlycloudy": "partly_cloudy",
+    "cloudy": "cloudy",
+    "fog": "fog",
+    "rainy": "rain", "pouring": "rain",
+    "lightning": "thunderstorm", "lightning-rainy": "thunderstorm",
+    "snowy": "snow", "snowy-rainy": "snow", "hail": "snow",
+    "windy": "clear", "windy-variant": "clear", "exceptional": "clear",
+}
+
+
+def _weather_condition(state: Any) -> Any:
+    """Normalize an entity to what the firmware expects: an int OWM code, or a condition string."""
+    raw = state.state
+    try:
+        return int(raw)  # numeric OWM code — device maps it via map_owm_code
+    except (ValueError, TypeError):
+        pass
+    for key in ("owm_code", "weather_code", "condition_code", "code"):
+        val = state.attributes.get(key)
+        if isinstance(val, int) or (isinstance(val, str) and val.isdigit()):
+            return int(val)
+    text = str(raw).lower()
+    return _HA_CONDITION_MAP.get(text, text)  # known HA condition -> firmware string; else pass through
+
+
 def _setup_publishers(hass: HomeAssistant, entry: PUConfigEntry) -> None:
     opts        = _merged_opts(entry)
     device_id   = opts[CONF_DEVICE_ID]
@@ -472,7 +505,7 @@ def _setup_publishers(hass: HomeAssistant, entry: PUConfigEntry) -> None:
             state = hass.states.get(weather_code_entity)
             if state is None or state.state in ("unknown", "unavailable", ""):
                 return
-            data: dict[str, Any] = {"condition": state.state}
+            data: dict[str, Any] = {"condition": _weather_condition(state)}
             temp = state.attributes.get("temperature")
             if isinstance(temp, (int, float)):
                 data["temp"] = round(float(temp), 1)
@@ -482,6 +515,31 @@ def _setup_publishers(hass: HomeAssistant, entry: PUConfigEntry) -> None:
         store["unsub"].append(
             async_track_state_change_event(hass, watch_entities, _publish_weather)
         )
+
+
+async def _async_resolve_host_to_ip(hass: HomeAssistant, base_url: str) -> str:
+    """Swap a hostname in base_url for its IP so the device needn't resolve names (mDNS unreliable)."""
+    parts = urlsplit(base_url)
+    host = parts.hostname
+    if not host:
+        return base_url
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        return base_url  # already an IP
+    try:
+        infos = await hass.async_add_executor_job(
+            socket.getaddrinfo, host, parts.port or 80, socket.AF_INET)
+        ip = str(infos[0][4][0])
+    except (OSError, IndexError):
+        _LOGGER.warning(
+            "Pimoroni Unicorn OTA: could not resolve %s to an IP; sending the hostname "
+            "(the device must resolve it itself, which MicroPython does unreliably)", host)
+        return base_url
+    netloc = ip if parts.port is None else f"{ip}:{parts.port}"
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
 
 
 def _make_push_firmware_handler(
@@ -511,6 +569,7 @@ def _make_push_firmware_handler(
                 hass, title="Pimoroni Unicorn OTA failed", message=msg,
                 notification_id="pimoroni_unicorn_ota_error")
             raise HomeAssistantError(msg)
+        base_url = await _async_resolve_host_to_ip(hass, base_url)
         _LOGGER.debug("Pimoroni Unicorn OTA: device will fetch files from %s", base_url)
         if base_url.lower().startswith("https"):
             _LOGGER.warning(
