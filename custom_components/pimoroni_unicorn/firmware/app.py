@@ -609,7 +609,7 @@ async def mqtt_task():
     global mqtt_client, _wdt
     mqtt_client = MQTTClient(
         DEVICE_ID, MQTT_BROKER,
-        port=MQTT_PORT, user=MQTT_USER, password=MQTT_PASSWORD, keepalive=45,
+        port=MQTT_PORT, user=MQTT_USER, password=MQTT_PASSWORD, keepalive=60,
     )
     mqtt_client.set_last_will(TOPIC_STATUS, b"offline", retain=True)
     mqtt_client.set_callback(on_message)
@@ -686,9 +686,9 @@ async def mqtt_task():
             while True:
                 mqtt_client.check_msg()
                 now = time.ticks_ms()
-                # Keep the connection alive: ping well within keepalive (45s) since check_msg
-                # never sends PINGREQ and the diag publish alone is too infrequent.
-                if time.ticks_diff(now, last_ping) >= 20000:
+                # Keep the connection alive: ping at keepalive/2 (60s) since check_msg never
+                # sends PINGREQ and the 60s diag publish alone races the broker's grace window.
+                if time.ticks_diff(now, last_ping) >= 30000:
                     mqtt_client.ping()
                     last_ping = now
                 if time.ticks_diff(now, last_diag) >= 60000:
