@@ -38,6 +38,7 @@
         "title": "Settings",
         "data": {
           "model": "Model",
+          "orientation": "Display orientation",
           "solar_entity": "Solar power entity (W)",
           "consumption_entity": "Consumption power entity (W)",
           "battery_soc_entity": "Battery state of charge entity (%)",
@@ -49,7 +50,8 @@
         },
         "data_description": {
           "extra_sensors": "Each line: entity_id followed by a topic suffix. Published to [device_id]/[topic_suffix] every 10 seconds.\nExample:\nsensor.indoor_temperature indoor_temp\nsensor.co2 co2",
-          "show_panel": "Adds the Unicorn Layout editor to the sidebar. Turn off to remove it; can be re-enabled here anytime."
+          "show_panel": "Adds the Unicorn Layout editor to the sidebar. Turn off to remove it; can be re-enabled here anytime.",
+          "orientation": "Physical mounting rotation. 90°/270° turn a Galactic panel vertical (a different layout). Changing this reboots the device."
         },
         "description": "Device ID: {device_id} — set at setup and used as the unique ID; not editable here. Re-add the device to change it."
       },

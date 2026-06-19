@@ -21,9 +21,9 @@ import ubinascii
 import uhashlib
 import uos
 from hardware import (
-    DISPLAY, HAS_AUDIO, MODEL, MODEL_NAME,
+    DISPLAY, HAS_AUDIO, MODEL, MODEL_NAME, ORIENTATION,
     SWITCH_BRIGHTNESS_DOWN, SWITCH_BRIGHTNESS_UP, SWITCH_SLEEP,
-    HEIGHT as height, WIDTH as width, unicorn,
+    HEIGHT as height, WIDTH as width, make_surface, unicorn,
 )
 from picographics import PEN_RGB888, PicoGraphics
 from umqtt.simple import MQTTClient
@@ -50,13 +50,16 @@ from weather_fx import init_weather_drops, map_owm_code
 machine.freq(200_000_000)
 graphics = PicoGraphics(display=DISPLAY, pen_type=PEN_RGB888)
 graphics.set_font("bitmap6")
-bitfont  = BitFont(graphics)
+# All render code draws into the logical (as-mounted) surface; unicorn.update() always
+# gets the raw physical `graphics`. At 0° the surface IS graphics (zero overhead).
+surface  = make_surface(graphics)
+bitfont  = BitFont(surface)
 
 # Initialise sub-modules that need hardware references
-drawing.init(graphics, bitfont, width, height)
-notify_animations.init(graphics, width, height)
+drawing.init(surface, bitfont, width, height)
+notify_animations.init(surface, width, height)
 sounds.init(unicorn)
-weather_fx.init(graphics, width, height)
+weather_fx.init(surface, width, height)
 
 # --- MQTT ---
 MQTT_BROKER      = MQTT_SERVER
@@ -85,6 +88,7 @@ TOPIC_FW_MANIFEST       = f"{DEVICE_ID}/fw/manifest"
 TOPIC_FW_REMOVE         = f"{DEVICE_ID}/fw/remove"
 TOPIC_TIME              = f"{DEVICE_ID}/time"
 TOPIC_DIAG              = f"{DEVICE_ID}/diag"
+TOPIC_ORIENTATION       = f"{DEVICE_ID}/orientation"
 
 # --- HA Device details ---
 DEVICE_INFO = {
@@ -235,7 +239,7 @@ def _show_ota_screen(label, n, total):
     bitfont.text(label[:14], 1, 7, font3x5)
     if total > 0:
         graphics.set_pen(ENERGY_CYAN)
-        graphics.rectangle(1, 5, max(1, int((n / total) * (width - 2))), 1)
+        surface.rectangle(1, 5, max(1, int((n / total) * (width - 2))), 1)
     unicorn.update(graphics)
 
 
@@ -534,6 +538,21 @@ def on_message(topic, message):
             machine.reset()
             return
 
+        if topic_str == TOPIC_ORIENTATION:
+            try:
+                ang = int(message.decode().strip())
+            except Exception:
+                return
+            if ang in (0, 90, 180, 270) and ang != ORIENTATION:
+                try:
+                    with open("orientation", "w") as f:
+                        f.write(str(ang))
+                except OSError:
+                    return
+                time.sleep(1)
+                machine.reset()
+            return
+
         data = json.loads(message)
         state_changed = False
 
@@ -641,6 +660,7 @@ async def mqtt_task():
                 TOPIC_COMMAND, TOPIC_SOLAR, TOPIC_WEATHER, TOPIC_NOTIFY,
                 TOPIC_NOTIFY_DISMISS, TOPIC_ICONS_CMD, TOPIC_LAYOUT, TOPIC_OTA,
                 TOPIC_SCREENS, TOPIC_SCREEN_SHOW, TOPIC_FW_REMOVE, TOPIC_TIME,
+                TOPIC_ORIENTATION,
             ):
                 mqtt_client.subscribe(topic.encode())
 
@@ -765,7 +785,7 @@ async def main_loop():
                 _fade_left -= 1
             else:
                 unicorn.set_brightness(brightness)
-            widgets.render_layout(graphics, _screens[_screen_idx], state)
+            widgets.render_layout(surface, _screens[_screen_idx], state)
 
             if icon_type != "none":
                 draw_icon(icon_type, 2, 2)

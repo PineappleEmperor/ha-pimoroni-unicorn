@@ -87,6 +87,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private png = "";
   @state() private wboxes: Size[] = [];
   @state() private dims: Size = [53, 11];
+  @state() private orientation = 0;  // device mounting rotation; affects effective dims
   @state() private zoom = 0;  // px per LED; 0 = auto-fit
   @state() private selected = -1;
   @state() private dragIdx = -1;
@@ -402,7 +403,8 @@ export class PimoroniUnicornPanel extends LitElement {
     this.overlayCaps = caps.overlays ?? [];
     this.defaultLayout = caps.default_layout;
     this.model = caps.model;
-    this.dims = MODELS[this.model] ?? [53, 11];
+    this.orientation = caps.orientation ?? 0;
+    this.dims = (caps.dims as Size) ?? MODELS[this.model] ?? [53, 11];
     await this.refreshStored();
   }
 
@@ -454,7 +456,7 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private async renderPreview(): Promise<void> {
     try {
-      const res = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: this.layout });
+      const res = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: this.layout, orientation: this.orientation });
       this.wboxes = res.boxes ?? [];
       this.playFrames("layout", res.frames ?? (res.png ? [res.png] : []), (f) => { this.png = f; });
       if (this.status.startsWith("Render failed")) this.status = "";

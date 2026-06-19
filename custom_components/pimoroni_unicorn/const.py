@@ -37,6 +37,10 @@ CONF_SUN_ENTITY                 = "sun_entity"
 CONF_WEATHER_CODE_ENTITY        = "weather_code_entity"
 CONF_EXTRA_SENSORS              = "extra_sensors"
 CONF_SHOW_PANEL                 = "show_panel"
+CONF_ORIENTATION                = "orientation"
+
+# Display mounting orientation (degrees). 90/270 turn a non-square panel vertical.
+ORIENTATIONS = ["0", "90", "180", "270"]
 
 # key -> (bundle basename, device path). Device tree is foldered: root holds the
 # auto-run boot.py + main.py stub; /engine the runtime; /widgets + /assets/fonts content.

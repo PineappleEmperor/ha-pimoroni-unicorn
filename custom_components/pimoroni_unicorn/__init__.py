@@ -38,6 +38,7 @@ from .const import (
     CONF_CONSUMPTION_ENTITY,
     CONF_DEVICE_ID,
     CONF_EXTRA_SENSORS,
+    CONF_ORIENTATION,
     CONF_SHOW_PANEL,
     CONF_SOLAR_ENTITY,
     CONF_SUN_ENTITY,
@@ -130,6 +131,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await _async_subscribe_ota_result(hass, entry)
     await _async_setup_time_feed(hass, entry)
     await _async_setup_sensor_feed(hass, entry)
+    await _async_publish_orientation(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     await hass.config_entries.async_forward_entry_setups(entry, ["button", "update", "sensor"])
@@ -220,6 +222,7 @@ async def _async_refresh_panel(hass: HomeAssistant) -> None:
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
     _setup_publishers(hass, entry)
     await _async_setup_sensor_feed(hass, entry)
+    await _async_publish_orientation(hass, entry)
     await layout.async_push_active(hass, entry)
     await _async_refresh_panel(hass)
 
@@ -341,6 +344,14 @@ async def _async_subscribe_notify_caps(hass: HomeAssistant, entry: PUConfigEntry
 
     unsub = await async_subscribe(hass, f"{device_id}/notify/capabilities", _on_caps)
     entry.runtime_data["unsub"].append(unsub)
+
+
+async def _async_publish_orientation(hass: HomeAssistant, entry: PUConfigEntry) -> None:
+    """Publish the configured mounting orientation (retained); device reboots on a change."""
+    opts = _merged_opts(entry)
+    await async_publish(
+        hass, f"{opts[CONF_DEVICE_ID]}/orientation",
+        str(opts.get(CONF_ORIENTATION, "0")), retain=True)
 
 
 async def _async_publish_time(hass: HomeAssistant, device_id: str) -> None:

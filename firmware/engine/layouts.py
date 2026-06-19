@@ -38,9 +38,22 @@ DEFAULT_LAYOUTS = {
         ],
         "overlays": [],
     },
+    # Galactic mounted vertically (90/270): 11 wide x 53 tall — a stacked column.
+    "galactic_vertical": {
+        "name": "default-vertical", "model": "galactic", "grid": 1,
+        "widgets": [
+            {"id": "date",        "x": 0, "y": 1,  "cfg": {"format": "day", "font": "font5x9", "color": [200, 0, 0]}},
+            {"id": "clock",       "x": 0, "y": 13, "cfg": {"font": "big", "layout": "stacked", "color": [255, 255, 255]}},
+            {"id": "weather",     "x": 1, "y": 33, "cfg": {}},
+            {"id": "temperature", "x": 0, "y": 45, "cfg": {"unit": "none"}},
+        ],
+        "overlays": [],
+    },
 }
 
 
-def default_layout(model):
-    """Return the default layout for a model, falling back to galactic."""
+def default_layout(model, orientation=0):
+    """Return the default layout for a model + orientation, falling back to galactic."""
+    if model == "galactic" and orientation in (90, 270):
+        return DEFAULT_LAYOUTS["galactic_vertical"]
     return DEFAULT_LAYOUTS.get(model, DEFAULT_LAYOUTS["galactic"])
