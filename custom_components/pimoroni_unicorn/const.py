@@ -72,8 +72,10 @@ OTA_SOURCE_FILES = {
     "widget_temperature":  ("widget_temperature.py",   "/widgets/widget_temperature.py"),
     "widget_weather":      ("widget_weather.py",       "/widgets/widget_weather.py"),
     "monospace_digits":    ("monospace_digits.py",     "/assets/fonts/monospace_digits.py"),
+    "monospace_digits_serif":("monospace_digits_serif.py", "/assets/fonts/monospace_digits_serif.py"),
     "monospace_big_digits":("monospace_big_digits.py", "/assets/fonts/monospace_big_digits.py"),
     "monospace_blocky":    ("monospace_blocky.py",     "/assets/fonts/monospace_blocky.py"),
+    "monospace_blocky_serif":("monospace_blocky_serif.py", "/assets/fonts/monospace_blocky_serif.py"),
     "monospace_tall":      ("monospace_tall.py",       "/assets/fonts/monospace_tall.py"),
     "monospace_humanist":  ("monospace_humanist.py",   "/assets/fonts/monospace_humanist.py"),
 }

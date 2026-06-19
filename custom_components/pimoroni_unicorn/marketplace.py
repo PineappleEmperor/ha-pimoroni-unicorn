@@ -13,11 +13,13 @@ _LAYOUTS = _DIR / "layouts"
 
 # Logical font dependency name (font:<name>) -> unit filename.
 FONT_FILES = {
-    "digits":     "monospace_digits.py",
-    "big_digits": "monospace_big_digits.py",
-    "blocky":     "monospace_blocky.py",
-    "tall":       "monospace_tall.py",
-    "humanist":   "monospace_humanist.py",
+    "digits":       "monospace_digits.py",
+    "digits_serif": "monospace_digits_serif.py",
+    "big_digits":   "monospace_big_digits.py",
+    "blocky":       "monospace_blocky.py",
+    "blocky_serif": "monospace_blocky_serif.py",
+    "tall":         "monospace_tall.py",
+    "humanist":     "monospace_humanist.py",
 }
 
 

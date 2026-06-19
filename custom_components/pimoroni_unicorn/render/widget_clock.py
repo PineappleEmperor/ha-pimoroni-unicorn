@@ -8,13 +8,15 @@ WIDGET = {
                     "color": [255, 255, 255]},
     "cfg_fields": [
         {"key": "font", "type": "select",
-         "options": ["big", "digits", "blocky", "tall", "humanist"], "label": "Digit font"},
+         "options": ["big", "digits", "digits-serif", "blocky", "blocky-serif", "tall", "humanist"],
+         "label": "Digit font"},
         {"key": "layout", "type": "select", "options": ["row", "stacked"], "label": "Layout"},
         {"key": "digit_gap", "type": "number", "min": 0, "max": 8, "step": 1, "label": "Digit gap"},
         {"key": "pair_gap", "type": "number", "min": 0, "max": 12, "step": 1, "label": "HH–MM gap"},
         {"key": "color", "type": "rgb", "label": "Colour"},
     ],
-    "requires": ["font:digits", "font:big_digits", "font:blocky", "font:tall", "font:humanist"],
+    "requires": ["font:digits", "font:digits_serif", "font:big_digits", "font:blocky",
+                 "font:blocky_serif", "font:tall", "font:humanist"],
 }
 
 # Legacy variant -> (font, layout, digit_gap, pair_gap). Pre-rc5 layouts still render.

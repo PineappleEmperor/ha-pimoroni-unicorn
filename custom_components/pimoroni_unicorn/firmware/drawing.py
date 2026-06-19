@@ -4,18 +4,21 @@ import time
 from bitfonts import font3x5, font5x9
 from monospace_big_digits import BIG_DIGITS
 from monospace_blocky import BLOCKY
+from monospace_blocky_serif import BLOCKY_SERIF
 from monospace_digits import DIGITS
+from monospace_digits_serif import DIGITS_SERIF
 from monospace_humanist import HUMANIST
 from monospace_tall import TALL
 
-# Single-row clock faces: (glyph table, glyph width).
 # Clock digit faces: name -> (glyph table, glyph width). Height derives from the table.
 _CLOCK_FACES = {
-    "big":      (BIG_DIGITS, 5),
-    "digits":   (DIGITS, 3),
-    "blocky":   (BLOCKY, 4),
-    "tall":     (TALL, 3),
-    "humanist": (HUMANIST, 4),
+    "big":          (BIG_DIGITS, 5),
+    "digits":       (DIGITS, 3),
+    "digits-serif": (DIGITS_SERIF, 3),
+    "blocky":       (BLOCKY, 4),
+    "blocky-serif": (BLOCKY_SERIF, 4),
+    "tall":         (TALL, 3),
+    "humanist":     (HUMANIST, 4),
 }
 
 

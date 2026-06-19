@@ -268,12 +268,16 @@ FONT_SPECS = [
      "builtin": True, "upper": True, "sample": "HELLO 2026"},
     {"name": "font5x9",    "label": "Tall 5×9",     "kind": "alpha",  "w": 5, "h": 9,
      "builtin": True, "upper": False, "sample": "Hello 2026"},
-    {"name": "digits",     "label": "Digits 3×5",   "kind": "digits", "w": 3, "h": 5,
-     "device_file": "monospace_digits.py",     "sample": "012345"},
-    {"name": "big_digits", "label": "Big 5×7",      "kind": "digits", "w": 5, "h": 7,
-     "device_file": "monospace_big_digits.py", "sample": "012345"},
-    {"name": "blocky",     "label": "Blocky 4×5",   "kind": "digits", "w": 4, "h": 5,
-     "device_file": "monospace_blocky.py",     "sample": "012345"},
+    {"name": "digits",       "label": "Digits 3×5",        "kind": "digits", "w": 3, "h": 5,
+     "device_file": "monospace_digits.py",       "sample": "012345"},
+    {"name": "digits_serif", "label": "Digits serif 3×5",  "kind": "digits", "w": 3, "h": 5,
+     "device_file": "monospace_digits_serif.py", "sample": "012345"},
+    {"name": "big_digits",   "label": "Big 5×7",           "kind": "digits", "w": 5, "h": 7,
+     "device_file": "monospace_big_digits.py",   "sample": "012345"},
+    {"name": "blocky",       "label": "Blocky 4×5",        "kind": "digits", "w": 4, "h": 5,
+     "device_file": "monospace_blocky.py",       "sample": "012345"},
+    {"name": "blocky_serif", "label": "Blocky serif 4×5",  "kind": "digits", "w": 4, "h": 5,
+     "device_file": "monospace_blocky_serif.py", "sample": "012345"},
     {"name": "tall",       "label": "Tall 3×7",     "kind": "digits", "w": 3, "h": 7,
      "device_file": "monospace_tall.py",       "sample": "012345"},
     {"name": "humanist",   "label": "Humanist 4×7", "kind": "digits", "w": 4, "h": 7,
@@ -282,11 +286,13 @@ FONT_SPECS = [
 
 _ALPHA_FONTS = {"font3x5": True, "font4x5": True, "font5x9": False}  # name -> force-uppercase
 _DIGIT_FONTS = {
-    "digits":     ("monospace_digits",     "DIGITS",     3, 5),
-    "big_digits": ("monospace_big_digits", "BIG_DIGITS", 5, 7),
-    "blocky":     ("monospace_blocky",     "BLOCKY",     4, 5),
-    "tall":       ("monospace_tall",       "TALL",       3, 7),
-    "humanist":   ("monospace_humanist",   "HUMANIST",   4, 7),
+    "digits":       ("monospace_digits",       "DIGITS",       3, 5),
+    "digits_serif": ("monospace_digits_serif", "DIGITS_SERIF", 3, 5),
+    "big_digits":   ("monospace_big_digits",   "BIG_DIGITS",   5, 7),
+    "blocky":       ("monospace_blocky",       "BLOCKY",       4, 5),
+    "blocky_serif": ("monospace_blocky_serif", "BLOCKY_SERIF", 4, 5),
+    "tall":         ("monospace_tall",         "TALL",         3, 7),
+    "humanist":     ("monospace_humanist",     "HUMANIST",     4, 7),
 }
 
 
