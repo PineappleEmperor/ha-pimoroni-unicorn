@@ -412,6 +412,36 @@ def _merged_opts(entry: ConfigEntry) -> dict[str, Any]:
     return {**entry.data, **entry.options}
 
 
+# HA weather-entity condition strings -> the firmware's simplified condition vocabulary
+# (matches weather_fx.map_owm_code outputs). Lets users pick a weather.* entity, not just an
+# OWM-code sensor.
+_HA_CONDITION_MAP = {
+    "sunny": "clear", "clear-night": "clear",
+    "partlycloudy": "partly_cloudy",
+    "cloudy": "cloudy",
+    "fog": "fog",
+    "rainy": "rain", "pouring": "rain",
+    "lightning": "thunderstorm", "lightning-rainy": "thunderstorm",
+    "snowy": "snow", "snowy-rainy": "snow", "hail": "snow",
+    "windy": "clear", "windy-variant": "clear", "exceptional": "clear",
+}
+
+
+def _weather_condition(state: Any) -> Any:
+    """Normalize an entity to what the firmware expects: an int OWM code, or a condition string."""
+    raw = state.state
+    try:
+        return int(raw)  # numeric OWM code — device maps it via map_owm_code
+    except (ValueError, TypeError):
+        pass
+    for key in ("owm_code", "weather_code", "condition_code", "code"):
+        val = state.attributes.get(key)
+        if isinstance(val, int) or (isinstance(val, str) and val.isdigit()):
+            return int(val)
+    text = str(raw).lower()
+    return _HA_CONDITION_MAP.get(text, text)  # known HA condition -> firmware string; else pass through
+
+
 def _setup_publishers(hass: HomeAssistant, entry: PUConfigEntry) -> None:
     opts        = _merged_opts(entry)
     device_id   = opts[CONF_DEVICE_ID]
@@ -475,7 +505,7 @@ def _setup_publishers(hass: HomeAssistant, entry: PUConfigEntry) -> None:
             state = hass.states.get(weather_code_entity)
             if state is None or state.state in ("unknown", "unavailable", ""):
                 return
-            data: dict[str, Any] = {"condition": state.state}
+            data: dict[str, Any] = {"condition": _weather_condition(state)}
             temp = state.attributes.get("temperature")
             if isinstance(temp, (int, float)):
                 data["temp"] = round(float(temp), 1)

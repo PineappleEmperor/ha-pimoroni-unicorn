@@ -559,7 +559,10 @@ def on_message(topic, message):
         if topic_str == TOPIC_WEATHER:
             try:
                 code = data.get("condition", 800)
-                new_condition = map_owm_code(int(code))
+                try:
+                    new_condition = map_owm_code(int(code))   # numeric OWM code
+                except (ValueError, TypeError):
+                    new_condition = str(code)                 # already a condition string from HA
                 if new_condition != weather_condition:
                     weather_condition = new_condition
                     init_weather_drops(weather_condition)
