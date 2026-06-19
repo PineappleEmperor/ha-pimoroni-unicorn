@@ -3,11 +3,14 @@
 import ast
 from collections.abc import Callable, Coroutine
 from datetime import timedelta
+import ipaddress
 import json
 import logging
 from pathlib import Path
+import socket
 import time
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
@@ -484,6 +487,31 @@ def _setup_publishers(hass: HomeAssistant, entry: PUConfigEntry) -> None:
         )
 
 
+async def _async_resolve_host_to_ip(hass: HomeAssistant, base_url: str) -> str:
+    """Swap a hostname in base_url for its IP so the device needn't resolve names (mDNS unreliable)."""
+    parts = urlsplit(base_url)
+    host = parts.hostname
+    if not host:
+        return base_url
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        return base_url  # already an IP
+    try:
+        infos = await hass.async_add_executor_job(
+            socket.getaddrinfo, host, parts.port or 80, socket.AF_INET)
+        ip = str(infos[0][4][0])
+    except (OSError, IndexError):
+        _LOGGER.warning(
+            "Pimoroni Unicorn OTA: could not resolve %s to an IP; sending the hostname "
+            "(the device must resolve it itself, which MicroPython does unreliably)", host)
+        return base_url
+    netloc = ip if parts.port is None else f"{ip}:{parts.port}"
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+
+
 def _make_push_firmware_handler(
     hass: HomeAssistant,
 ) -> Callable[[ServiceCall], Coroutine[Any, Any, None]]:
@@ -511,6 +539,7 @@ def _make_push_firmware_handler(
                 hass, title="Pimoroni Unicorn OTA failed", message=msg,
                 notification_id="pimoroni_unicorn_ota_error")
             raise HomeAssistantError(msg)
+        base_url = await _async_resolve_host_to_ip(hass, base_url)
         _LOGGER.debug("Pimoroni Unicorn OTA: device will fetch files from %s", base_url)
         if base_url.lower().startswith("https"):
             _LOGGER.warning(
