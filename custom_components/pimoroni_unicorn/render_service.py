@@ -185,12 +185,20 @@ def _prime_icons(m, installed: dict | None) -> None:
             m.icons._code_alias[str(data["code"])] = name  # noqa: SLF001
 
 
+def map_owm(code) -> str:
+    """Map an OWM numeric code to the firmware's simplified condition string."""
+    try:
+        return _modules().weather_fx.map_owm_code(int(code))
+    except (ValueError, TypeError):
+        return "clear"
+
+
 def render_layout_png(model: str, layout: dict, installed_icons: dict | None = None,
-                      elapsed_ms: int = 0, orientation: int = 0) -> str:
-    """Render a layout for a model at a point in time; return a base64 PNG."""
+                      elapsed_ms: int = 0, orientation: int = 0, state: dict | None = None) -> str:
+    """Render a layout for a model; pass `state` to mirror the device's live values."""
     m, g, width, height = _new_graphics(model, orientation)
     _prime_icons(m, installed_icons)
-    state = {**SAMPLE_STATE, "time": time.localtime(), "elapsed_ms": elapsed_ms}
+    state = {**SAMPLE_STATE, "time": time.localtime(), "elapsed_ms": elapsed_ms, **(state or {})}
     ds = dict(state.get("display_sensors") or {})
     for entry in layout.get("widgets", []):
         ent = (entry.get("cfg") or {}).get("entity")
