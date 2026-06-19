@@ -87,7 +87,7 @@ ENGINE_FILE_KEYS = list(OTA_SOURCE_FILES)
 # Bundled engine version (the update entity diffs the device's reported
 # engine_version against this). Keep in sync with firmware/engine/version.py.
 # Versioned independently of the integration manifest version.
-ENGINE_VERSION = "1.2.1"
+ENGINE_VERSION = "1.2.2"
 
 # Engine builds below this need a one-time USB reflash (the foldered file layout
 # landed in 1.1.0); OTA cannot migrate a flat device, so the update entity refuses
