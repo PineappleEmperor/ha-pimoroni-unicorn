@@ -644,6 +644,18 @@ export class PimoroniUnicornPanel extends LitElement {
     this.layoutName = "";
     this.switchTab("layout");
   }
+  private async editCurrentPage(): Promise<void> {
+    if (!this.entryId || !this.guardDiscard()) return;
+    const res = await this.hass.callWS({ type: "pimoroni_unicorn/devices" });
+    const dev = (res.devices ?? []).find((d: Device) => d.entry_id === this.entryId);
+    await this.refreshStored();
+    const active = dev?.active_layout ? this.stored[dev.active_layout] : undefined;
+    if (!active) { this.status = "This device has no active page saved in the library yet."; return; }
+    this.layoutName = dev.active_layout!;
+    this.loadLayout(active);
+    this.switchTab("layout");
+    this.status = `Loaded the device's current page "${dev.active_layout}".`;
+  }
   private async deploy(): Promise<void> {
     if (!this.entryId) return;
     this.layout.name = this.layoutName;
@@ -797,6 +809,7 @@ export class PimoroniUnicornPanel extends LitElement {
           <label>Name <input .value=${this.layoutName} @input=${(e: Event) => (this.layoutName = (e.target as HTMLInputElement).value)} /></label>
         </div>
         <div class="group">
+          <button class="secondary" @click=${this.editCurrentPage} ?disabled=${!this.entryId} title=${this.entryId ? "Load the page currently active on the device to edit it" : "Select a device first"}>Edit current page</button>
           <button @click=${this.save} title="Save this page to the library (no device needed)">Save</button>
           <button class="secondary" @click=${this.deploy} ?disabled=${!this.entryId} title=${this.entryId ? "Push this page to the selected device now" : "Select a device to push"}>Push to device</button>
           <button class="secondary" @click=${this.exportLayout} title="Copy this page's JSON to clipboard to share or import elsewhere">Export JSON</button>
