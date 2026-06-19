@@ -187,7 +187,7 @@ def send_ha_state():
     """Publish current on/off state and brightness to the HA state topic."""
     if mqtt_client:
         try:
-            mqtt_client.publish(TOPIC_STATE, json.dumps({
+            _pub(TOPIC_STATE, json.dumps({
                 "state": "ON" if system_state == "AWAKE" else "OFF",
                 "brightness": int(brightness * 100),
             }), retain=True)
@@ -310,7 +310,7 @@ def _run_ota(payload):
     _show_ota_screen(f"Done {succeeded}/{total}", total, total)
     failed = [it.get("path", "") for it in files if it.get("path") and it.get("path") not in written]
     try:
-        mqtt_client.publish(
+        _pub(
             f"{DEVICE_ID}/ota/result",
             json.dumps({"ok": not failed, "succeeded": succeeded, "total": total, "failed": failed}),
             retain=True)
@@ -604,12 +604,23 @@ def on_message(topic, message):
         print("MQTT message error:", e)
 
 
+_MQTT_MAX_PAYLOAD = 4096  # umqtt short-writes larger publishes over lwIP -> truncated/malformed packet
+
+
+def _pub(topic, payload, retain=False, qos=0):
+    """Publish, skipping (with a warning) any payload too large to send intact over MQTT."""
+    if len(payload) > _MQTT_MAX_PAYLOAD:
+        print("MQTT publish skipped (payload too large):", topic, len(payload))
+        return
+    mqtt_client.publish(topic, payload, retain=retain, qos=qos)
+
+
 async def mqtt_task():
     """Manage MQTT connection, HA discovery publishing, and message polling."""
     global mqtt_client, _wdt
     mqtt_client = MQTTClient(
         DEVICE_ID, MQTT_BROKER,
-        port=MQTT_PORT, user=MQTT_USER, password=MQTT_PASSWORD, keepalive=45,
+        port=MQTT_PORT, user=MQTT_USER, password=MQTT_PASSWORD, keepalive=60,
     )
     mqtt_client.set_last_will(TOPIC_STATUS, b"offline", retain=True)
     mqtt_client.set_callback(on_message)
@@ -622,16 +633,16 @@ async def mqtt_task():
             print("Connecting to MQTT...")
             mqtt_client.connect()
             print("Connected to MQTT broker")
-            mqtt_client.publish(TOPIC_STATUS, b"online", retain=True)
+            _pub(TOPIC_STATUS, b"online", retain=True)
             # Announce to the Pimoroni Unicorn integration for auto-discovery (no manual device id).
-            mqtt_client.publish(
+            _pub(
                 f"pimoroni_unicorn/discovery/{DEVICE_ID}",
                 json.dumps({"device_id": DEVICE_ID, "model": MODEL, "name": DEVICE_ID}),
                 retain=True,
             )
             await asyncio.sleep(0.5)
 
-            mqtt_client.publish(
+            _pub(
                 f"{DISCOVERY_PREFIX}/binary_sensor/{DEVICE_ID}/status/config",
                 json.dumps({
                     "name": "Connectivity", "state_topic": TOPIC_STATUS,
@@ -641,7 +652,7 @@ async def mqtt_task():
                 }),
                 retain=True,
             )
-            mqtt_client.publish(
+            _pub(
                 f"{DISCOVERY_PREFIX}/light/{DEVICE_ID}/display/config",
                 json.dumps({
                     "name": "Display", "unique_id": f"{DEVICE_ID}_light",
@@ -655,8 +666,10 @@ async def mqtt_task():
             )
             # Energy mode + battery animation are now per-widget config; clear any
             # select/switch discovery a previous firmware advertised so the entities vanish.
-            mqtt_client.publish(f"{DISCOVERY_PREFIX}/switch/{DEVICE_ID}/animation/config", b"", retain=True)
-            mqtt_client.publish(f"{DISCOVERY_PREFIX}/select/{DEVICE_ID}/energy_mode/config", b"", retain=True)
+            _pub(f"{DISCOVERY_PREFIX}/switch/{DEVICE_ID}/animation/config", b"", retain=True)
+            _pub(f"{DISCOVERY_PREFIX}/select/{DEVICE_ID}/energy_mode/config", b"", retain=True)
+            # Clear the oversized retained layout/capabilities a prior build left on the broker.
+            _pub(f"{DEVICE_ID}/layout/capabilities", b"", retain=True)
 
             mqtt_client.subscribe(f"{DEVICE_ID}/display/#".encode())
             for topic in (
@@ -667,26 +680,34 @@ async def mqtt_task():
             ):
                 mqtt_client.subscribe(topic.encode())
 
-            mqtt_client.publish(
+            _pub(
                 f"{DEVICE_ID}/notify/capabilities", json.dumps(NOTIFY_CAPABILITIES), retain=True
             )
-            mqtt_client.publish(
-                f"{DEVICE_ID}/layout/capabilities",
-                json.dumps(widgets.LAYOUT_CAPABILITIES), retain=True,
-            )
-            mqtt_client.publish(TOPIC_FW_MANIFEST, json.dumps(_fw_manifest()), retain=True)
+            # NB: the editor palette comes from the HA backend (render_service.layout_capabilities),
+            # not the device — so we no longer publish the ~6KB layout/capabilities. umqtt short-writes
+            # a publish that large over lwIP, sending a truncated (malformed) packet the broker rejects.
+            _pub(TOPIC_FW_MANIFEST, json.dumps(_fw_manifest()), retain=True)
             _ota_commit()  # booted healthy — drop OTA backups/rollback counter
             if _wdt is None:  # arm watchdog once up; main loop + OTA feed it
                 _wdt = machine.WDT(timeout=WDT_TIMEOUT_MS)
             send_ha_state()
             print("MQTT Connected & Discovery Published")
 
+            last_ping = time.ticks_ms()
+            last_diag = last_ping
             while True:
                 mqtt_client.check_msg()
-                if time.ticks_ms() % 60000 < 500:
-                    mqtt_client.publish(TOPIC_STATUS, b"online", retain=True)
+                now = time.ticks_ms()
+                # Keep the connection alive: ping at keepalive/2 (60s) since check_msg never
+                # sends PINGREQ and the 60s diag publish alone races the broker's grace window.
+                if time.ticks_diff(now, last_ping) >= 30000:
+                    mqtt_client.ping()
+                    last_ping = now
+                if time.ticks_diff(now, last_diag) >= 60000:
+                    last_diag = now
+                    _pub(TOPIC_STATUS, b"online", retain=True)
                     page = _screens[_screen_idx].get("name", str(_screen_idx)) if _screens else ""
-                    mqtt_client.publish(TOPIC_DIAG, json.dumps({
+                    _pub(TOPIC_DIAG, json.dumps({
                         "page": page, "free_mem": gc.mem_free(), "uptime_s": time.ticks_ms() // 1000,
                     }), retain=True)
                     # Re-sync NTP if never synced, or hourly — time isn't battery-backed.
