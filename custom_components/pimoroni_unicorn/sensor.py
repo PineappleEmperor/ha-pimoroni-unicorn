@@ -31,12 +31,18 @@ PARALLEL_UPDATES = 0
 class PUSensorDescription(SensorEntityDescription):
     """Sensor description with a value function over (diag, manifest)."""
     value_fn: Callable[[dict, dict], StateType]
+    attr_fn: Callable[[dict, dict], dict] | None = None
 
 
 SENSORS: tuple[PUSensorDescription, ...] = (
     PUSensorDescription(
         key="page", translation_key="page", icon="mdi:view-carousel",
         value_fn=lambda diag, manifest: diag.get("page"),
+        attr_fn=lambda diag, manifest: {
+            "index": diag.get("screen_index"),
+            "count": diag.get("screen_count"),
+            "dwell_s": diag.get("dwell_s"),
+        },
     ),
     PUSensorDescription(
         key="free_mem", translation_key="free_mem",
@@ -78,6 +84,13 @@ SENSORS: tuple[PUSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
         value_fn=lambda diag, manifest: diag.get("orientation"),
     ),
+    PUSensorDescription(
+        key="cpu_temp", translation_key="cpu_temp",
+        native_unit_of_measurement="°C", device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
+        value_fn=lambda diag, manifest: diag.get("cpu_temp"),
+    ),
 )
 
 
@@ -114,6 +127,14 @@ class PimoroniUnicornSensor(SensorEntity):
         """Compute the value from the cached diag + firmware manifest payloads."""
         data = self._entry.runtime_data or {}
         return self._desc.value_fn(data.get("diag") or {}, data.get("fw_manifest") or {})
+
+    @cached_property
+    def extra_state_attributes(self) -> dict | None:
+        """Optional per-sensor attributes (e.g. playlist position on the page sensor)."""
+        if self._desc.attr_fn is None:
+            return None
+        data = self._entry.runtime_data or {}
+        return self._desc.attr_fn(data.get("diag") or {}, data.get("fw_manifest") or {})
 
     async def async_added_to_hass(self) -> None:
         """Refresh when new diag, manifest or status payloads arrive."""

@@ -361,8 +361,17 @@ def _file_hash(path):
 _MANIFEST_DIRS = ("/engine", "/engine/animations", "/widgets", "/assets/fonts", "/icons")
 
 
+def _cpu_temp():
+    """Pico internal temperature sensor in °C (None if unavailable)."""
+    try:
+        v = machine.ADC(4).read_u16() * 3.3 / 65535
+        return round(27 - (v - 0.706) / 0.001721, 1)
+    except Exception:
+        return None
+
+
 def _diag_payload():
-    """Full device state HA mirrors: current page, health, identity/config, and WiFi."""
+    """Full device state HA mirrors: current page, health, identity/config, WiFi, rotation."""
     page = _screens[_screen_idx].get("name", str(_screen_idx)) if _screens else ""
     wlan = network.WLAN(network.STA_IF)
     try:
@@ -385,6 +394,10 @@ def _diag_payload():
         "ip": ip,
         "rssi": rssi,
         "reset_cause": _RESET_CAUSE,
+        "cpu_temp": _cpu_temp(),
+        "screen_index": _screen_idx,
+        "screen_count": len(_screens) if _screens else 0,
+        "dwell_s": (_screen_dwell_ms // 1000) if _screen_dwell_ms else 0,
     }
 
 
