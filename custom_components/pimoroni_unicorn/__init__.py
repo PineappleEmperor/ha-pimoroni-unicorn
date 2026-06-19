@@ -126,7 +126,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     device_id = opts[CONF_DEVICE_ID]
 
     _setup_publishers(hass, entry)
-    await _async_subscribe_layout_caps(hass, entry)
     await _async_subscribe_notify_caps(hass, entry)
     await _async_subscribe_fw_manifest(hass, entry)
     await _async_subscribe_diag(hass, entry)
@@ -228,23 +227,6 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     await _async_publish_orientation(hass, entry)
     await layout.async_push_active(hass, entry)
     await _async_refresh_panel(hass)
-
-
-async def _async_subscribe_layout_caps(hass: HomeAssistant, entry: PUConfigEntry) -> None:
-    """Subscribe to retained layout/capabilities and cache the widget catalogue."""
-    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
-
-    @callback
-    def _on_caps(msg: Any) -> None:
-        try:
-            data = json.loads(msg.payload)
-            if isinstance(data, dict):
-                entry.runtime_data["layout_caps"] = data
-        except (json.JSONDecodeError, ValueError):
-            pass
-
-    unsub = await async_subscribe(hass, f"{device_id}/layout/capabilities", _on_caps)
-    entry.runtime_data["unsub"].append(unsub)
 
 
 async def _async_subscribe_fw_manifest(hass: HomeAssistant, entry: PUConfigEntry) -> None:

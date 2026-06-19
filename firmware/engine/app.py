@@ -670,10 +670,9 @@ async def mqtt_task():
             mqtt_client.publish(
                 f"{DEVICE_ID}/notify/capabilities", json.dumps(NOTIFY_CAPABILITIES), retain=True
             )
-            mqtt_client.publish(
-                f"{DEVICE_ID}/layout/capabilities",
-                json.dumps(widgets.LAYOUT_CAPABILITIES), retain=True,
-            )
+            # NB: the editor palette comes from the HA backend (render_service.layout_capabilities),
+            # not the device — so we no longer publish the ~6KB layout/capabilities. umqtt short-writes
+            # a publish that large over lwIP, sending a truncated (malformed) packet the broker rejects.
             mqtt_client.publish(TOPIC_FW_MANIFEST, json.dumps(_fw_manifest()), retain=True)
             _ota_commit()  # booted healthy — drop OTA backups/rollback counter
             if _wdt is None:  # arm watchdog once up; main loop + OTA feed it
