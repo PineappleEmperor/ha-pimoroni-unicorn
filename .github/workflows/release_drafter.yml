@@ -16,7 +16,23 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     steps:
+      - uses: actions/checkout@v4
+      - id: ver
+        name: Read version from manifest
+        run: |
+          V=$(python3 -c "import json;print(json.load(open('custom_components/pimoroni_unicorn/manifest.json'))['version'])")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          if echo "$V" | grep -Eiq '[0-9][-._]?(rc|alpha|beta|dev|a|b)'; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: release-drafter/release-drafter@v7
+        with:
+          version: ${{ steps.ver.outputs.version }}
+          tag: v${{ steps.ver.outputs.version }}
+          name: v${{ steps.ver.outputs.version }}
+          prerelease: ${{ steps.ver.outputs.prerelease }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   autolabeler:
