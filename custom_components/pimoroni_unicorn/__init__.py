@@ -254,15 +254,37 @@ async def _async_subscribe_diag(hass: HomeAssistant, entry: PUConfigEntry) -> No
     """Subscribe to the retained diagnostics topic (current page, free memory, uptime)."""
     device_id = _merged_opts(entry)[CONF_DEVICE_ID]
 
+    note_id = f"pimoroni_unicorn_orientation_drift_{device_id}"
+
     @callback
     def _on_diag(msg: Any) -> None:
         try:
             data = json.loads(msg.payload)
-            if isinstance(data, dict):
-                entry.runtime_data["diag"] = data
-                async_dispatcher_send(hass, f"{DOMAIN}_diag_{entry.entry_id}")
         except (json.JSONDecodeError, ValueError):
-            pass
+            return
+        if not isinstance(data, dict):
+            return
+        entry.runtime_data["diag"] = data
+        async_dispatcher_send(hass, f"{DOMAIN}_diag_{entry.entry_id}")
+
+        # Config-drift: the orientation the device actually applied vs what HA has configured.
+        applied = data.get("orientation")
+        try:
+            configured = int(_merged_opts(entry).get(CONF_ORIENTATION, 0) or 0)
+        except (ValueError, TypeError):
+            configured = 0
+        if isinstance(applied, int) and applied != configured:
+            notify_create(
+                hass,
+                title="Pimoroni Unicorn orientation drift",
+                message=(
+                    f"{device_id} is running at {applied}° but is configured for {configured}°. "
+                    "It applies a new orientation on reboot — reboot the device to sync."
+                ),
+                notification_id=note_id,
+            )
+        else:
+            notify_dismiss(hass, note_id)
 
     unsub = await async_subscribe(hass, f"{device_id}/diag", _on_diag)
     entry.runtime_data["unsub"].append(unsub)
