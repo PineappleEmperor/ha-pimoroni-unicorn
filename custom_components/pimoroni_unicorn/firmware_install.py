@@ -6,6 +6,7 @@ from pathlib import Path
 
 from homeassistant.components.mqtt import async_publish
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.network import NoURLAvailableError, get_url
 
 from . import marketplace
 from .const import CONF_DEVICE_ID
@@ -31,10 +32,22 @@ async def _stage_and_ota(hass: HomeAssistant, entry, files: list[tuple[str, str]
     if not files:
         return True
     device_id = _device_id(entry)
-    base_url = hass.config.internal_url or hass.config.external_url
+    try:
+        base_url = get_url(
+            hass, allow_internal=True, allow_external=False,
+            allow_cloud=False, allow_ip=True)
+    except NoURLAvailableError:
+        base_url = hass.config.internal_url
     if not base_url:
-        _LOGGER.error("Pimoroni Unicorn install: no internal/external HA URL configured")
+        _LOGGER.error(
+            "Pimoroni Unicorn install: no local HA URL. The device fetches over plain HTTP on "
+            "the LAN; set a plain-HTTP internal URL in Settings → System → Network, or install "
+            "the unit by flashing firmware/ over USB.")
         return False
+    if base_url.lower().startswith("https"):
+        _LOGGER.warning(
+            "Pimoroni Unicorn install: HA URL is HTTPS (%s); TLS is unreliable on the device. "
+            "If the install fails, use USB instead.", base_url)
     www_dir = Path(hass.config.config_dir) / "www" / "pimoroni_unicorn" / device_id
 
     def _stage() -> list[tuple[str, str]]:

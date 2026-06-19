@@ -5,7 +5,7 @@ MQTT_SERVER   = ""
 MQTT_PORT     = 1883
 MQTT_USER     = ""
 MQTT_PASSWORD = ""
-DEVICE_ID     = "pimoroni_unicorn_1"
+DEVICE_ID     = ""            # blank -> auto-derived as pimoroni_unicorn_<mac>; set to override
 NTP_HOST      = ""            # defaults to pool.ntp.org if blank (or set your router IP)
 MODEL         = "galactic"    # galactic | cosmic | stellar
 

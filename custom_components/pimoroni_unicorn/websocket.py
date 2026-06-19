@@ -9,7 +9,23 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from . import firmware_install, lametric, layout, marketplace, render_service
-from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN, UNICORN_MODEL_KEYS
+from .const import (
+    CONF_DEVICE_ID,
+    CONF_MODEL,
+    CONF_ORIENTATION,
+    DOMAIN,
+    UNICORN_MODEL_KEYS,
+)
+
+ORIENTATION_ANGLES = [0, 90, 180, 270]
+
+
+def _orientation(entry) -> int:
+    """Device's configured mounting orientation in degrees (0 default)."""
+    try:
+        return int({**entry.data, **entry.options}.get(CONF_ORIENTATION, 0) or 0)
+    except (ValueError, TypeError):
+        return 0
 
 WS_DEVICES        = "pimoroni_unicorn/devices"
 WS_CAPABILITIES   = "pimoroni_unicorn/capabilities"
@@ -87,6 +103,7 @@ def ws_devices(hass, connection, msg):
             "model":     _model_key(entry),
             "name":      entry.title,
             "active_layout": opts.get(layout.CONF_ACTIVE_LAYOUT),
+            "orientation": _orientation(entry),
         })
     connection.send_result(msg["id"], {"devices": devices})
 
@@ -95,24 +112,29 @@ def ws_devices(hass, connection, msg):
     vol.Required("type"): WS_CAPABILITIES,
     vol.Optional("entry_id"): str,
     vol.Optional("model"): vol.In(list(render_service.MODEL_DIMS)),
+    vol.Optional("orientation"): vol.In(ORIENTATION_ANGLES),
 })
-@callback
-def ws_capabilities(hass, connection, msg):
-    """Widget catalogue + model default layout, for a device or a bare model (mock)."""
-    caps = None
+@websocket_api.async_response
+async def ws_capabilities(hass, connection, msg):
+    """Widget catalogue (backend built-ins + HA custom widgets) + oriented default layout + dims."""
     entry = _entry(hass, msg["entry_id"]) if msg.get("entry_id") else None
-    if entry is not None:
-        model = _model_key(entry)
-        caps  = (entry.runtime_data or {}).get("layout_caps")
-    else:
-        model = msg.get("model", "galactic")
-    if not caps:
-        caps = render_service.layout_capabilities()
+    model = _model_key(entry) if entry is not None else msg.get("model", "galactic")
+    orientation = msg["orientation"] if "orientation" in msg else (
+        _orientation(entry) if entry is not None else 0)
+    custom_dir = marketplace.widgets_dir(hass.config.config_dir)
+
+    def _caps():
+        return (render_service.layout_capabilities(custom_dir),
+                render_service.default_layout(model, orientation))
+
+    caps, default_layout = await hass.async_add_executor_job(_caps)
     connection.send_result(msg["id"], {
         "model": model,
+        "orientation": orientation,
+        "dims": list(render_service.oriented_dims(model, orientation)),
         "widgets": caps.get("widgets", []),
         "overlays": caps.get("overlays", []),
-        "default_layout": render_service.default_layout(model),
+        "default_layout": default_layout,
     })
 
 
@@ -128,35 +150,31 @@ async def ws_layouts(hass, connection, msg):
     vol.Required("type"): WS_RENDER,
     vol.Required("model"): vol.In(list(render_service.MODEL_DIMS)),
     vol.Required("layout"): dict,
+    vol.Optional("orientation", default=0): vol.In(ORIENTATION_ANGLES),
 })
 @websocket_api.async_response
 async def ws_render(hass, connection, msg):
     """Render a layout to animated base64 PNG frames using the device's own render code."""
     installed = await lametric.async_get_registry(hass)
+    orientation = msg["orientation"]
     frames = await hass.async_add_executor_job(
-        render_service.render_layout_frames, msg["model"], msg["layout"], installed)
+        render_service.render_layout_frames, msg["model"], msg["layout"], installed, 8, 200,
+        orientation)
     boxes = render_service.layout_boxes(msg["layout"])
-    connection.send_result(msg["id"], {"png": frames[0], "frames": frames, "boxes": boxes})
+    dims = list(render_service.oriented_dims(msg["model"], orientation))
+    connection.send_result(msg["id"], {
+        "png": frames[0], "frames": frames, "boxes": boxes, "dims": dims})
 
 
 @websocket_api.websocket_command({
     vol.Required("type"): WS_SAVE_LAYOUT,
-    vol.Required("entry_id"): str,
     vol.Required("name"): str,
     vol.Required("layout"): dict,
 })
 @websocket_api.async_response
 async def ws_save_layout(hass, connection, msg):
-    """Store a named layout, make it the device's active layout, and push it."""
-    entry = _entry(hass, msg["entry_id"])
-    if entry is None:
-        connection.send_error(msg["id"], "not_found", "Unknown device")
-        return
-    name = msg["name"]
-    await layout.async_save_layout(hass, name, msg["layout"])
-    hass.config_entries.async_update_entry(
-        entry, options={**entry.options, layout.CONF_ACTIVE_LAYOUT: name})
-    await layout.async_push_layout(hass, layout.entry_device_id(entry), msg["layout"])
+    """Store a named layout in the library (no device needed; does not push)."""
+    await layout.async_save_layout(hass, msg["name"], msg["layout"])
     connection.send_result(msg["id"], {"ok": True})
 
 
@@ -164,15 +182,20 @@ async def ws_save_layout(hass, connection, msg):
     vol.Required("type"): WS_PUSH_LAYOUT,
     vol.Required("entry_id"): str,
     vol.Required("layout"): dict,
+    vol.Optional("set_active", default=False): bool,
+    vol.Optional("name"): str,
 })
 @websocket_api.async_response
 async def ws_push_layout(hass, connection, msg):
-    """Push a layout to a device without storing it (live preview)."""
+    """Push a layout to a device (live preview); optionally mark it the active page."""
     entry = _entry(hass, msg["entry_id"])
     if entry is None:
         connection.send_error(msg["id"], "not_found", "Unknown device")
         return
     await layout.async_push_layout(hass, layout.entry_device_id(entry), msg["layout"])
+    if msg["set_active"] and msg.get("name"):
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, layout.CONF_ACTIVE_LAYOUT: msg["name"]})
     connection.send_result(msg["id"], {"ok": True})
 
 

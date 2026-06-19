@@ -30,6 +30,7 @@ from .const import (
     CONF_DEVICE_ID,
     CONF_EXTRA_SENSORS,
     CONF_MODEL,
+    CONF_ORIENTATION,
     CONF_SHOW_PANEL,
     CONF_SOLAR_ENTITY,
     CONF_SUN_ENTITY,
@@ -51,6 +52,16 @@ _MODEL_SELECTOR = SelectSelector(
     SelectSelectorConfig(options=UNICORN_MODELS, mode=SelectSelectorMode.DROPDOWN)
 )
 
+_ORIENTATION_SELECTOR = SelectSelector(SelectSelectorConfig(
+    options=[
+        {"value": "0",   "label": "0° — normal"},
+        {"value": "180", "label": "180° — upside down"},
+        {"value": "90",  "label": "90° clockwise (vertical)"},
+        {"value": "270", "label": "270° clockwise (vertical)"},
+    ],
+    mode=SelectSelectorMode.DROPDOWN,
+))
+
 
 def _options_schema(current: dict) -> vol.Schema:
     def _sv(key, default=None):
@@ -59,8 +70,8 @@ def _options_schema(current: dict) -> vol.Schema:
         return {"suggested_value": v} if v is not None else {}
 
     return vol.Schema({
-        vol.Required(CONF_DEVICE_ID, default=current.get(CONF_DEVICE_ID, "")):              str,
         vol.Required(CONF_MODEL, default=current.get(CONF_MODEL) or UNICORN_MODELS[0]):     _MODEL_SELECTOR,
+        vol.Optional(CONF_ORIENTATION, default=str(current.get(CONF_ORIENTATION, "0"))):    _ORIENTATION_SELECTOR,
         vol.Optional(CONF_SOLAR_ENTITY,            description=_sv(CONF_SOLAR_ENTITY)):            EntitySelector(EntitySelectorConfig(device_class="power")),
         vol.Optional(CONF_CONSUMPTION_ENTITY,      description=_sv(CONF_CONSUMPTION_ENTITY)):      EntitySelector(EntitySelectorConfig(device_class="power")),
         vol.Optional(CONF_BATTERY_SOC_ENTITY,      description=_sv(CONF_BATTERY_SOC_ENTITY)):      EntitySelector(EntitySelectorConfig(device_class="battery")),
@@ -188,6 +199,7 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="settings",
             data_schema=_options_schema(self._settings),
+            description_placeholders={"device_id": self._settings.get(CONF_DEVICE_ID, "")},
         )
 
     async def async_step_add_icon(self, user_input=None):

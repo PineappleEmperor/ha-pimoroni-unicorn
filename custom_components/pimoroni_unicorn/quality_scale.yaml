@@ -18,9 +18,7 @@ rules:
   docs-high-level-description: done
   docs-installation-instructions: done
   docs-removal-instructions: done
-  entity-event-setup:
-    status: todo
-    comment: Audit subscribe in async_added_to_hass across button/update.
+  entity-event-setup: done
   entity-unique-id: done
   has-entity-name: done
   runtime-data: done
@@ -35,16 +33,13 @@ rules:
   config-entry-unloading: done
   log-when-unavailable:
     status: todo
-  entity-unavailable:
-    status: todo
-    comment: MQTT availability topic wired; audit per-entity availability.
+  entity-unavailable: done
   action-exceptions:
     status: todo
   reauthentication-flow:
     status: exempt
     comment: No authentication to the device beyond MQTT broker creds (HA-managed).
-  parallel-updates:
-    status: todo
+  parallel-updates: done
   test-coverage:
     status: todo
     comment: No test suite yet.
@@ -63,9 +58,7 @@ rules:
   entity-disabled-by-default:
     status: todo
     comment: Diagnostic sensors disabled-by-default pending (#63).
-  discovery:
-    status: todo
-    comment: MQTT auto-discovery pending (#58).
+  discovery: done
   stale-devices: done
   diagnostics: done
   exception-translations:
@@ -79,8 +72,8 @@ rules:
     status: exempt
     comment: One device per config entry; not a hub.
   discovery-update-info:
-    status: todo
-    comment: Revisit with #58.
+    status: exempt
+    comment: MQTT transport keyed on device_id; no network host/IP to refresh on rediscovery.
   repair-issues:
     status: todo
   docs-use-cases: done

@@ -14,6 +14,8 @@ from homeassistant.helpers.typing import StateType
 
 from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN, PUConfigEntry
 
+PARALLEL_UPDATES = 0
+
 
 @dataclass(frozen=True, kw_only=True)
 class PUSensorDescription(SensorEntityDescription):
@@ -81,10 +83,14 @@ class PimoroniUnicornSensor(SensorEntity):
         return self._desc.value_fn(data.get("diag") or {}, data.get("fw_manifest") or {})
 
     async def async_added_to_hass(self) -> None:
-        """Refresh when new diag or manifest payloads arrive."""
-        for sig in (f"{DOMAIN}_diag_{self._entry.entry_id}", f"{DOMAIN}_manifest_{self._entry.entry_id}"):
+        """Refresh when new diag, manifest or status payloads arrive."""
+        self._attr_available = bool((self._entry.runtime_data or {}).get("available"))
+        for sig in (f"{DOMAIN}_diag_{self._entry.entry_id}",
+                    f"{DOMAIN}_manifest_{self._entry.entry_id}",
+                    f"{DOMAIN}_status_{self._entry.entry_id}"):
             self.async_on_remove(async_dispatcher_connect(self.hass, sig, self._refresh))
 
     @callback
     def _refresh(self) -> None:
+        self._attr_available = bool((self._entry.runtime_data or {}).get("available"))
         self.async_write_ha_state()

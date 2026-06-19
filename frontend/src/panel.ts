@@ -38,6 +38,31 @@ const OP_FIELDS: Record<string, [string, string][]> = {
   dot:   [["w", "num"], ["h", "num"], ["bind", "text"], ["on_color", "rgb"], ["off_color", "rgb"]],
 };
 
+const OP_META: Record<string, { label: string; desc: string }> = {
+  value: { label: "Value",      desc: "Draw a data value as text — pick a source and number format." },
+  bar:   { label: "Bar",        desc: "Horizontal bar that fills from 0 to max by a value." },
+  rect:  { label: "Rectangle",  desc: "A filled rectangle." },
+  pixel: { label: "Pixel",      desc: "A single lit pixel." },
+  icon:  { label: "Icon",       desc: "Draw an installed icon by name." },
+  dot:   { label: "Status dot", desc: "A box that switches colour on a sensor's on/off state." },
+};
+
+const FIELD_META: Record<string, { label: string; hint?: string }> = {
+  bind:      { label: "Data source", hint: "what value to show — see Available data" },
+  fmt:       { label: "Number format", hint: "e.g. {:.1f}W or {}%  (Python format)" },
+  color:     { label: "Colour" },
+  bg:        { label: "Background", hint: "track colour behind the bar" },
+  w:         { label: "Width", hint: "pixels" },
+  h:         { label: "Height", hint: "pixels" },
+  max:       { label: "Max value", hint: "value that fills the bar fully" },
+  name:      { label: "Icon" },
+  on_color:  { label: "On colour" },
+  off_color: { label: "Off colour" },
+};
+
+const KNOWN_BINDS = ["solar", "consumption", "soc", "temp", "weather", "energy_mode", "co2"];
+const fieldLabel = (k: string) => FIELD_META[k]?.label ?? k;
+
 const hex = (rgb?: Rgb): string => {
   const [r, g, b] = rgb ?? [0, 0, 0];
   return "#" + [r, g, b].map((v) => Math.max(0, Math.min(255, v | 0)).toString(16).padStart(2, "0")).join("");
@@ -62,6 +87,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private png = "";
   @state() private wboxes: Size[] = [];
   @state() private dims: Size = [53, 11];
+  @state() private orientation = 0;  // device mounting rotation; affects effective dims
   @state() private zoom = 0;  // px per LED; 0 = auto-fit
   @state() private selected = -1;
   @state() private dragIdx = -1;
@@ -200,11 +226,11 @@ export class PimoroniUnicornPanel extends LitElement {
     .tab:hover:not(.on) { background: color-mix(in srgb, var(--pu-primary) 7%, transparent); filter: none; }
     .tab.on { color: var(--pu-primary); border-bottom-color: var(--pu-primary); }
     .section { margin-bottom: 8px; }
-    .shead { display: flex; gap: 10px; align-items: center; cursor: pointer; padding: 10px 4px; user-select: none; }
+    .shead { display: flex; gap: 10px; align-items: center; cursor: pointer; padding: 12px 4px; min-height: 48px; box-sizing: border-box; user-select: none; }
     .shead:hover .stitle { color: var(--pu-primary); }
-    .chev { display: inline-block; transition: transform .15s; color: var(--secondary-text-color, #79747e); font-size: 12px; }
+    .chev { width: 24px; height: 24px; flex: none; transition: transform .15s; fill: var(--secondary-text-color, #79747e); }
     .chev.open { transform: rotate(90deg); }
-    .stitle { font-size: 16px; font-weight: 500; }
+    .stitle { font-size: 22px; line-height: 28px; font-weight: 400; letter-spacing: 0; }
     .mtable { max-width: 780px; margin-bottom: 8px; }
     .mhead, .mrow { display: grid; grid-template-columns: 108px minmax(120px,1fr) minmax(80px,0.9fr) 120px 110px; gap: 12px; align-items: center; }
     .mhead { font-size: 12px; font-weight: 600; color: var(--secondary-text-color, #79747e); padding: 0 14px 6px; }
@@ -213,7 +239,10 @@ export class PimoroniUnicornPanel extends LitElement {
     .cell-action { display: flex; justify-content: flex-end; }
     .thumb { width: 100px; height: 64px; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
     .iconprev { width: 128px; height: 128px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
-    .iconthumb { width: 40px; height: 40px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .iconthumb { width: 64px; height: 64px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+    .addchips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+    .addchip { font-size: 14px; font-weight: 500; line-height: 20px; padding: 9px 14px; min-height: 40px; border-radius: 20px; border: 1px solid var(--pu-outline); background: transparent; color: inherit; cursor: pointer; }
+    .addchip:hover { background: color-mix(in srgb, var(--pu-primary) 12%, transparent); border-color: var(--pu-primary); color: var(--pu-primary); }
     .targets { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
     .chk { display: inline-flex; gap: 4px; align-items: center; font-weight: 400; }
     .catalog { list-style: none; padding: 0; margin: 0; max-width: 680px; }
@@ -226,7 +255,14 @@ export class PimoroniUnicornPanel extends LitElement {
     .badge.ok { background: color-mix(in srgb, var(--success-color, #2e7d32) 18%, transparent); color: var(--success-color, #2e7d32); }
     .badge.warn { background: color-mix(in srgb, var(--warning-color, #ed6c02) 20%, transparent); color: var(--warning-color, #ed6c02); }
     .spec { width: 380px; height: 320px; font: 13px ui-monospace, monospace; resize: vertical; }
-    .opcard { border: 1px solid var(--pu-outline); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+    .opcard { border: 1px solid var(--pu-outline); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+    .ophead { display: flex; gap: 10px; align-items: center; margin-bottom: 4px; }
+    .optitle { font-size: 16px; font-weight: 500; }
+    .opdesc { color: var(--secondary-text-color, #79747e); font-size: 13px; margin: 0 0 10px; }
+    .fieldgrid { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: center; }
+    .flabel { font-size: 14px; color: var(--secondary-text-color, #49454f); }
+    .fhint { font-size: 12px; color: var(--secondary-text-color, #79747e); margin-left: 8px; }
+    .fcell { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
     .frow { display: flex; align-items: center; gap: 14px; padding: 8px 10px; border: 1px solid var(--pu-outline); border-radius: 8px; margin-bottom: 6px; }
     .fmeta { display: flex; flex-direction: column; gap: 2px; width: 160px; flex: none; }
     .fprev { height: 40px; image-rendering: pixelated; background: #000; border-radius: 6px; padding: 0 8px; object-fit: contain; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
@@ -367,7 +403,8 @@ export class PimoroniUnicornPanel extends LitElement {
     this.overlayCaps = caps.overlays ?? [];
     this.defaultLayout = caps.default_layout;
     this.model = caps.model;
-    this.dims = MODELS[this.model] ?? [53, 11];
+    this.orientation = caps.orientation ?? 0;
+    this.dims = (caps.dims as Size) ?? MODELS[this.model] ?? [53, 11];
     await this.refreshStored();
   }
 
@@ -419,7 +456,7 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private async renderPreview(): Promise<void> {
     try {
-      const res = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: this.layout });
+      const res = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: this.layout, orientation: this.orientation });
       this.wboxes = res.boxes ?? [];
       this.playFrames("layout", res.frames ?? (res.png ? [res.png] : []), (f) => { this.png = f; });
       if (this.status.startsWith("Render failed")) this.status = "";
@@ -592,12 +629,24 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private async save(): Promise<void> {
-    if (!this.entryId) return;
+    if (!this.layoutName.trim()) { this.status = "Name the page before saving."; return; }
     this.layout.name = this.layoutName;
-    await this.hass.callWS({ type: "pimoroni_unicorn/save_layout", entry_id: this.entryId, name: this.layoutName, layout: this.layout });
+    await this.hass.callWS({ type: "pimoroni_unicorn/save_layout", name: this.layoutName, layout: this.layout });
     await this.refreshStored();
     this.dirty = false;
-    this.status = `Saved "${this.layoutName}" and pushed to device.`;
+    this.status = `Saved "${this.layoutName}" to the library.`;
+  }
+  private newPage(): void {
+    if (!this.guardDiscard()) return;
+    this.loadLayout(this.defaultLayout);
+    this.layoutName = "";
+    this.switchTab("layout");
+  }
+  private async deploy(): Promise<void> {
+    if (!this.entryId) return;
+    this.layout.name = this.layoutName;
+    await this.hass.callWS({ type: "pimoroni_unicorn/push_layout", entry_id: this.entryId, layout: this.layout, set_active: true, name: this.layoutName });
+    this.status = `Pushed "${this.layoutName}" to the device.`;
   }
   private async deleteLayout(): Promise<void> {
     if (!this.stored[this.layoutName]) return;
@@ -746,7 +795,8 @@ export class PimoroniUnicornPanel extends LitElement {
           <label>Name <input .value=${this.layoutName} @input=${(e: Event) => (this.layoutName = (e.target as HTMLInputElement).value)} /></label>
         </div>
         <div class="group">
-          <button @click=${this.save} ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to save/push"}>Save &amp; Push</button>
+          <button @click=${this.save} title="Save this page to the library (no device needed)">Save</button>
+          <button class="secondary" @click=${this.deploy} ?disabled=${!this.entryId} title=${this.entryId ? "Push this page to the selected device now" : "Select a device to push"}>Push to device</button>
           <button class="secondary" @click=${this.exportLayout} title="Copy this page's JSON to clipboard to share or import elsewhere">Export JSON</button>
           ${this.stored[this.layoutName] ? html`<button class="secondary" @click=${() => this.publishLayout(true)} title="List this page in the marketplace">Publish</button>` : ""}
           ${this.stored[this.layoutName] ? html`<button class="danger" @click=${this.deleteLayout}>Delete</button>` : ""}
@@ -808,9 +858,8 @@ export class PimoroniUnicornPanel extends LitElement {
             })}
           </ul>
           ${this.layout.widgets.length > 1 ? html`<p class="hint">Top of the list draws on top.</p>` : ""}
-          ${addable.length ? html`<div class="panelrow">
-            <select id="addsel"><option value="">add widget…</option>${addable.map((c) => html`<option value=${c.id}>${c.label}</option>`)}</select>
-            <button class="secondary" @click=${() => { const sel = this.renderRoot.querySelector("#addsel") as HTMLSelectElement; this.addWidget(sel.value); sel.value = ""; }}>Add</button>
+          ${addable.length ? html`<div class="addchips">
+            ${addable.map((c) => html`<button class="addchip" @click=${() => this.addWidget(c.id)} title="Add ${c.label}">+ ${c.label}</button>`)}
           </div>` : ""}
           <h3>Overlays</h3>
           ${this.overlayCaps.map((o) => html`<div class="panelrow"><label>
@@ -913,7 +962,7 @@ export class PimoroniUnicornPanel extends LitElement {
     const open = this.sectionsOpen[key] !== false;
     return html`<div class="section">
       <div class="shead" @click=${() => { this.sectionsOpen = { ...this.sectionsOpen, [key]: !open }; }}>
-        <span class="chev ${open ? "open" : ""}">▸</span>
+        <svg class="chev ${open ? "open" : ""}" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z" /></svg>
         <span class="stitle">${title}</span>
         <span class="chip dim">${count}</span>
       </div>
@@ -947,9 +996,11 @@ export class PimoroniUnicornPanel extends LitElement {
         <button class="secondary" @click=${this.loadCatalog}>Refresh</button>
       </div>
 
-      ${this._section("pages", "Pages", apps.length, apps.length
-        ? html`<div class="mtable">${this._mhead()}${apps.map((a) => this._contentRow(a, "layout"))}</div>`
-        : html`<p class="hint">No published pages${all ? "" : " for this device"}. Publish one from the Designer tab.</p>`)}
+      ${this._section("pages", "Pages", apps.length, html`
+        <div class="panelrow"><button @click=${this.newPage} title="Start a new page in the Designer">+ New page</button></div>
+        ${apps.length
+          ? html`<div class="mtable">${this._mhead()}${apps.map((a) => this._contentRow(a, "layout"))}</div>`
+          : html`<p class="hint">No published pages${all ? "" : " for this device"} yet. Create one above, then Publish it from the Designer.</p>`}`)}
 
       ${this._section("playlists", "Playlists", sets.length, sets.length
         ? html`<div class="mtable">${this._mhead()}${sets.map((s) => this._contentRow(s, "screenset"))}</div>`
@@ -1027,7 +1078,7 @@ export class PimoroniUnicornPanel extends LitElement {
           <input style="width:220px" placeholder="type to preview…" .value=${this.fontText}
             @input=${(e: Event) => this.onFontInput((e.target as HTMLInputElement).value)} />
         </div>
-        ${this.fonts.map((f) => html`<div class="frow">
+        ${[...this.fonts].sort((a, b) => a.h - b.h || a.w - b.w || a.label.localeCompare(b.label)).map((f) => html`<div class="frow">
           <div class="fmeta"><span class="cell-name">${f.label}</span>
             <span class="hint">${f.kind === "digits" ? "digits" : "A–Z 0–9"} · ${f.w}×${f.h}${f.builtin ? " · built-in" : ""}</span></div>
           ${this.fontPngs[f.name]
@@ -1099,44 +1150,59 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private _opField(op: Record<string, any>, i: number, key: string, type: string) {
-    if (type === "rgb") return html`<label>${key}</label>
-      <input type="color" .value=${hex(op[key] as Rgb)} @input=${(e: Event) => this.setOpField(i, key, unhex((e.target as HTMLInputElement).value))} />`;
-    if (type === "num") return html`<label>${key}</label>
-      <input type="number" style="width:54px" .value=${String(op[key] ?? 0)} @change=${(e: Event) => this.setOpField(i, key, +(e.target as HTMLInputElement).value)} />`;
-    if (type === "icon") return html`<label>${key}</label>
-      <select @change=${(e: Event) => this.setOpField(i, key, (e.target as HTMLSelectElement).value)}>
+    const hint = FIELD_META[key]?.hint;
+    const label = html`<span class="flabel">${fieldLabel(key)}</span>`;
+    let control;
+    if (type === "rgb") control = html`<input type="color" .value=${hex(op[key] as Rgb)} @input=${(e: Event) => this.setOpField(i, key, unhex((e.target as HTMLInputElement).value))} />`;
+    else if (type === "num") control = html`<input type="number" style="width:64px" .value=${String(op[key] ?? 0)} @change=${(e: Event) => this.setOpField(i, key, +(e.target as HTMLInputElement).value)} />`;
+    else if (type === "icon") control = html`<select @change=${(e: Event) => this.setOpField(i, key, (e.target as HTMLSelectElement).value)}>
         ${this.iconNames.map((o) => html`<option ?selected=${op[key] === o}>${o}</option>`)}</select>`;
-    return html`<label>${key}</label>
-      <input type="text" style="width:90px" .value=${String(op[key] ?? "")} @change=${(e: Event) => this.setOpField(i, key, (e.target as HTMLInputElement).value)} />`;
+    else if (key === "bind") control = html`<input type="text" style="width:140px" list="pu-bind-list" placeholder="solar…"
+        .value=${String(op[key] ?? "")} @change=${(e: Event) => this.setOpField(i, key, (e.target as HTMLInputElement).value)} />`;
+    else control = html`<input type="text" style="width:120px" .value=${String(op[key] ?? "")} @change=${(e: Event) => this.setOpField(i, key, (e.target as HTMLInputElement).value)} />`;
+    return html`${label}<span class="fcell">${control}${hint ? html`<span class="fhint">${hint}</span>` : ""}</span>`;
   }
   private _opEditor(op: Record<string, any>, i: number) {
+    const meta = OP_META[op.op] ?? { label: op.op, desc: "" };
     return html`<div class="opcard">
-      <div class="panelrow">
-        <select @change=${(e: Event) => this.setOpField(i, "op", (e.target as HTMLSelectElement).value)}>
-          ${OP_TYPES.map((t) => html`<option ?selected=${t === op.op}>${t}</option>`)}</select>
-        <label>x</label><input type="number" style="width:54px" .value=${String(op.x ?? 0)} @change=${(e: Event) => this.setOpField(i, "x", +(e.target as HTMLInputElement).value)} />
-        <label>y</label><input type="number" style="width:54px" .value=${String(op.y ?? 0)} @change=${(e: Event) => this.setOpField(i, "y", +(e.target as HTMLInputElement).value)} />
+      <div class="ophead">
+        <span class="optitle">${meta.label}</span>
+        <select title="Change op type" @change=${(e: Event) => this.setOpField(i, "op", (e.target as HTMLSelectElement).value)}>
+          ${OP_TYPES.map((t) => html`<option value=${t} ?selected=${t === op.op}>${OP_META[t]?.label ?? t}</option>`)}</select>
         <span class="grow"></span>
-        <button class="danger zbtn" @click=${() => this.removeOp(i)}>✕</button>
+        <button class="danger zbtn" title="Remove op" @click=${() => this.removeOp(i)}>✕</button>
       </div>
-      <div class="panelrow">${(OP_FIELDS[op.op] ?? []).map(([k, t]) => this._opField(op, i, k, t))}</div>
+      ${meta.desc ? html`<p class="opdesc">${meta.desc}</p>` : ""}
+      <div class="fieldgrid">
+        <span class="flabel">Position</span>
+        <span class="fcell">
+          <label class="fhint">X</label><input type="number" style="width:64px" .value=${String(op.x ?? 0)} @change=${(e: Event) => this.setOpField(i, "x", +(e.target as HTMLInputElement).value)} />
+          <label class="fhint">Y</label><input type="number" style="width:64px" .value=${String(op.y ?? 0)} @change=${(e: Event) => this.setOpField(i, "y", +(e.target as HTMLInputElement).value)} />
+        </span>
+        ${(OP_FIELDS[op.op] ?? []).map(([k, t]) => this._opField(op, i, k, t))}
+      </div>
     </div>`;
   }
   private _formView() {
     const s = this.parsedSpec();
     if (!s) return html`<p class="status err">Spec isn't valid JSON — switch to YAML / JSON to fix it.</p>`;
-    const num = (k: string) => html`<label>${k}</label><input type="number" style="width:60px" .value=${String(s[k] ?? "")} @change=${(e: Event) => this.setSpecField(k, +(e.target as HTMLInputElement).value)} />`;
     return html`
-      <div class="panelrow">
-        <label>ID</label><input style="width:120px" .value=${s.id ?? ""} @change=${(e: Event) => this.setSpecField("id", (e.target as HTMLInputElement).value)} />
-        <label>Label</label><input style="width:120px" .value=${s.label ?? ""} @change=${(e: Event) => this.setSpecField("label", (e.target as HTMLInputElement).value)} />
+      <datalist id="pu-bind-list">${KNOWN_BINDS.map((b) => html`<option value=${b}></option>`)}</datalist>
+      <div class="fieldgrid">
+        <span class="flabel">ID</span><span class="fcell"><input style="width:140px" .value=${s.id ?? ""} @change=${(e: Event) => this.setSpecField("id", (e.target as HTMLInputElement).value)} /><span class="fhint">unique id, e.g. my_widget</span></span>
+        <span class="flabel">Label</span><span class="fcell"><input style="width:140px" .value=${s.label ?? ""} @change=${(e: Event) => this.setSpecField("label", (e.target as HTMLInputElement).value)} /></span>
+        <span class="flabel">Size</span><span class="fcell">
+          <label class="fhint">W</label><input type="number" style="width:64px" .value=${String(s.w ?? "")} @change=${(e: Event) => this.setSpecField("w", +(e.target as HTMLInputElement).value)} />
+          <label class="fhint">H</label><input type="number" style="width:64px" .value=${String(s.h ?? "")} @change=${(e: Event) => this.setSpecField("h", +(e.target as HTMLInputElement).value)} />
+        </span>
       </div>
-      <div class="panelrow">${num("w")}${num("h")}</div>
       <h3>Draw ops</h3>
+      <p class="hint">Each op draws one element, in order. Available data: ${KNOWN_BINDS.join(", ")} (unknown binds preview as 123).</p>
       ${(s.draw ?? []).map((op: Record<string, any>, i: number) => this._opEditor(op, i))}
-      <div class="panelrow"><label>Add op</label>
-        <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v) { this.addOp(v); (e.target as HTMLSelectElement).value = ""; } }}>
-          <option value="">add op…</option>${OP_TYPES.map((t) => html`<option>${t}</option>`)}</select></div>
+      <p class="hint">Add an op:</p>
+      <div class="addchips">
+        ${OP_TYPES.map((t) => html`<button class="addchip" title=${OP_META[t]?.desc ?? ""} @click=${() => this.addOp(t)}>+ ${OP_META[t]?.label ?? t}</button>`)}
+      </div>
     `;
   }
 

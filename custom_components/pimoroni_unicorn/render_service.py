@@ -19,6 +19,12 @@ MODEL_DIMS = {
     "stellar":  (16, 16),
 }
 
+
+def oriented_dims(model: str, orientation: int = 0) -> tuple[int, int]:
+    """Effective (logical) canvas dims for a model at an orientation; 90/270 swap w/h."""
+    w, h = MODEL_DIMS.get(model, MODEL_DIMS["galactic"])
+    return (h, w) if orientation in (90, 270) else (w, h)
+
 SAMPLE_STATE = {
     "solar": 2.5, "consumption": 0.8, "soc": 75, "charging": True,
     "sun_below": False, "energy_mode": "Net", "weather": "clear", "temp": 18.5,
@@ -64,14 +70,40 @@ def _modules():
     return _loaded
 
 
-def default_layout(model: str) -> dict:
-    """Return the firmware default layout for a model."""
-    return _modules().layouts.default_layout(model)
+def default_layout(model: str, orientation: int = 0) -> dict:
+    """Return the firmware default layout for a model at an orientation."""
+    return _modules().layouts.default_layout(model, orientation)
 
 
-def layout_capabilities() -> dict:
-    """Return the widget catalogue from the render package."""
-    return _modules().widgets.LAYOUT_CAPABILITIES
+def layout_capabilities(custom_dir=None) -> dict:
+    """Backend widget catalogue: built-ins plus HA-side custom widgets (device-independent)."""
+    import json
+    from pathlib import Path
+    base = _modules().widgets.LAYOUT_CAPABILITIES
+    d = Path(custom_dir) if custom_dir else None
+    if d is None or not d.is_dir():
+        return base
+    known = {w["id"] for w in base["widgets"]}
+    extra = []
+    for p in sorted(d.glob("widget_*.json")):
+        try:
+            spec = json.loads(p.read_text())
+        except (ValueError, OSError):
+            continue
+        wid = spec.get("id", p.stem[7:])
+        if wid in known:
+            continue
+        known.add(wid)
+        extra.append({
+            "id": wid, "label": spec.get("label", wid),
+            "w": spec.get("w", 8), "h": spec.get("h", 8),
+            "variants": [], "default_cfg": spec.get("default_cfg", {}),
+            "cfg_fields": spec.get("cfg_fields", []), "sizes": {},
+            "multi": spec.get("multi", False),
+        })
+    if not extra:
+        return base
+    return {"widgets": [*base["widgets"], *extra], "overlays": base["overlays"]}
 
 
 def builtin_icon_names() -> list[str]:
@@ -113,9 +145,9 @@ def layout_boxes(layout: dict) -> list:
     return out
 
 
-def _new_graphics(model: str):
+def _new_graphics(model: str, orientation: int = 0):
     m = _modules()
-    width, height = MODEL_DIMS.get(model, MODEL_DIMS["galactic"])
+    width, height = oriented_dims(model, orientation)
     g = m.PicoGraphics(width, height)
     m.drawing.init(g, m.bitfonts.BitFont(g), width, height)
     m.weather_fx.init(g, width, height)
@@ -154,9 +186,9 @@ def _prime_icons(m, installed: dict | None) -> None:
 
 
 def render_layout_png(model: str, layout: dict, installed_icons: dict | None = None,
-                      elapsed_ms: int = 0) -> str:
+                      elapsed_ms: int = 0, orientation: int = 0) -> str:
     """Render a layout for a model at a point in time; return a base64 PNG."""
-    m, g, width, height = _new_graphics(model)
+    m, g, width, height = _new_graphics(model, orientation)
     _prime_icons(m, installed_icons)
     state = {**SAMPLE_STATE, "time": time.localtime(), "elapsed_ms": elapsed_ms}
     ds = dict(state.get("display_sensors") or {})
@@ -170,9 +202,10 @@ def render_layout_png(model: str, layout: dict, installed_icons: dict | None = N
 
 
 def render_layout_frames(model: str, layout: dict, installed_icons: dict | None = None,
-                         n: int = 8, step_ms: int = 200) -> list[str]:
+                         n: int = 8, step_ms: int = 200, orientation: int = 0) -> list[str]:
     """N base64 PNG frames stepped through time, so the panel can animate the preview."""
-    return [render_layout_png(model, layout, installed_icons, i * step_ms) for i in range(n)]
+    return [render_layout_png(model, layout, installed_icons, i * step_ms, orientation)
+            for i in range(n)]
 
 
 def render_unit_thumb(model: str, unit_id: str, installed_icons: dict | None = None) -> str | None:

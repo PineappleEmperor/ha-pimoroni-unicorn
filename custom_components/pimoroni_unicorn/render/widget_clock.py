@@ -3,33 +3,49 @@
 from . import drawing
 
 WIDGET = {
-    "id": "clock", "label": "Clock", "w": 23, "h": 7,
-    "variants": ["big", "small", "wide", "blocky", "tall", "humanist", "stacked"],
-    "default_cfg": {"variant": "big", "color": [255, 255, 255]},
+    "id": "clock", "label": "Clock", "w": 23, "h": 7, "variants": [],
+    "default_cfg": {"font": "big", "layout": "row", "digit_gap": 1, "pair_gap": 2,
+                    "color": [255, 255, 255]},
     "cfg_fields": [
-        {"key": "variant", "type": "select",
-         "options": ["big", "small", "wide", "blocky", "tall", "humanist", "stacked"]},
+        {"key": "font", "type": "select",
+         "options": ["big", "digits", "blocky", "tall", "humanist"], "label": "Digit font"},
+        {"key": "layout", "type": "select", "options": ["row", "stacked"], "label": "Layout"},
+        {"key": "digit_gap", "type": "number", "min": 0, "max": 8, "step": 1, "label": "Digit gap"},
+        {"key": "pair_gap", "type": "number", "min": 0, "max": 12, "step": 1, "label": "HH–MM gap"},
         {"key": "color", "type": "rgb", "label": "Colour"},
     ],
     "requires": ["font:digits", "font:big_digits", "font:blocky", "font:tall", "font:humanist"],
 }
 
-_BOXES = {
-    "small":    (15, 5),
-    "wide":     (16, 5),
-    "blocky":   (20, 5),
-    "tall":     (16, 7),
-    "humanist": (20, 7),
-    "stacked":  (11, 15),
+# Legacy variant -> (font, layout, digit_gap, pair_gap). Pre-rc5 layouts still render.
+_LEGACY = {
+    "big":      ("big", "row", 1, 2),
+    "small":    ("digits", "row", 1, 1),
+    "wide":     ("digits", "row", 1, 2),
+    "blocky":   ("blocky", "row", 1, 2),
+    "tall":     ("tall", "row", 1, 2),
+    "humanist": ("humanist", "row", 1, 2),
+    "stacked":  ("big", "stacked", 1, 2),
 }
 
 
+def _resolve(cfg):
+    """Return (font, layout, digit_gap, pair_gap), migrating a legacy variant if present."""
+    v = cfg.get("variant")
+    if v in _LEGACY:
+        return _LEGACY[v]
+    return (cfg.get("font", "big"), cfg.get("layout", "row"),
+            int(cfg.get("digit_gap", 1)), int(cfg.get("pair_gap", 2)))
+
+
 def box(cfg):
-    """Footprint for the selected variant."""
-    return _BOXES.get(cfg.get("variant"), (23, 7))
+    """Footprint for the selected face, layout and gaps."""
+    font, layout, dg, pg = _resolve(cfg)
+    return drawing.clock_box(font, layout, dg, pg)
 
 
 def render(g, x, y, w, h, cfg, state):
     """Draw the clock."""
-    drawing.draw_clock(x, state["time"], y=y, variant=cfg.get("variant", "big"),
-                       color=cfg.get("color"))
+    font, layout, dg, pg = _resolve(cfg)
+    drawing.draw_clock(x, state["time"], y=y, font=font, layout=layout,
+                       color=cfg.get("color"), digit_gap=dg, pair_gap=pg)
