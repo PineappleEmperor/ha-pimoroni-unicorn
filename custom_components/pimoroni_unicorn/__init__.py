@@ -131,6 +131,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await _async_subscribe_diag(hass, entry)
     await _async_subscribe_status(hass, entry)
     await _async_subscribe_ota_result(hass, entry)
+    await _async_subscribe_icons_result(hass, entry)
     await _async_setup_time_feed(hass, entry)
     await _async_setup_sensor_feed(hass, entry)
     await _async_publish_orientation(hass, entry)
@@ -277,6 +278,36 @@ async def _async_subscribe_status(hass: HomeAssistant, entry: PUConfigEntry) -> 
         async_dispatcher_send(hass, f"{DOMAIN}_status_{entry.entry_id}")
 
     unsub = await async_subscribe(hass, f"{device_id}/status", _on_status)
+    entry.runtime_data["unsub"].append(unsub)
+
+
+async def _async_subscribe_icons_result(hass: HomeAssistant, entry: PUConfigEntry) -> None:
+    """Surface the device's icon install/remove result (error -> notification)."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+    note_id = f"pimoroni_unicorn_icon_result_{device_id}"
+
+    @callback
+    def _on_result(msg: Any) -> None:
+        try:
+            data = json.loads(msg.payload)
+        except (json.JSONDecodeError, ValueError):
+            return
+        if not isinstance(data, dict):
+            return
+        if data.get("ok"):
+            notify_dismiss(hass, note_id)
+        else:
+            notify_create(
+                hass,
+                title="Pimoroni Unicorn icon install failed",
+                message=(
+                    f"{device_id} could not install icon "
+                    f"'{data.get('name', '?')}': {data.get('error', 'unknown error')}"
+                ),
+                notification_id=note_id,
+            )
+
+    unsub = await async_subscribe(hass, f"{device_id}/icons/result", _on_result)
     entry.runtime_data["unsub"].append(unsub)
 
 

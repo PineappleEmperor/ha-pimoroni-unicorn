@@ -80,6 +80,7 @@ TOPIC_WEATHER           = f"{DEVICE_ID}/weather"
 TOPIC_NOTIFY            = f"{DEVICE_ID}/notify"
 TOPIC_NOTIFY_DISMISS    = f"{DEVICE_ID}/notify/dismiss"
 TOPIC_ICONS_CMD         = f"{DEVICE_ID}/icons/cmd"
+TOPIC_ICONS_RESULT      = f"{DEVICE_ID}/icons/result"
 TOPIC_LAYOUT            = f"{DEVICE_ID}/layout"
 TOPIC_SCREENS           = f"{DEVICE_ID}/screens"
 TOPIC_SCREEN_SHOW       = f"{DEVICE_ID}/screen/show"
@@ -450,9 +451,10 @@ def on_message(topic, message):
             return
 
         if topic_str == TOPIC_ICONS_CMD:
+            name, action = "", ""
             try:
                 data   = json.loads(message)
-                action = data.get("action")
+                action = data.get("action", "")
                 name   = data.get("name", "")
                 if action == "install" and name:
                     icons.install(name, data)
@@ -460,8 +462,10 @@ def on_message(topic, message):
                     icons.remove(name)
                 # Republish the manifest so HA sees the /icons change immediately (not just on reconnect).
                 _pub(TOPIC_FW_MANIFEST, json.dumps(_fw_manifest()), retain=True)
+                _pub(TOPIC_ICONS_RESULT, json.dumps({"name": name, "action": action, "ok": True}))
             except Exception as e:
                 print("Icon cmd failed:", e)
+                _pub(TOPIC_ICONS_RESULT, json.dumps({"name": name, "action": action, "ok": False, "error": str(e)}))
             return
 
         if topic_str == TOPIC_TIME:
