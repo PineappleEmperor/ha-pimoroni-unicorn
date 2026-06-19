@@ -20,6 +20,8 @@ from .const import (
     PUConfigEntry,
 )
 
+PARALLEL_UPDATES = 0
+
 _BUNDLE_DIR = Path(__file__).parent / "firmware"
 _bundle_hashes: dict[str, str] = {}
 
@@ -74,7 +76,9 @@ class PimoroniUnicornUpdate(UpdateEntity):
 
     def _sync(self) -> None:
         """Recompute installed/latest version from the device manifest, incl. file-hash drift."""
-        manifest = (self._entry.runtime_data or {}).get("fw_manifest") or {}
+        store = self._entry.runtime_data or {}
+        self._attr_available = bool(store.get("available"))
+        manifest = store.get("fw_manifest") or {}
         installed = manifest.get("engine_version")
         self._attr_installed_version = installed
         self._reflash = bool(installed) and _ver(installed) < _ver(ENGINE_REFLASH_BELOW)
@@ -91,10 +95,11 @@ class PimoroniUnicornUpdate(UpdateEntity):
             if self._reflash else None)
 
     async def async_added_to_hass(self) -> None:
-        """Seed installed version + refresh when a new device manifest arrives."""
+        """Seed installed version + refresh when a new device manifest/status arrives."""
         self._sync()
-        self.async_on_remove(async_dispatcher_connect(
-            self.hass, f"{DOMAIN}_manifest_{self._entry.entry_id}", self._refresh))
+        for sig in (f"{DOMAIN}_manifest_{self._entry.entry_id}",
+                    f"{DOMAIN}_status_{self._entry.entry_id}"):
+            self.async_on_remove(async_dispatcher_connect(self.hass, sig, self._refresh))
 
     @callback
     def _refresh(self) -> None:

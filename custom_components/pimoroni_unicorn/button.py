@@ -1,11 +1,14 @@
 """Button platform for Pimoroni Unicorn."""
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN
+
+PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
@@ -39,11 +42,22 @@ class PimoroniUnicornUpdateButton(ButtonEntity):
             model=model,
         )
 
+    async def async_added_to_hass(self) -> None:
+        """Track device online/offline for availability."""
+        self._attr_available = bool((self._entry.runtime_data or {}).get("available"))
+        self.async_on_remove(async_dispatcher_connect(
+            self.hass, f"{DOMAIN}_status_{self._entry.entry_id}", self._refresh))
+
+    @callback
+    def _refresh(self) -> None:
+        self._attr_available = bool((self._entry.runtime_data or {}).get("available"))
+        self.async_write_ha_state()
+
     async def async_press(self) -> None:
-        """Trigger firmware OTA push."""
+        """Trigger firmware OTA push (blocking so an OTA failure surfaces to the user)."""
         await self.hass.services.async_call(
             DOMAIN,
             "push_firmware",
             {"files": ["main"]},
-            blocking=False,
+            blocking=True,
         )

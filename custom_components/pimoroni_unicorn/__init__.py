@@ -116,7 +116,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     """Set up Pimoroni Unicorn from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    entry.runtime_data = {"unsub": [], "sensor_entities": set(), "diag": {}}
+    entry.runtime_data = {"unsub": [], "sensor_entities": set(), "diag": {}, "available": False}
 
     opts      = _merged_opts(entry)
     device_id = opts[CONF_DEVICE_ID]
@@ -126,6 +126,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await _async_subscribe_notify_caps(hass, entry)
     await _async_subscribe_fw_manifest(hass, entry)
     await _async_subscribe_diag(hass, entry)
+    await _async_subscribe_status(hass, entry)
     await _async_subscribe_ota_result(hass, entry)
     await _async_setup_time_feed(hass, entry)
     await _async_setup_sensor_feed(hass, entry)
@@ -275,6 +276,19 @@ async def _async_subscribe_diag(hass: HomeAssistant, entry: PUConfigEntry) -> No
             pass
 
     unsub = await async_subscribe(hass, f"{device_id}/diag", _on_diag)
+    entry.runtime_data["unsub"].append(unsub)
+
+
+async def _async_subscribe_status(hass: HomeAssistant, entry: PUConfigEntry) -> None:
+    """Subscribe to the device LWT/status topic to drive entity availability."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+
+    @callback
+    def _on_status(msg: Any) -> None:
+        entry.runtime_data["available"] = (msg.payload == "online")
+        async_dispatcher_send(hass, f"{DOMAIN}_status_{entry.entry_id}")
+
+    unsub = await async_subscribe(hass, f"{device_id}/status", _on_status)
     entry.runtime_data["unsub"].append(unsub)
 
 
@@ -567,7 +581,7 @@ def _make_push_firmware_handler(
             async def _sweep(_now: Any, did: str = device_id) -> None:
                 await hass.async_add_executor_job(_purge_ota_staging, hass, did)
 
-            async_call_later(hass, OTA_STAGING_TTL, _sweep)
+            entry.runtime_data["unsub"].append(async_call_later(hass, OTA_STAGING_TTL, _sweep))
 
             _LOGGER.info(
                 "Pimoroni Unicorn OTA: sent %s to %s",

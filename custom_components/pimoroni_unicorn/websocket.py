@@ -96,18 +96,23 @@ def ws_devices(hass, connection, msg):
     vol.Optional("entry_id"): str,
     vol.Optional("model"): vol.In(list(render_service.MODEL_DIMS)),
 })
-@callback
-def ws_capabilities(hass, connection, msg):
+@websocket_api.async_response
+async def ws_capabilities(hass, connection, msg):
     """Widget catalogue (backend built-ins + HA custom widgets) + model default layout."""
     entry = _entry(hass, msg["entry_id"]) if msg.get("entry_id") else None
     model = _model_key(entry) if entry is not None else msg.get("model", "galactic")
     custom_dir = marketplace.widgets_dir(hass.config.config_dir)
-    caps = render_service.layout_capabilities(custom_dir)
+
+    def _caps():
+        return (render_service.layout_capabilities(custom_dir),
+                render_service.default_layout(model))
+
+    caps, default_layout = await hass.async_add_executor_job(_caps)
     connection.send_result(msg["id"], {
         "model": model,
         "widgets": caps.get("widgets", []),
         "overlays": caps.get("overlays", []),
-        "default_layout": render_service.default_layout(model),
+        "default_layout": default_layout,
     })
 
 

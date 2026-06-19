@@ -37,7 +37,6 @@
       "settings": {
         "title": "Settings",
         "data": {
-          "device_id": "Device ID",
           "model": "Model",
           "solar_entity": "Solar power entity (W)",
           "consumption_entity": "Consumption power entity (W)",
@@ -51,7 +50,8 @@
         "data_description": {
           "extra_sensors": "Each line: entity_id followed by a topic suffix. Published to [device_id]/[topic_suffix] every 10 seconds.\nExample:\nsensor.indoor_temperature indoor_temp\nsensor.co2 co2",
           "show_panel": "Adds the Unicorn Layout editor to the sidebar. Turn off to remove it; can be re-enabled here anytime."
-        }
+        },
+        "description": "Device ID: {device_id} — set at setup and used as the unique ID; not editable here. Re-add the device to change it."
       },
       "add_icon": {
         "title": "Install LaMetric icon",

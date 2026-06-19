@@ -59,7 +59,6 @@ def _options_schema(current: dict) -> vol.Schema:
         return {"suggested_value": v} if v is not None else {}
 
     return vol.Schema({
-        vol.Required(CONF_DEVICE_ID, default=current.get(CONF_DEVICE_ID, "")):              str,
         vol.Required(CONF_MODEL, default=current.get(CONF_MODEL) or UNICORN_MODELS[0]):     _MODEL_SELECTOR,
         vol.Optional(CONF_SOLAR_ENTITY,            description=_sv(CONF_SOLAR_ENTITY)):            EntitySelector(EntitySelectorConfig(device_class="power")),
         vol.Optional(CONF_CONSUMPTION_ENTITY,      description=_sv(CONF_CONSUMPTION_ENTITY)):      EntitySelector(EntitySelectorConfig(device_class="power")),
@@ -188,6 +187,7 @@ class PimoroniUnicornOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="settings",
             data_schema=_options_schema(self._settings),
+            description_placeholders={"device_id": self._settings.get(CONF_DEVICE_ID, "")},
         )
 
     async def async_step_add_icon(self, user_input=None):
