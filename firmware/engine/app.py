@@ -235,8 +235,8 @@ def _show_ota_screen(label, n, total):
     graphics.set_pen(graphics.create_pen(0, 0, 30))
     graphics.clear()
     graphics.set_pen(WHITE)
-    bitfont.text("OTA", 1, 1, font3x5)
-    bitfont.text(label[:14], 1, 7, font3x5)
+    bitfont.draw_text("OTA", 1, 1, font3x5)
+    bitfont.draw_text(label[:14], 1, 7, font3x5)
     if total > 0:
         graphics.set_pen(ENERGY_CYAN)
         surface.rectangle(1, 5, max(1, int((n / total) * (width - 2))), 1)
