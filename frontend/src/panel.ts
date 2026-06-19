@@ -287,17 +287,24 @@ export class PimoroniUnicornPanel extends LitElement {
       this.deviceIcons = r.device_installed ?? [];
     } catch { /* icons list optional */ }
   }
+  // Device install/remove round-trips through MQTT (cmd -> device writes -> manifest republish
+  // -> HA). Re-poll a couple of times so the device-installed state catches up.
+  private reloadIconsSoon() {
+    this.loadIcons();
+    window.setTimeout(() => this.loadIcons(), 1500);
+    window.setTimeout(() => this.loadIcons(), 4000);
+  }
   private async pushIconToDevice(name: string) {
     if (!this.entryId) return;
     await this.hass.callWS({ type: "pimoroni_unicorn/icon_push", entry_id: this.entryId, name });
     this.status = `Installing "${name}" on this device…`;
-    this.loadIcons();
+    this.reloadIconsSoon();
   }
   private async removeIconFromDevice(name: string) {
     if (!this.entryId) return;
     await this.hass.callWS({ type: "pimoroni_unicorn/icon_device_remove", entry_id: this.entryId, name });
     this.status = `Removed "${name}" from this device.`;
-    this.loadIcons();
+    this.reloadIconsSoon();
   }
 
   // Install targets default to every device; user can narrow the selection.
@@ -321,13 +328,13 @@ export class PimoroniUnicornPanel extends LitElement {
       ? `Installed "${name}" → ${sent.join(", ")}.`
       : `Saved "${name}" (no devices to push to).`;
     this.iconCode = ""; this.iconName = "";
-    this.loadIcons();
+    this.reloadIconsSoon();
   }
   private async removeIcon(name: string) {
     if (!confirm(`Delete icon "${name}" from all devices?`)) return;
     await this.hass.callWS({ type: "pimoroni_unicorn/icon_remove", name });
     this.status = `Removed icon "${name}".`;
-    this.loadIcons();
+    this.reloadIconsSoon();
   }
 
   private async loadFonts() {
