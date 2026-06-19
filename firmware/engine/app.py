@@ -458,6 +458,8 @@ def on_message(topic, message):
                     icons.install(name, data)
                 elif action == "remove" and name:
                     icons.remove(name)
+                # Republish the manifest so HA sees the /icons change immediately (not just on reconnect).
+                _pub(TOPIC_FW_MANIFEST, json.dumps(_fw_manifest()), retain=True)
             except Exception as e:
                 print("Icon cmd failed:", e)
             return
