@@ -116,6 +116,18 @@
       },
       "engine_version": {
         "name": "Engine version"
+      },
+      "wifi_signal": {
+        "name": "WiFi signal"
+      },
+      "ip_address": {
+        "name": "IP address"
+      },
+      "reset_cause": {
+        "name": "Last reset cause"
+      },
+      "orientation": {
+        "name": "Orientation"
       }
     }
   },

@@ -4,8 +4,18 @@ from dataclasses import dataclass
 
 from propcache.api import cached_property
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
-from homeassistant.const import EntityCategory, UnitOfInformation, UnitOfTime
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.const import (
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    EntityCategory,
+    UnitOfInformation,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -44,6 +54,29 @@ SENSORS: tuple[PUSensorDescription, ...] = (
         key="engine_version", translation_key="engine_version",
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
         value_fn=lambda diag, manifest: manifest.get("engine_version"),
+    ),
+    PUSensorDescription(
+        key="wifi_signal", translation_key="wifi_signal",
+        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH, state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
+        value_fn=lambda diag, manifest: diag.get("rssi"),
+    ),
+    PUSensorDescription(
+        key="ip_address", translation_key="ip_address", icon="mdi:ip-network",
+        entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
+        value_fn=lambda diag, manifest: diag.get("ip"),
+    ),
+    PUSensorDescription(
+        key="reset_cause", translation_key="reset_cause", icon="mdi:restart-alert",
+        entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
+        value_fn=lambda diag, manifest: diag.get("reset_cause"),
+    ),
+    PUSensorDescription(
+        key="orientation", translation_key="orientation", icon="mdi:screen-rotation",
+        native_unit_of_measurement="°",
+        entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
+        value_fn=lambda diag, manifest: diag.get("orientation"),
     ),
 )
 

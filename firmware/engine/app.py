@@ -48,6 +48,7 @@ from weather_fx import init_weather_drops, map_owm_code
 
 
 machine.freq(200_000_000)
+_RESET_CAUSE = machine.reset_cause()  # why the device last rebooted (WDT/power/soft) — for diagnostics
 graphics = PicoGraphics(display=DISPLAY, pen_type=PEN_RGB888)
 graphics.set_font("bitmap6")
 # All render code draws into the logical (as-mounted) surface; unicorn.update() always
@@ -357,7 +358,34 @@ def _file_hash(path):
     return ubinascii.hexlify(h.digest()).decode()[:16]
 
 
-_MANIFEST_DIRS = ("/engine", "/widgets", "/assets/fonts", "/icons")
+_MANIFEST_DIRS = ("/engine", "/engine/animations", "/widgets", "/assets/fonts", "/icons")
+
+
+def _diag_payload():
+    """Full device state HA mirrors: current page, health, identity/config, and WiFi."""
+    page = _screens[_screen_idx].get("name", str(_screen_idx)) if _screens else ""
+    wlan = network.WLAN(network.STA_IF)
+    try:
+        ip = wlan.ifconfig()[0]
+    except Exception:
+        ip = ""
+    try:
+        rssi = wlan.status("rssi")
+    except Exception:
+        rssi = None
+    return {
+        "page": page,
+        "free_mem": gc.mem_free(),
+        "uptime_s": time.ticks_ms() // 1000,
+        "engine_version": ENGINE_VERSION,
+        "model": MODEL,
+        "orientation": ORIENTATION,
+        "brightness": int(brightness * 100),
+        "awake": system_state == "AWAKE",
+        "ip": ip,
+        "rssi": rssi,
+        "reset_cause": _RESET_CAUSE,
+    }
 
 
 def _fw_manifest():
@@ -697,6 +725,7 @@ async def mqtt_task():
             if _wdt is None:  # arm watchdog once up; main loop + OTA feed it
                 _wdt = machine.WDT(timeout=WDT_TIMEOUT_MS)
             send_ha_state()
+            _pub(TOPIC_DIAG, json.dumps(_diag_payload()), retain=True)  # immediate state, not after 60s
             print("MQTT Connected & Discovery Published")
 
             last_ping = time.ticks_ms()
@@ -712,10 +741,7 @@ async def mqtt_task():
                 if time.ticks_diff(now, last_diag) >= 60000:
                     last_diag = now
                     _pub(TOPIC_STATUS, b"online", retain=True)
-                    page = _screens[_screen_idx].get("name", str(_screen_idx)) if _screens else ""
-                    _pub(TOPIC_DIAG, json.dumps({
-                        "page": page, "free_mem": gc.mem_free(), "uptime_s": time.ticks_ms() // 1000,
-                    }), retain=True)
+                    _pub(TOPIC_DIAG, json.dumps(_diag_payload()), retain=True)
                     # Re-sync NTP if never synced, or hourly — time isn't battery-backed.
                     if not _time_synced or time.ticks_diff(time.ticks_ms(), _last_ntp_ms) > 3600000:
                         await sync_time()
