@@ -91,6 +91,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private zoom = 0;  // px per LED; 0 = auto-fit
   @state() private selected = -1;
   @state() private dragIdx = -1;
+  @state() private dragOverIdx = -1;
   @state() private layoutName = "default";
   @state() private live = false;
   @state() private wireframe = false;
@@ -204,11 +205,12 @@ export class PimoroniUnicornPanel extends LitElement {
     .box .tag { position: absolute; top: -17px; left: 0; font: 11px ui-monospace, monospace; color: #ddd; white-space: nowrap; display: none; }
     .boxes.wf .box .tag, .box.sel .tag { display: block; }
     .wlist { list-style: none; padding: 0; margin: 0 0 12px; }
-    .wlist li { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: background .12s; }
+    .wlist li { display: flex; gap: 10px; align-items: center; padding: 10px 12px; min-height: 48px; box-sizing: border-box; border-radius: 10px; cursor: pointer; transition: background .12s; }
     .wlist li:hover { background: color-mix(in srgb, var(--pu-primary) 7%, transparent); }
     .wlist li.sel { background: color-mix(in srgb, var(--pu-primary) 14%, transparent); box-shadow: inset 3px 0 0 var(--pu-primary); }
     .wlist li .grow { flex: 1; }
     .wlist li.dragging { opacity: .4; }
+    .wlist li.dragover { outline: 2px solid var(--pu-primary); outline-offset: -2px; }
     .wlist li .drag { cursor: grab; color: var(--secondary-text-color, #79747e); user-select: none; line-height: 1; }
     .wlist li .drag:active { cursor: grabbing; }
     .panelrow { display: flex; gap: 10px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
@@ -844,13 +846,22 @@ export class PimoroniUnicornPanel extends LitElement {
             ${[...this.layout.widgets.keys()].reverse().map((i) => {
               const w = this.layout.widgets[i];
               return html`
-              <li class="${i === this.selected ? "sel" : ""} ${i === this.dragIdx ? "dragging" : ""}"
+              <li class="${i === this.selected ? "sel" : ""} ${i === this.dragIdx ? "dragging" : ""} ${i === this.dragOverIdx && i !== this.dragIdx ? "dragover" : ""}"
                   @click=${() => (this.selected = i)}
-                  @dragover=${(e: DragEvent) => { e.preventDefault(); }}
-                  @drop=${(e: DragEvent) => { e.preventDefault(); this.dropWidget(i); }}>
+                  @dragover=${(e: DragEvent) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "move"; this.dragOverIdx = i; }}
+                  @dragleave=${() => { if (this.dragOverIdx === i) this.dragOverIdx = -1; }}
+                  @drop=${(e: DragEvent) => { e.preventDefault(); this.dropWidget(i); this.dragOverIdx = -1; }}>
                 <span class="drag" title="Drag to reorder" draggable="true"
-                  @dragstart=${(e: DragEvent) => { this.dragIdx = i; if (e.dataTransfer) e.dataTransfer.effectAllowed = "move"; }}
-                  @dragend=${() => { this.dragIdx = -1; }}>⣿</span>
+                  @dragstart=${(e: DragEvent) => {
+                    this.dragIdx = i;
+                    if (e.dataTransfer) {
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", String(i));  // required for Firefox to start a drag
+                      const li = (e.target as HTMLElement).closest("li");
+                      if (li) e.dataTransfer.setDragImage(li, 0, 0);
+                    }
+                  }}
+                  @dragend=${() => { this.dragIdx = -1; this.dragOverIdx = -1; }}>⣿</span>
                 <input type="checkbox" .checked=${w.enabled !== false} title="Show / hide"
                   @click=${(e: Event) => { e.stopPropagation(); w.enabled = (e.target as HTMLInputElement).checked; this.edited(); }} />
                 <span class="grow">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span>
