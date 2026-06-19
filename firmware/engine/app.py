@@ -62,6 +62,12 @@ weather_fx.init(graphics, width, height)
 MQTT_BROKER      = MQTT_SERVER
 DISCOVERY_PREFIX = "homeassistant"
 
+# Blank DEVICE_ID -> stable MAC-derived id, so multiple devices are unique out of the box.
+if not DEVICE_ID:
+    _sta = network.WLAN(network.STA_IF)
+    _sta.active(True)
+    DEVICE_ID = "pimoroni_unicorn_" + ubinascii.hexlify(_sta.config("mac")[-3:]).decode()
+
 # --- MQTT Topics ---
 TOPIC_STATUS            = f"{DEVICE_ID}/status"
 TOPIC_COMMAND           = f"{DEVICE_ID}/set"
