@@ -3,6 +3,7 @@
 import ast
 from collections.abc import Callable, Coroutine
 from datetime import timedelta
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -645,19 +646,26 @@ def _make_push_firmware_handler(
 
         requested    = call.data.get("files", ["main"])
         file_content = call.data.get("file_content", {})
+        force        = bool(call.data.get("force", False))
         source_dir   = Path(__file__).parent / "firmware"
 
         all_errors: list[str] = []
+        total_skipped = 0
         published = False
         for entry in entries:
             opts      = _merged_opts(entry)
             device_id = opts[CONF_DEVICE_ID]
             www_dir   = _ota_www_dir(hass, device_id)
+            # Per-file hashes the device last reported; skip any file it already has identical.
+            device_hashes = ((entry.runtime_data or {}).get("fw_manifest") or {}).get("files", {})
 
-            def _stage_files(www_dir: Path = www_dir) -> tuple[list[tuple[str, str]], list[str]]:
+            def _stage_files(
+                www_dir: Path = www_dir, device_hashes: dict = device_hashes,
+            ) -> tuple[list[tuple[str, str]], list[str], list[str]]:
                 www_dir.mkdir(parents=True, exist_ok=True)
                 staged: list[tuple[str, str]] = []
                 errors: list[str]             = []
+                skipped: list[str]            = []
                 for key in requested:
                     src_name, device_path = _resolve_ota_key(key)
 
@@ -685,16 +693,31 @@ def _make_push_firmware_handler(
                                 src_name,
                             )
 
+                    basename = device_path.rsplit("/", 1)[-1]
+                    new_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+                    if not force and device_hashes.get(basename) == new_hash:
+                        skipped.append(basename)
+                        continue
+
                     with (www_dir / src_name).open("w", encoding="utf-8") as f:
                         f.write(content)
                     staged.append((src_name, device_path))
-                return staged, errors
+                return staged, errors, skipped
 
-            staged, errors = await hass.async_add_executor_job(_stage_files)
+            staged, errors, skipped = await hass.async_add_executor_job(_stage_files)
             all_errors.extend(errors)
+            total_skipped += len(skipped)
+            if skipped:
+                _LOGGER.debug(
+                    "Pimoroni Unicorn OTA: %s already current on %s, skipped: %s",
+                    len(skipped), device_id, ", ".join(skipped))
 
             if not staged:
-                _LOGGER.warning("Pimoroni Unicorn OTA: no files staged for %s", device_id)
+                if skipped and not errors:
+                    _LOGGER.info(
+                        "Pimoroni Unicorn OTA: %s already up to date, nothing to send", device_id)
+                else:
+                    _LOGGER.warning("Pimoroni Unicorn OTA: no files staged for %s", device_id)
                 continue
 
             ota_payload = {
@@ -729,6 +752,9 @@ def _make_push_firmware_handler(
             _LOGGER.warning(
                 "Pimoroni Unicorn OTA: skipped (syntax/missing): %s", ", ".join(all_errors))
         if not published:
+            if total_skipped and not all_errors:
+                _LOGGER.info("Pimoroni Unicorn OTA: nothing to send, device(s) already current")
+                return
             raise HomeAssistantError(
                 f"OTA published nothing (no files staged{'; skipped: ' + ', '.join(all_errors) if all_errors else ''}).")
         _LOGGER.info("Pimoroni Unicorn OTA: command sent for %s", ", ".join(requested))
