@@ -969,16 +969,21 @@ export class PimoroniUnicornPanel extends LitElement {
     this.loadContent();
   }
 
+  // Widget install/remove OTA-reboots the device (~10-20s); re-poll across the reboot
+  // window so the catalog reflects the new manifest once it republishes on reconnect.
+  private reloadCatalogSoon() {
+    for (const ms of [8000, 15000, 25000]) setTimeout(() => this.loadCatalog(), ms);
+  }
   private async installWidget(id: string) {
     await this.hass.callWS({ type: "pimoroni_unicorn/fw_install", entry_id: this.entryId, widget_id: id });
     this.status = `Installing ${id}… device will reboot.`;
-    setTimeout(() => this.loadCatalog(), 8000);
+    this.reloadCatalogSoon();
   }
 
   private async removeWidgetUnit(id: string) {
     await this.hass.callWS({ type: "pimoroni_unicorn/fw_remove", entry_id: this.entryId, widget_id: id });
     this.status = `Removing ${id}… device will reboot.`;
-    setTimeout(() => this.loadCatalog(), 8000);
+    this.reloadCatalogSoon();
   }
 
   private _thumb(src?: string) {
