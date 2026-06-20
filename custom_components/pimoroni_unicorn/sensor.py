@@ -54,13 +54,12 @@ SENSORS: tuple[PUSensorDescription, ...] = (
         },
     ),
     PUSensorDescription(
-        key="free_mem", translation_key="free_mem",
-        native_unit_of_measurement=UnitOfInformation.BYTES,
-        device_class=SensorDeviceClass.DATA_SIZE,
-        suggested_unit_of_measurement=UnitOfInformation.KILOBYTES,
+        key="free_mem", translation_key="free_mem", icon="mdi:memory",
+        native_unit_of_measurement=UnitOfInformation.KILOBYTES,
         suggested_display_precision=1, state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
-        value_fn=lambda diag, manifest: diag.get("free_mem"),
+        value_fn=lambda diag, manifest: (
+            round(diag["free_mem"] / 1024, 1) if diag.get("free_mem") is not None else None),
     ),
     PUSensorDescription(
         key="uptime", translation_key="uptime",
