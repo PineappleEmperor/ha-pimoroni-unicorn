@@ -42,7 +42,9 @@ async def async_device_base_url(hass: HomeAssistant) -> str | None:
             return configured  # already an IP — use as-is
     try:
         from homeassistant.components import network  # noqa: PLC0415
-        ip = await network.async_get_source_ip(hass, "224.0.0.251")  # HA's LAN-facing IP
+        # 224.0.0.251 = mDNS multicast group; asking for the source IP toward it returns
+        # HA's LAN-facing interface address (the one the device reaches HA on). No packet sent.
+        ip = await network.async_get_source_ip(hass, "224.0.0.251")
     except Exception:  # noqa: BLE001
         ip = None
     if ip:

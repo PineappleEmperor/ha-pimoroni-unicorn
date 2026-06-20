@@ -406,10 +406,18 @@ def _cpu_temp():
         return None
 
 
+_last_page = None  # last published page JSON; skip re-publishing an unchanged page
+
+
 def _publish_page():
-    """Publish the layout the device is actually rendering, so HA mirrors it (camera)."""
+    """Publish the rendered layout (retained) when it changes, so HA mirrors it (camera)."""
+    global _last_page
     try:
-        _pub(TOPIC_PAGE, json.dumps(_screens[_screen_idx]) if _screens else "{}", retain=True)
+        payload = json.dumps(_screens[_screen_idx]) if _screens else "{}"
+        if payload == _last_page:
+            return
+        _last_page = payload
+        _pub(TOPIC_PAGE, payload, retain=True)
     except Exception as e:
         print("page publish failed:", e)
 
