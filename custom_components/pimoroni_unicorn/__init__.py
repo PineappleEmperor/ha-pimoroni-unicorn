@@ -126,6 +126,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await _async_subscribe_fw_manifest(hass, entry)
     await _async_subscribe_diag(hass, entry)
     await _async_subscribe_status(hass, entry)
+    await _async_subscribe_page(hass, entry)
     await _async_subscribe_ota_result(hass, entry)
     await _async_subscribe_icons_result(hass, entry)
     await _async_setup_time_feed(hass, entry)
@@ -292,6 +293,22 @@ async def _async_subscribe_diag(hass: HomeAssistant, entry: PUConfigEntry) -> No
             notify_dismiss(hass, note_id)
 
     unsub = await async_subscribe(hass, f"{device_id}/diag", _on_diag)
+    entry.runtime_data["unsub"].append(unsub)
+
+
+async def _async_subscribe_page(hass: HomeAssistant, entry: PUConfigEntry) -> None:
+    """Cache the layout the device is actually rendering, so the camera mirrors it."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+
+    @callback
+    def _on_page(msg: Any) -> None:
+        try:
+            data = json.loads(msg.payload)
+        except (json.JSONDecodeError, ValueError):
+            return
+        entry.runtime_data["page"] = data if isinstance(data, dict) and data.get("widgets") else None
+
+    unsub = await async_subscribe(hass, f"{device_id}/page", _on_page)
     entry.runtime_data["unsub"].append(unsub)
 
 

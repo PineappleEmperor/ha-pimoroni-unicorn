@@ -71,7 +71,10 @@ class PimoroniUnicornCamera(Camera):
             orientation = int(opts.get(CONF_ORIENTATION, 0) or 0)
         except (ValueError, TypeError):
             orientation = 0
-        lay = await layout.async_get_active(self.hass, self._entry) \
+        # Prefer the layout the device says it's actually rendering; fall back to the
+        # configured active layout, then the model default.
+        lay = (self._entry.runtime_data or {}).get("page") \
+            or await layout.async_get_active(self.hass, self._entry) \
             or render_service.default_layout(model, orientation)
         icons = await lametric.async_get_registry(self.hass)
         state = live_state(self.hass, self._entry)

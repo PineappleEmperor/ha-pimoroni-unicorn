@@ -90,6 +90,7 @@ TOPIC_FW_MANIFEST       = f"{DEVICE_ID}/fw/manifest"
 TOPIC_FW_REMOVE         = f"{DEVICE_ID}/fw/remove"
 TOPIC_TIME              = f"{DEVICE_ID}/time"
 TOPIC_DIAG              = f"{DEVICE_ID}/diag"
+TOPIC_PAGE              = f"{DEVICE_ID}/page"
 TOPIC_ORIENTATION       = f"{DEVICE_ID}/orientation"
 
 # --- HA Device details ---
@@ -172,6 +173,7 @@ def _advance_screen():
             _screen_idx = (_screen_idx + 1) % len(_screens)
             if _screen_transition == "fade":
                 _fade_left = FADE_FRAMES
+            _publish_page()  # reflect the rotation to HA as it changes
         _screen_switch_ms = now
 
 display_sensors: dict = {}  # populated via MQTT {device_id}/display/{id}/config and state
@@ -402,6 +404,14 @@ def _cpu_temp():
         return round(27 - (v - 0.706) / 0.001721, 1)
     except Exception:
         return None
+
+
+def _publish_page():
+    """Publish the layout the device is actually rendering, so HA mirrors it (camera)."""
+    try:
+        _pub(TOPIC_PAGE, json.dumps(_screens[_screen_idx]) if _screens else "{}", retain=True)
+    except Exception as e:
+        print("page publish failed:", e)
 
 
 def _diag_payload():
@@ -787,6 +797,7 @@ async def mqtt_task():
                 _wdt = machine.WDT(timeout=WDT_TIMEOUT_MS)
             send_ha_state()
             _pub(TOPIC_DIAG, json.dumps(_diag_payload()), retain=True)  # immediate state, not after 60s
+            _publish_page()
             print("MQTT Connected & Discovery Published")
 
             last_ping = time.ticks_ms()
@@ -803,6 +814,7 @@ async def mqtt_task():
                     last_diag = now
                     _pub(TOPIC_STATUS, b"online", retain=True)
                     _pub(TOPIC_DIAG, json.dumps(_diag_payload()), retain=True)
+                    _publish_page()  # catches layout/screen changes without per-handler hooks
                     # Re-sync NTP if never synced, or hourly — time isn't battery-backed.
                     if not _time_synced or time.ticks_diff(time.ticks_ms(), _last_ntp_ms) > 3600000:
                         await sync_time()
