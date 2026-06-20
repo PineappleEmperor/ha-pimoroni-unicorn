@@ -25,6 +25,11 @@ const SAMPLE_SPEC = JSON.stringify({
   ],
 }, null, 2);
 const MODELS: Record<string, Size> = { galactic: [53, 11], cosmic: [32, 32], stellar: [16, 16] };
+// Firmware condition strings the device's weather widgets understand, with friendly labels.
+const WEATHER_TEST: [string, string][] = [
+  ["clear", "Clear"], ["partly_cloudy", "Partly cloudy"], ["cloudy", "Cloudy"],
+  ["fog", "Fog"], ["rain", "Rain"], ["snow", "Snow"], ["thunderstorm", "Storm"],
+];
 const MOCK = "__mock__";
 
 // Declarative op types and their per-op fields (all ops also carry x, y).
@@ -88,6 +93,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private wboxes: Size[] = [];
   @state() private dims: Size = [53, 11];
   @state() private orientation = 0;  // device mounting rotation; affects effective dims
+  @state() private previewWeather = "";  // "" = live; else a forced condition for the preview
   @state() private zoom = 0;  // px per LED; 0 = auto-fit
   @state() private selected = -1;
   @state() private dragIdx = -1;
@@ -468,7 +474,7 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private async renderPreview(): Promise<void> {
     try {
-      const res = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: this.layout, orientation: this.orientation });
+      const res = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: this.layout, orientation: this.orientation, weather: this.previewWeather || undefined });
       this.wboxes = res.boxes ?? [];
       this.playFrames("layout", res.frames ?? (res.png ? [res.png] : []), (f) => { this.png = f; });
       if (this.status.startsWith("Render failed")) this.status = "";
@@ -838,6 +844,11 @@ export class PimoroniUnicornPanel extends LitElement {
               @input=${(e: Event) => (this.zoom = +(e.target as HTMLInputElement).value)} />
             <button class="zbtn" @click=${() => this.zoomBy(2)} title="Zoom in">+</button>
           </label>
+          <label>Weather
+            <select @change=${(e: Event) => { this.previewWeather = (e.target as HTMLSelectElement).value; this.renderPreview(); }}>
+              <option value="" ?selected=${this.previewWeather === ""}>live</option>
+              ${WEATHER_TEST.map(([v, l]) => html`<option value=${v} ?selected=${this.previewWeather === v}>${l}</option>`)}
+            </select></label>
           <label><input type="checkbox" .checked=${this.wireframe} @change=${(e: Event) => (this.wireframe = (e.target as HTMLInputElement).checked)} /> wireframe</label>
           <label><input type="checkbox" .checked=${this.locked} @change=${(e: Event) => (this.locked = (e.target as HTMLInputElement).checked)} /> lock</label>
           <label><input type="checkbox" .checked=${this.live} ?disabled=${!this.entryId} @change=${(e: Event) => (this.live = (e.target as HTMLInputElement).checked)} /> live push</label>
