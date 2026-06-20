@@ -260,6 +260,15 @@ async def _async_subscribe_diag(hass: HomeAssistant, entry: PUConfigEntry) -> No
             return
         if not isinstance(data, dict):
             return
+        # Stable boot timestamp: compute once from uptime, only recompute on a reboot
+        # (uptime dropped) — avoids the per-poll jitter of now-minus-uptime.
+        prev = entry.runtime_data.get("diag") or {}
+        up = data.get("uptime_s")
+        boot = prev.get("boot_time")
+        if isinstance(up, (int, float)):
+            if boot is None or up < (prev.get("uptime_s") or 0):
+                boot = dt_util.utcnow() - timedelta(seconds=int(up))
+        data["boot_time"] = boot
         entry.runtime_data["diag"] = data
         async_dispatcher_send(hass, f"{DOMAIN}_diag_{entry.entry_id}")
 
