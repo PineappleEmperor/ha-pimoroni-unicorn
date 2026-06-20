@@ -235,15 +235,48 @@ async def sync_time():
 
 # --- OTA ---
 
-def _show_ota_screen(label, n, total):
-    graphics.set_pen(graphics.create_pen(0, 0, 30))
+def _draw_ota_progress(frac, phase_ms):
+    """Boustrophedon progress fill: columns fill in 2px pairs, snaking up then down;
+    the frontier pair pulses slowly to show activity."""
+    if frac < 0:
+        frac = 0
+    elif frac > 1:
+        frac = 1
+    ppc = height // 2
+    if ppc < 1:
+        return
+    total  = width * ppc
+    filled = int(frac * total)
+    graphics.set_pen(BLACK)
     graphics.clear()
-    graphics.set_pen(WHITE)
-    bitfont.draw_text("OTA", 1, 1, font3x5)
-    bitfont.draw_text(label[:14], 1, 7, font3x5)
-    if total > 0:
-        graphics.set_pen(ENERGY_CYAN)
-        surface.rectangle(1, 5, max(1, int((n / total) * (width - 2))), 1)
+    graphics.set_pen(ENERGY_CYAN)
+    for p in range(filled):
+        c = p // ppc
+        k = p % ppc
+        if c % 2 == 0:
+            ya = height - 1 - 2 * k
+            yb = ya - 1
+        else:
+            ya = 2 * k
+            yb = ya + 1
+        graphics.pixel(c, ya)
+        graphics.pixel(c, yb)
+    if filled < total:
+        ph = (phase_ms % 1400) / 700
+        if ph > 1:
+            ph = 2 - ph
+        lvl = int(30 + 176 * ph)
+        graphics.set_pen(graphics.create_pen(0, lvl, lvl))
+        c = filled // ppc
+        k = filled % ppc
+        if c % 2 == 0:
+            ya = height - 1 - 2 * k
+            yb = ya - 1
+        else:
+            ya = 2 * k
+            yb = ya + 1
+        graphics.pixel(c, ya)
+        graphics.pixel(c, yb)
     unicorn.update(graphics)
 
 
@@ -271,23 +304,41 @@ def _ota_needs_reboot(paths):
     return False
 
 
+def _ota_normalize(payload):
+    """Yield (url, path) from either the compact {base, files:[[name,path]]} form or the
+    legacy {files:[{url,path}]} form."""
+    base = payload.get("base")
+    norm = []
+    for item in payload.get("files", []):
+        if base is not None:
+            try:
+                name, path = item
+            except (ValueError, TypeError):
+                continue
+            url = base + name
+        else:
+            url  = item.get("url", "")
+            path = item.get("path", "")
+        if url and path:
+            norm.append((url, path))
+    return norm
+
+
 def _run_ota(payload):
     global _ota_pending
     _ota_pending = None  # one-shot: don't retry-loop on failure, report it instead
     import urequests  # noqa: PLC0415
-    files     = payload.get("files", [])
-    total     = len(files)
+    norm      = _ota_normalize(payload)
+    total     = len(norm)
     succeeded = 0
     written   = []
     failed    = []
-    for i, item in enumerate(files):
-        url  = item.get("url", "")
-        path = item.get("path", "")
-        if not url or not path:
-            continue
+    last_draw = 0
+    for i, (url, path) in enumerate(norm):
         if _wdt is not None:
             _wdt.feed()
-        _show_ota_screen(path.lstrip("/"), i + 1, total)
+        frac = i / total if total else 0
+        _draw_ota_progress(frac, time.ticks_ms())
         parent = path.rsplit("/", 1)[0]
         if parent:
             try:
@@ -298,8 +349,19 @@ def _run_ota(payload):
         try:
             r = urequests.get(url, timeout=5)  # keep < WDT_TIMEOUT_MS
             if r.status_code == 200:
+                sock = r.raw
                 with open(tmp, "wb") as f:
-                    f.write(r.content)
+                    while True:
+                        chunk = sock.read(512)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        if _wdt is not None:
+                            _wdt.feed()
+                        now = time.ticks_ms()
+                        if time.ticks_diff(now, last_draw) >= 80:
+                            last_draw = now
+                            _draw_ota_progress(frac, now)
                 r.close()
                 valid = True
                 if path.endswith(".py"):
@@ -335,8 +397,8 @@ def _run_ota(payload):
                 uos.remove(tmp)
             except Exception:
                 pass
-    _show_ota_screen(f"Done {succeeded}/{total}", total, total)
-    failed = [it.get("path", "") for it in files if it.get("path") and it.get("path") not in written]
+    _draw_ota_progress(1.0, time.ticks_ms())
+    failed = [p for (_u, p) in norm if p not in written]
     try:
         _pub(
             f"{DEVICE_ID}/ota/result",
@@ -936,9 +998,21 @@ async def main_loop():
 
 
 async def connect_wifi():
-    """Connect to WiFi and sync the RTC via NTP."""
+    """Connect to WiFi and sync the RTC via NTP; recover a wedged CYW43 chip by re-init/reset."""
     wlan = network.WLAN(network.STA_IF)
-    wlan.active(True)
+    for attempt in range(4):
+        try:
+            wlan.active(False)
+            await asyncio.sleep(0.3)
+            wlan.active(True)
+            break
+        except OSError as e:
+            print("WiFi chip init failed (attempt %d): %s" % (attempt + 1, e))
+            await asyncio.sleep(1)
+    else:
+        print("WiFi chip will not initialise; resetting to recover")
+        time.sleep(1)
+        machine.reset()
     wlan.connect(SSID, PASSWORD)
     print("Connecting to WiFi...")
     while not wlan.isconnected():

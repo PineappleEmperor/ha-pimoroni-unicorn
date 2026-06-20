@@ -93,10 +93,10 @@ async def _stage_and_ota(hass: HomeAssistant, entry, files: list[tuple[str, str]
         return staged
 
     staged = await hass.async_add_executor_job(_stage)
-    payload = {"files": [
-        {"url": f"{base_url.rstrip('/')}/local/pimoroni_unicorn/{device_id}/{name}", "path": path}
-        for name, path in staged
-    ]}
+    payload = {
+        "base": f"{base_url.rstrip('/')}/local/pimoroni_unicorn/{device_id}/",
+        "files": [[name, path] for name, path in staged],
+    }
     await async_publish(hass, f"{device_id}/ota", json.dumps(payload), retain=False)
     return True
 
