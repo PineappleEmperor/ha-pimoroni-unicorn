@@ -56,6 +56,7 @@ WS_ICON_PUSH      = "pimoroni_unicorn/icon_push"
 WS_ICON_DEV_REMOVE = "pimoroni_unicorn/icon_device_remove"
 WS_FONTS          = "pimoroni_unicorn/fonts"
 WS_FONT_PREVIEW   = "pimoroni_unicorn/font_preview"
+WS_FONT_INSTALL   = "pimoroni_unicorn/font_install"
 
 
 @callback
@@ -68,7 +69,7 @@ def async_register(hass: HomeAssistant) -> None:
                     ws_content_catalog, ws_deploy_layout, ws_deploy_screenset,
                     ws_publish_layout, ws_save_screenset, ws_delete_screenset, ws_icons,
                     ws_icon_install, ws_icon_remove, ws_icon_push, ws_icon_device_remove,
-                    ws_fonts, ws_font_preview):
+                    ws_fonts, ws_font_preview, ws_font_install):
         websocket_api.async_register_command(hass, handler)
 
 
@@ -587,11 +588,35 @@ async def ws_icon_device_remove(hass, connection, msg):
     connection.send_result(msg["id"], {"ok": True})
 
 
-@websocket_api.websocket_command({vol.Required("type"): WS_FONTS})
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_FONTS,
+    vol.Optional("entry_id"): str,
+})
 @callback
 def ws_fonts(hass, connection, msg):
-    """Marketplace font catalog: alpha + digit fonts with a sample string each."""
-    connection.send_result(msg["id"], {"fonts": render_service.font_specs()})
+    """Marketplace font catalog; per-device install state when entry_id is given."""
+    specs = render_service.font_specs()
+    files = (_fw_manifest(hass, msg["entry_id"]) or {}).get("files") or {} if msg.get("entry_id") else {}
+    for s in specs:
+        df = s.get("device_file")
+        s["installed"] = (df in files) if df else True  # built-in alpha fonts always present
+    connection.send_result(msg["id"], {"fonts": specs})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_FONT_INSTALL,
+    vol.Required("entry_id"): str,
+    vol.Required("font"): str,
+})
+@websocket_api.async_response
+async def ws_font_install(hass, connection, msg):
+    """Install a single font unit onto a device (hot-loaded, no reboot)."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown device")
+        return
+    ok = await firmware_install.async_install_font(hass, entry, msg["font"])
+    connection.send_result(msg["id"], {"ok": ok})
 
 
 @websocket_api.websocket_command({

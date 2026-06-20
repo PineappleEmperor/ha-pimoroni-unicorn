@@ -11,7 +11,7 @@ interface Layout { name?: string; model?: string; grid?: number; widgets: Widget
 interface Device { entry_id: string; device_id: string; model: string; name: string; active_layout?: string; }
 interface CatalogWidget { id: string; label: string; kind: string; requires: string[]; device_file: string; hash: string; status: string; thumb?: string; }
 interface ContentUnit { id: string; label: string; kind: string; compat: string[]; requires: string[]; screens: number; compatible: boolean; thumb?: string; }
-interface FontSpec { name: string; label: string; kind: "alpha" | "digits"; w: number; h: number; builtin?: boolean; sample: string; }
+interface FontSpec { name: string; label: string; kind: "alpha" | "digits"; w: number; h: number; builtin?: boolean; sample: string; installed?: boolean; device_file?: string; }
 interface FwManifest { engine_version?: string; files?: Record<string, string>; }
 
 const PREVIEW_TARGET_PX = 560;
@@ -91,6 +91,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private zoom = 0;  // px per LED; 0 = auto-fit
   @state() private selected = -1;
   @state() private dragIdx = -1;
+  @state() private dragOverIdx = -1;
   @state() private layoutName = "default";
   @state() private live = false;
   @state() private wireframe = false;
@@ -204,11 +205,12 @@ export class PimoroniUnicornPanel extends LitElement {
     .box .tag { position: absolute; top: -17px; left: 0; font: 11px ui-monospace, monospace; color: #ddd; white-space: nowrap; display: none; }
     .boxes.wf .box .tag, .box.sel .tag { display: block; }
     .wlist { list-style: none; padding: 0; margin: 0 0 12px; }
-    .wlist li { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: background .12s; }
+    .wlist li { display: flex; gap: 10px; align-items: center; padding: 10px 12px; min-height: 48px; box-sizing: border-box; border-radius: 10px; cursor: pointer; transition: background .12s; }
     .wlist li:hover { background: color-mix(in srgb, var(--pu-primary) 7%, transparent); }
     .wlist li.sel { background: color-mix(in srgb, var(--pu-primary) 14%, transparent); box-shadow: inset 3px 0 0 var(--pu-primary); }
     .wlist li .grow { flex: 1; }
     .wlist li.dragging { opacity: .4; }
+    .wlist li.dragover { outline: 2px solid var(--pu-primary); outline-offset: -2px; }
     .wlist li .drag { cursor: grab; color: var(--secondary-text-color, #79747e); user-select: none; line-height: 1; }
     .wlist li .drag:active { cursor: grabbing; }
     .panelrow { display: flex; gap: 10px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
@@ -285,17 +287,24 @@ export class PimoroniUnicornPanel extends LitElement {
       this.deviceIcons = r.device_installed ?? [];
     } catch { /* icons list optional */ }
   }
+  // Device install/remove round-trips through MQTT (cmd -> device writes -> manifest republish
+  // -> HA). Re-poll a couple of times so the device-installed state catches up.
+  private reloadIconsSoon() {
+    this.loadIcons();
+    window.setTimeout(() => this.loadIcons(), 1500);
+    window.setTimeout(() => this.loadIcons(), 4000);
+  }
   private async pushIconToDevice(name: string) {
     if (!this.entryId) return;
     await this.hass.callWS({ type: "pimoroni_unicorn/icon_push", entry_id: this.entryId, name });
     this.status = `Installing "${name}" on this device…`;
-    this.loadIcons();
+    this.reloadIconsSoon();
   }
   private async removeIconFromDevice(name: string) {
     if (!this.entryId) return;
     await this.hass.callWS({ type: "pimoroni_unicorn/icon_device_remove", entry_id: this.entryId, name });
     this.status = `Removed "${name}" from this device.`;
-    this.loadIcons();
+    this.reloadIconsSoon();
   }
 
   // Install targets default to every device; user can narrow the selection.
@@ -319,18 +328,20 @@ export class PimoroniUnicornPanel extends LitElement {
       ? `Installed "${name}" → ${sent.join(", ")}.`
       : `Saved "${name}" (no devices to push to).`;
     this.iconCode = ""; this.iconName = "";
-    this.loadIcons();
+    this.reloadIconsSoon();
   }
   private async removeIcon(name: string) {
     if (!confirm(`Delete icon "${name}" from all devices?`)) return;
     await this.hass.callWS({ type: "pimoroni_unicorn/icon_remove", name });
     this.status = `Removed icon "${name}".`;
-    this.loadIcons();
+    this.reloadIconsSoon();
   }
 
   private async loadFonts() {
     try {
-      const r = await this.hass.callWS({ type: "pimoroni_unicorn/fonts" });
+      const q: Record<string, unknown> = { type: "pimoroni_unicorn/fonts" };
+      if (this.entryId) q.entry_id = this.entryId;
+      const r = await this.hass.callWS(q);
       this.fonts = r.fonts ?? [];
       this.refreshFontPreviews();
     } catch { /* font catalog optional */ }
@@ -414,6 +425,7 @@ export class PimoroniUnicornPanel extends LitElement {
     this.entryId = entryId;
     await this.loadCaps({ entry_id: entryId });
     this.loadIcons();
+    this.loadFonts();  // refresh per-device font install state
     const active = dev.active_layout ? this.stored[dev.active_layout] : undefined;
     this.loadLayout(active ?? this.defaultLayout);
   }
@@ -642,6 +654,18 @@ export class PimoroniUnicornPanel extends LitElement {
     this.layoutName = "";
     this.switchTab("layout");
   }
+  private async editCurrentPage(): Promise<void> {
+    if (!this.entryId || !this.guardDiscard()) return;
+    const res = await this.hass.callWS({ type: "pimoroni_unicorn/devices" });
+    const dev = (res.devices ?? []).find((d: Device) => d.entry_id === this.entryId);
+    await this.refreshStored();
+    const active = dev?.active_layout ? this.stored[dev.active_layout] : undefined;
+    if (!active) { this.status = "This device has no active page saved in the library yet."; return; }
+    this.layoutName = dev.active_layout!;
+    this.loadLayout(active);
+    this.switchTab("layout");
+    this.status = `Loaded the device's current page "${dev.active_layout}".`;
+  }
   private async deploy(): Promise<void> {
     if (!this.entryId) return;
     this.layout.name = this.layoutName;
@@ -795,6 +819,7 @@ export class PimoroniUnicornPanel extends LitElement {
           <label>Name <input .value=${this.layoutName} @input=${(e: Event) => (this.layoutName = (e.target as HTMLInputElement).value)} /></label>
         </div>
         <div class="group">
+          <button class="secondary" @click=${this.editCurrentPage} ?disabled=${!this.entryId} title=${this.entryId ? "Load the page currently active on the device to edit it" : "Select a device first"}>Edit current page</button>
           <button @click=${this.save} title="Save this page to the library (no device needed)">Save</button>
           <button class="secondary" @click=${this.deploy} ?disabled=${!this.entryId} title=${this.entryId ? "Push this page to the selected device now" : "Select a device to push"}>Push to device</button>
           <button class="secondary" @click=${this.exportLayout} title="Copy this page's JSON to clipboard to share or import elsewhere">Export JSON</button>
@@ -844,13 +869,22 @@ export class PimoroniUnicornPanel extends LitElement {
             ${[...this.layout.widgets.keys()].reverse().map((i) => {
               const w = this.layout.widgets[i];
               return html`
-              <li class="${i === this.selected ? "sel" : ""} ${i === this.dragIdx ? "dragging" : ""}"
+              <li class="${i === this.selected ? "sel" : ""} ${i === this.dragIdx ? "dragging" : ""} ${i === this.dragOverIdx && i !== this.dragIdx ? "dragover" : ""}"
                   @click=${() => (this.selected = i)}
-                  @dragover=${(e: DragEvent) => { e.preventDefault(); }}
-                  @drop=${(e: DragEvent) => { e.preventDefault(); this.dropWidget(i); }}>
+                  @dragover=${(e: DragEvent) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "move"; this.dragOverIdx = i; }}
+                  @dragleave=${() => { if (this.dragOverIdx === i) this.dragOverIdx = -1; }}
+                  @drop=${(e: DragEvent) => { e.preventDefault(); this.dropWidget(i); this.dragOverIdx = -1; }}>
                 <span class="drag" title="Drag to reorder" draggable="true"
-                  @dragstart=${(e: DragEvent) => { this.dragIdx = i; if (e.dataTransfer) e.dataTransfer.effectAllowed = "move"; }}
-                  @dragend=${() => { this.dragIdx = -1; }}>⣿</span>
+                  @dragstart=${(e: DragEvent) => {
+                    this.dragIdx = i;
+                    if (e.dataTransfer) {
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", String(i));  // required for Firefox to start a drag
+                      const li = (e.target as HTMLElement).closest("li");
+                      if (li) e.dataTransfer.setDragImage(li, 0, 0);
+                    }
+                  }}
+                  @dragend=${() => { this.dragIdx = -1; this.dragOverIdx = -1; }}>⣿</span>
                 <input type="checkbox" .checked=${w.enabled !== false} title="Show / hide"
                   @click=${(e: Event) => { e.stopPropagation(); w.enabled = (e.target as HTMLInputElement).checked; this.edited(); }} />
                 <span class="grow">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span>
@@ -938,16 +972,27 @@ export class PimoroniUnicornPanel extends LitElement {
     this.loadContent();
   }
 
+  // Widget install/remove OTA-reboots the device (~10-20s); re-poll across the reboot
+  // window so the catalog reflects the new manifest once it republishes on reconnect.
+  private reloadCatalogSoon() {
+    for (const ms of [8000, 15000, 25000]) setTimeout(() => this.loadCatalog(), ms);
+  }
+  private async installFont(name: string) {
+    if (!this.entryId) return;
+    await this.hass.callWS({ type: "pimoroni_unicorn/font_install", entry_id: this.entryId, font: name });
+    this.status = `Installing font ${name}…`;
+    for (const ms of [2000, 5000]) setTimeout(() => this.loadFonts(), ms);  // hot-loads, no reboot
+  }
   private async installWidget(id: string) {
     await this.hass.callWS({ type: "pimoroni_unicorn/fw_install", entry_id: this.entryId, widget_id: id });
-    this.status = `Installing ${id}… device will reboot.`;
-    setTimeout(() => this.loadCatalog(), 8000);
+    this.status = `Installing ${id}…`;
+    this.reloadCatalogSoon();
   }
 
   private async removeWidgetUnit(id: string) {
     await this.hass.callWS({ type: "pimoroni_unicorn/fw_remove", entry_id: this.entryId, widget_id: id });
-    this.status = `Removing ${id}… device will reboot.`;
-    setTimeout(() => this.loadCatalog(), 8000);
+    this.status = `Removing ${id}…`;
+    this.reloadCatalogSoon();
   }
 
   private _thumb(src?: string) {
@@ -1072,7 +1117,7 @@ export class PimoroniUnicornPanel extends LitElement {
       `)}
 
       ${this._section("fonts", "Fonts", this.fonts.length, html`
-        <p class="hint">Type below to preview live in every font. Digit fonts (clock faces) show only numerals; alpha fonts cover A–Z. Fonts install automatically with any widget that needs them.</p>
+        <p class="hint">Type below to preview live in every font. Digit fonts (clock faces) show only numerals; alpha fonts cover A–Z. Fonts install automatically with any widget that needs them, or install one directly onto the selected device here (no reboot).</p>
         <div class="panelrow">
           <label>Preview text</label>
           <input style="width:220px" placeholder="type to preview…" .value=${this.fontText}
@@ -1084,6 +1129,11 @@ export class PimoroniUnicornPanel extends LitElement {
           ${this.fontPngs[f.name]
             ? html`<img class="fprev" src="data:image/png;base64,${this.fontPngs[f.name]}" />`
             : html`<div class="fprev"></div>`}
+          ${this.entryId && !f.builtin
+            ? (f.installed
+                ? html`<span class="badge ok">installed</span>`
+                : html`<button @click=${() => this.installFont(f.name)}>Install</button>`)
+            : ""}
         </div>`)}
       `)}
       <p class="hint">Deploying a page installs any widgets/fonts it needs over the air first, then pushes it; the device reboots if files changed.</p>

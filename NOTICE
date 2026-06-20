@@ -1,0 +1,18 @@
+Third-party assets bundled with ha-pimoroni-unicorn
+====================================================
+
+Weather icons
+-------------
+The 16x16 and 32x32 weather icons in firmware/engine/weather_icons.py are derived
+from "weather-pixel-icons" by Dhole:
+
+    https://github.com/Dhole/weather-pixel-icons
+
+Licensed under Creative Commons Attribution-ShareAlike 4.0 International
+(CC BY-SA 4.0): https://creativecommons.org/licenses/by-sa/4.0/
+
+The original monochrome XBM bitmaps were converted to bit-packed row masks by
+scripts/gen_weather_icons.py; the 8x8 set is hand-drawn. These derivatives remain
+under CC BY-SA 4.0. Changes: format conversion (XBM -> packed rows) and addition of
+an 8x8 size. CC BY-SA 4.0 material may be used within this GPLv3 project under the
+GPLv3 compatibility provision of CC BY-SA 4.0.

@@ -48,6 +48,7 @@ from weather_fx import init_weather_drops, map_owm_code
 
 
 machine.freq(200_000_000)
+_RESET_CAUSE = machine.reset_cause()  # why the device last rebooted (WDT/power/soft) — for diagnostics
 graphics = PicoGraphics(display=DISPLAY, pen_type=PEN_RGB888)
 graphics.set_font("bitmap6")
 # All render code draws into the logical (as-mounted) surface; unicorn.update() always
@@ -80,6 +81,7 @@ TOPIC_WEATHER           = f"{DEVICE_ID}/weather"
 TOPIC_NOTIFY            = f"{DEVICE_ID}/notify"
 TOPIC_NOTIFY_DISMISS    = f"{DEVICE_ID}/notify/dismiss"
 TOPIC_ICONS_CMD         = f"{DEVICE_ID}/icons/cmd"
+TOPIC_ICONS_RESULT      = f"{DEVICE_ID}/icons/result"
 TOPIC_LAYOUT            = f"{DEVICE_ID}/layout"
 TOPIC_SCREENS           = f"{DEVICE_ID}/screens"
 TOPIC_SCREEN_SHOW       = f"{DEVICE_ID}/screen/show"
@@ -243,6 +245,30 @@ def _show_ota_screen(label, n, total):
     unicorn.update(graphics)
 
 
+def _ota_needs_reboot(paths):
+    """True if any written path is the engine or an update to an already-loaded module.
+
+    New content (widget/overlay/font/json not yet imported) hot-loads without a reboot;
+    engine files and updates to live modules can't be hot-swapped, so they reboot.
+    """
+    import sys  # noqa: PLC0415
+    for p in paths:
+        base = p.rsplit("/", 1)[-1]
+        if base.startswith("monospace_") and base.endswith(".py"):
+            continue  # digit-font unit -> hot via drawing.reload_fonts()
+        if p.startswith("/engine/") or p in ("/main.py", "/boot.py"):
+            return True
+        if base.startswith("widget_"):
+            if base[7:].rsplit(".", 1)[0] in widgets.WIDGET_REGISTRY:
+                return True
+        elif base.startswith("overlay_") and base.endswith(".py"):
+            if base[8:-3] in widgets.OVERLAY_REGISTRY:
+                return True
+        elif base.endswith(".py") and base[:-3] in sys.modules:
+            return True  # a font/module already imported into the running engine
+    return False
+
+
 def _run_ota(payload):
     global _ota_pending
     _ota_pending = None  # one-shot: don't retry-loop on failure, report it instead
@@ -317,13 +343,23 @@ def _run_ota(payload):
     except Exception:
         pass
     if written:
-        try:
-            with open("/ota_pending", "w") as f:
-                json.dump(written, f)
-        except OSError:
-            pass
-        time.sleep(1)
-        machine.reset()
+        if _ota_needs_reboot(written):
+            try:
+                with open("/ota_pending", "w") as f:
+                    json.dump(written, f)
+            except OSError:
+                pass
+            time.sleep(1)
+            machine.reset()
+        else:
+            # New content only — register it live and tell HA, no reboot.
+            try:
+                if any(p.rsplit("/", 1)[-1].startswith("monospace_") for p in written):
+                    drawing.reload_fonts()
+                widgets.reload()
+            except Exception as e:
+                print("hot-load failed:", e)
+            _pub(TOPIC_FW_MANIFEST, json.dumps(_fw_manifest()), retain=True)
 
 
 def _ota_commit():
@@ -356,7 +392,47 @@ def _file_hash(path):
     return ubinascii.hexlify(h.digest()).decode()[:16]
 
 
-_MANIFEST_DIRS = ("/engine", "/widgets", "/assets/fonts", "/icons")
+_MANIFEST_DIRS = ("/engine", "/engine/animations", "/widgets", "/assets/fonts", "/icons")
+
+
+def _cpu_temp():
+    """Pico internal temperature sensor in °C (None if unavailable)."""
+    try:
+        v = machine.ADC(4).read_u16() * 3.3 / 65535
+        return round(27 - (v - 0.706) / 0.001721, 1)
+    except Exception:
+        return None
+
+
+def _diag_payload():
+    """Full device state HA mirrors: current page, health, identity/config, WiFi, rotation."""
+    page = _screens[_screen_idx].get("name", str(_screen_idx)) if _screens else ""
+    wlan = network.WLAN(network.STA_IF)
+    try:
+        ip = wlan.ifconfig()[0]
+    except Exception:
+        ip = ""
+    try:
+        rssi = wlan.status("rssi")
+    except Exception:
+        rssi = None
+    return {
+        "page": page,
+        "free_mem": gc.mem_free(),
+        "uptime_s": time.ticks_ms() // 1000,
+        "engine_version": ENGINE_VERSION,
+        "model": MODEL,
+        "orientation": ORIENTATION,
+        "brightness": int(brightness * 100),
+        "awake": system_state == "AWAKE",
+        "ip": ip,
+        "rssi": rssi,
+        "reset_cause": _RESET_CAUSE,
+        "cpu_temp": _cpu_temp(),
+        "screen_index": _screen_idx,
+        "screen_count": len(_screens) if _screens else 0,
+        "dwell_s": (_screen_dwell_ms // 1000) if _screen_dwell_ms else 0,
+    }
 
 
 def _fw_manifest():
@@ -450,16 +526,21 @@ def on_message(topic, message):
             return
 
         if topic_str == TOPIC_ICONS_CMD:
+            name, action = "", ""
             try:
                 data   = json.loads(message)
-                action = data.get("action")
+                action = data.get("action", "")
                 name   = data.get("name", "")
                 if action == "install" and name:
                     icons.install(name, data)
                 elif action == "remove" and name:
                     icons.remove(name)
+                # Republish the manifest so HA sees the /icons change immediately (not just on reconnect).
+                _pub(TOPIC_FW_MANIFEST, json.dumps(_fw_manifest()), retain=True)
+                _pub(TOPIC_ICONS_RESULT, json.dumps({"name": name, "action": action, "ok": True}))
             except Exception as e:
                 print("Icon cmd failed:", e)
+                _pub(TOPIC_ICONS_RESULT, json.dumps({"name": name, "action": action, "ok": False, "error": str(e)}))
             return
 
         if topic_str == TOPIC_TIME:
@@ -525,15 +606,29 @@ def on_message(topic, message):
             return
 
         if topic_str == TOPIC_FW_REMOVE:
+            removed = []
             try:
                 data = json.loads(message)
                 for path in data.get("files", []):
                     try:
                         uos.remove(path)
+                        removed.append(path)
                     except Exception:
                         pass
             except Exception:
                 pass
+            hot = bool(removed)
+            for path in removed:
+                base = path.rsplit("/", 1)[-1]
+                if base.startswith("widget_"):
+                    widgets.WIDGET_REGISTRY.pop(base[7:].rsplit(".", 1)[0], None)
+                elif base.startswith("overlay_") and base.endswith(".py"):
+                    widgets.OVERLAY_REGISTRY.pop(base[8:-3], None)
+                else:
+                    hot = False  # font/engine file -> reboot to be safe
+            if hot:
+                _pub(TOPIC_FW_MANIFEST, json.dumps(_fw_manifest()), retain=True)
+                return
             time.sleep(1)
             machine.reset()
             return
@@ -691,6 +786,7 @@ async def mqtt_task():
             if _wdt is None:  # arm watchdog once up; main loop + OTA feed it
                 _wdt = machine.WDT(timeout=WDT_TIMEOUT_MS)
             send_ha_state()
+            _pub(TOPIC_DIAG, json.dumps(_diag_payload()), retain=True)  # immediate state, not after 60s
             print("MQTT Connected & Discovery Published")
 
             last_ping = time.ticks_ms()
@@ -706,10 +802,7 @@ async def mqtt_task():
                 if time.ticks_diff(now, last_diag) >= 60000:
                     last_diag = now
                     _pub(TOPIC_STATUS, b"online", retain=True)
-                    page = _screens[_screen_idx].get("name", str(_screen_idx)) if _screens else ""
-                    _pub(TOPIC_DIAG, json.dumps({
-                        "page": page, "free_mem": gc.mem_free(), "uptime_s": time.ticks_ms() // 1000,
-                    }), retain=True)
+                    _pub(TOPIC_DIAG, json.dumps(_diag_payload()), retain=True)
                     # Re-sync NTP if never synced, or hourly — time isn't battery-backed.
                     if not _time_synced or time.ticks_diff(time.ticks_ms(), _last_ntp_ms) > 3600000:
                         await sync_time()

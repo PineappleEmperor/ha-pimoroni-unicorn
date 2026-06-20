@@ -185,12 +185,20 @@ def _prime_icons(m, installed: dict | None) -> None:
             m.icons._code_alias[str(data["code"])] = name  # noqa: SLF001
 
 
+def map_owm(code) -> str:
+    """Map an OWM numeric code to the firmware's simplified condition string."""
+    try:
+        return _modules().weather_fx.map_owm_code(int(code))
+    except (ValueError, TypeError):
+        return "clear"
+
+
 def render_layout_png(model: str, layout: dict, installed_icons: dict | None = None,
-                      elapsed_ms: int = 0, orientation: int = 0) -> str:
-    """Render a layout for a model at a point in time; return a base64 PNG."""
+                      elapsed_ms: int = 0, orientation: int = 0, state: dict | None = None) -> str:
+    """Render a layout for a model; pass `state` to mirror the device's live values."""
     m, g, width, height = _new_graphics(model, orientation)
     _prime_icons(m, installed_icons)
-    state = {**SAMPLE_STATE, "time": time.localtime(), "elapsed_ms": elapsed_ms}
+    state = {**SAMPLE_STATE, "time": time.localtime(), "elapsed_ms": elapsed_ms, **(state or {})}
     ds = dict(state.get("display_sensors") or {})
     for entry in layout.get("widgets", []):
         ent = (entry.get("cfg") or {}).get("entity")
@@ -268,12 +276,16 @@ FONT_SPECS = [
      "builtin": True, "upper": True, "sample": "HELLO 2026"},
     {"name": "font5x9",    "label": "Tall 5×9",     "kind": "alpha",  "w": 5, "h": 9,
      "builtin": True, "upper": False, "sample": "Hello 2026"},
-    {"name": "digits",     "label": "Digits 3×5",   "kind": "digits", "w": 3, "h": 5,
-     "device_file": "monospace_digits.py",     "sample": "012345"},
-    {"name": "big_digits", "label": "Big 5×7",      "kind": "digits", "w": 5, "h": 7,
-     "device_file": "monospace_big_digits.py", "sample": "012345"},
-    {"name": "blocky",     "label": "Blocky 4×5",   "kind": "digits", "w": 4, "h": 5,
-     "device_file": "monospace_blocky.py",     "sample": "012345"},
+    {"name": "digits",       "label": "Digits 3×5",        "kind": "digits", "w": 3, "h": 5,
+     "device_file": "monospace_digits.py",       "sample": "012345"},
+    {"name": "digits_serif", "label": "Digits serif 3×5",  "kind": "digits", "w": 3, "h": 5,
+     "device_file": "monospace_digits_serif.py", "sample": "012345"},
+    {"name": "big_digits",   "label": "Big 5×7",           "kind": "digits", "w": 5, "h": 7,
+     "device_file": "monospace_big_digits.py",   "sample": "012345"},
+    {"name": "blocky",       "label": "Blocky 4×5",        "kind": "digits", "w": 4, "h": 5,
+     "device_file": "monospace_blocky.py",       "sample": "012345"},
+    {"name": "blocky_serif", "label": "Blocky serif 4×5",  "kind": "digits", "w": 4, "h": 5,
+     "device_file": "monospace_blocky_serif.py", "sample": "012345"},
     {"name": "tall",       "label": "Tall 3×7",     "kind": "digits", "w": 3, "h": 7,
      "device_file": "monospace_tall.py",       "sample": "012345"},
     {"name": "humanist",   "label": "Humanist 4×7", "kind": "digits", "w": 4, "h": 7,
@@ -282,11 +294,13 @@ FONT_SPECS = [
 
 _ALPHA_FONTS = {"font3x5": True, "font4x5": True, "font5x9": False}  # name -> force-uppercase
 _DIGIT_FONTS = {
-    "digits":     ("monospace_digits",     "DIGITS",     3, 5),
-    "big_digits": ("monospace_big_digits", "BIG_DIGITS", 5, 7),
-    "blocky":     ("monospace_blocky",     "BLOCKY",     4, 5),
-    "tall":       ("monospace_tall",       "TALL",       3, 7),
-    "humanist":   ("monospace_humanist",   "HUMANIST",   4, 7),
+    "digits":       ("monospace_digits",       "DIGITS",       3, 5),
+    "digits_serif": ("monospace_digits_serif", "DIGITS_SERIF", 3, 5),
+    "big_digits":   ("monospace_big_digits",   "BIG_DIGITS",   5, 7),
+    "blocky":       ("monospace_blocky",       "BLOCKY",       4, 5),
+    "blocky_serif": ("monospace_blocky_serif", "BLOCKY_SERIF", 4, 5),
+    "tall":         ("monospace_tall",         "TALL",         3, 7),
+    "humanist":     ("monospace_humanist",     "HUMANIST",     4, 7),
 }
 
 

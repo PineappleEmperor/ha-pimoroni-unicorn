@@ -59,6 +59,7 @@ OTA_SOURCE_FILES = {
     "icons":               ("icons.py",                "/engine/icons.py"),
     "sounds":              ("sounds.py",               "/engine/sounds.py"),
     "weather_fx":          ("weather_fx.py",           "/engine/weather_fx.py"),
+    "weather_icons":       ("weather_icons.py",        "/engine/weather_icons.py"),
     "bitfonts":            ("bitfonts.py",             "/engine/bitfonts.py"),
     "widget_clock":        ("widget_clock.py",         "/widgets/widget_clock.py"),
     "widget_calendar":     ("widget_calendar.py",      "/widgets/widget_calendar.py"),
@@ -72,8 +73,10 @@ OTA_SOURCE_FILES = {
     "widget_temperature":  ("widget_temperature.py",   "/widgets/widget_temperature.py"),
     "widget_weather":      ("widget_weather.py",       "/widgets/widget_weather.py"),
     "monospace_digits":    ("monospace_digits.py",     "/assets/fonts/monospace_digits.py"),
+    "monospace_digits_serif":("monospace_digits_serif.py", "/assets/fonts/monospace_digits_serif.py"),
     "monospace_big_digits":("monospace_big_digits.py", "/assets/fonts/monospace_big_digits.py"),
     "monospace_blocky":    ("monospace_blocky.py",     "/assets/fonts/monospace_blocky.py"),
+    "monospace_blocky_serif":("monospace_blocky_serif.py", "/assets/fonts/monospace_blocky_serif.py"),
     "monospace_tall":      ("monospace_tall.py",       "/assets/fonts/monospace_tall.py"),
     "monospace_humanist":  ("monospace_humanist.py",   "/assets/fonts/monospace_humanist.py"),
 }
@@ -85,7 +88,7 @@ ENGINE_FILE_KEYS = list(OTA_SOURCE_FILES)
 # Bundled engine version (the update entity diffs the device's reported
 # engine_version against this). Keep in sync with firmware/engine/version.py.
 # Versioned independently of the integration manifest version.
-ENGINE_VERSION = "1.2.1"
+ENGINE_VERSION = "1.2.2"
 
 # Engine builds below this need a one-time USB reflash (the foldered file layout
 # landed in 1.1.0); OTA cannot migrate a flat device, so the update entity refuses

@@ -1,7 +1,8 @@
 # AUTO-GENERATED from firmware/ by scripts/sync_render.py — do not edit.
-"""Weather widget unit: draws an 8x8 icon for the current condition."""
-from . import icons
+"""Weather widget unit: draws a monochrome weather icon (8/16/32 px) for the condition."""
+from .weather_icons import WEATHER_ICONS
 
+# Firmware condition string -> icon bucket.
 _BUCKET = {
     "clear": "clear", "thunderstorm": "storm",
     "light_rain": "rain", "rain": "rain",
@@ -10,30 +11,40 @@ _BUCKET = {
 }
 
 WIDGET = {
-    "id": "weather", "label": "Weather icon", "w": 8, "h": 8, "variants": [], "multi": True,
-    "default_cfg": {"clear": "wx_clear", "partly_cloudy": "wx_partly_cloudy",
-                    "cloudy": "wx_cloudy", "fog": "wx_fog", "rain": "wx_rain",
-                    "snow": "wx_snow", "storm": "wx_storm"},
+    "id": "weather", "label": "Weather icon", "w": 16, "h": 16, "variants": [], "multi": True,
+    "default_cfg": {"size": 16, "style": "outline", "color": [160, 210, 255]},
     "cfg_fields": [
-        {"key": "clear", "type": "icon", "label": "Clear"},
-        {"key": "partly_cloudy", "type": "icon", "label": "Partly cloudy"},
-        {"key": "cloudy", "type": "icon", "label": "Cloudy"},
-        {"key": "fog", "type": "icon", "label": "Fog"},
-        {"key": "rain", "type": "icon", "label": "Rain"},
-        {"key": "snow", "type": "icon", "label": "Snow"},
-        {"key": "storm", "type": "icon", "label": "Storm"},
+        {"key": "size", "type": "select", "options": [8, 16, 32], "label": "Size"},
+        {"key": "style", "type": "select", "options": ["outline", "solid"], "label": "Style"},
+        {"key": "color", "type": "rgb", "label": "Colour"},
     ],
     "requires": [],
 }
 
 
+def _size(cfg):
+    s = int(cfg.get("size", 16))
+    return s if s in (8, 16, 32) else 16
+
+
 def box(cfg):
-    """Icons are a fixed 8x8 footprint."""
-    return (icons.ICON_SIZE, icons.ICON_SIZE)
+    """Square footprint at the configured size."""
+    s = _size(cfg)
+    return (s, s)
 
 
 def render(g, x, y, w, h, cfg, state):
-    """Draw the icon mapped from the current weather condition."""
+    """Draw the bucketed weather icon at the configured size, style and colour."""
     bucket = _BUCKET.get(state.get("weather", "clear"), "clear")
-    name = cfg.get(bucket) or bucket
-    icons.draw_icon(name, x, y, state.get("elapsed_ms", 0))
+    styles = WEATHER_ICONS.get(bucket) or WEATHER_ICONS["clear"]
+    style = cfg.get("style", "outline")
+    sizes = styles.get(style) or styles["outline"]
+    s = _size(cfg)
+    rows = sizes.get(s) or sizes[16]
+    color = cfg.get("color") or (160, 210, 255)
+    g.set_pen(g.create_pen(color[0], color[1], color[2]))
+    for ry in range(len(rows)):
+        mask = rows[ry]
+        for cx in range(s):
+            if mask >> cx & 1:
+                g.pixel(x + cx, y + ry)

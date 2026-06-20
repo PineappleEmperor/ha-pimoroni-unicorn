@@ -83,14 +83,12 @@ def _hsv_to_rgb(h, s, v):
 
 
 def _load_animations():
-    """Exec each *.py file in /animations/ with injected context."""
-    result = {}
-    try:
-        files = sorted(uos.listdir("/animations"))
-    except OSError:
-        print("notify_animations: /animations not found")
-        return result
+    """Exec each animation unit with injected context.
 
+    Defaults ship in /engine/animations (flashed with the engine); user units live in
+    /animations. Both are scanned so the built-in Pimoroni effects work out of the box.
+    """
+    result = {}
     ns_base = {
         "_g":             _g,
         "_width":         _width,
@@ -101,20 +99,29 @@ def _load_animations():
         "random":         random,
     }
 
-    for fname in files:
-        if not fname.endswith(".py") or fname.startswith("_"):
-            continue
-        path = "/animations/" + fname
-        ns = dict(ns_base)
+    found = False
+    for adir in ("/engine/animations", "/animations"):
         try:
-            with open(path) as f:
-                exec(f.read(), ns)
-            if "ANIMATIONS" in ns:
-                result.update(ns["ANIMATIONS"])
-                print("Loaded:", list(ns["ANIMATIONS"].keys()))
-        except Exception as e:
-            print("Animation load error:", path, e)
+            files = sorted(uos.listdir(adir))
+        except OSError:
+            continue
+        found = True
+        for fname in files:
+            if not fname.endswith(".py") or fname.startswith("_"):
+                continue
+            path = adir + "/" + fname
+            ns = dict(ns_base)
+            try:
+                with open(path) as f:
+                    exec(f.read(), ns)
+                if "ANIMATIONS" in ns:
+                    result.update(ns["ANIMATIONS"])
+                    print("Loaded:", list(ns["ANIMATIONS"].keys()))
+            except Exception as e:
+                print("Animation load error:", path, e)
 
+    if not found:
+        print("notify_animations: no animation dirs found")
     return result
 
 

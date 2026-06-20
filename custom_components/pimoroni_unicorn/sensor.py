@@ -1,18 +1,37 @@
 """Sensor platform: current page + (disabled-by-default) device diagnostics."""
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from propcache.api import cached_property
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
-from homeassistant.const import EntityCategory, UnitOfInformation, UnitOfTime
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.const import (
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    EntityCategory,
+    UnitOfInformation,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
+from homeassistant.util import dt as dt_util
 
 from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN, PUConfigEntry
+
+
+def _boot_time(diag: dict, manifest: dict) -> datetime | None:
+    """Boot timestamp = now - uptime; rendered relatively by the HA frontend."""
+    s = diag.get("uptime_s")
+    if s is None:
+        return None
+    return dt_util.utcnow() - timedelta(seconds=int(s))
 
 PARALLEL_UPDATES = 0
 
@@ -20,30 +39,69 @@ PARALLEL_UPDATES = 0
 @dataclass(frozen=True, kw_only=True)
 class PUSensorDescription(SensorEntityDescription):
     """Sensor description with a value function over (diag, manifest)."""
-    value_fn: Callable[[dict, dict], StateType]
+    value_fn: Callable[[dict, dict], StateType | datetime]
+    attr_fn: Callable[[dict, dict], dict] | None = None
 
 
 SENSORS: tuple[PUSensorDescription, ...] = (
     PUSensorDescription(
         key="page", translation_key="page", icon="mdi:view-carousel",
         value_fn=lambda diag, manifest: diag.get("page"),
+        attr_fn=lambda diag, manifest: {
+            "index": diag.get("screen_index"),
+            "count": diag.get("screen_count"),
+            "dwell_s": diag.get("dwell_s"),
+        },
     ),
     PUSensorDescription(
         key="free_mem", translation_key="free_mem",
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
+        suggested_unit_of_measurement=UnitOfInformation.KILOBYTES,
+        suggested_display_precision=1, state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
         value_fn=lambda diag, manifest: diag.get("free_mem"),
     ),
     PUSensorDescription(
         key="uptime", translation_key="uptime",
-        native_unit_of_measurement=UnitOfTime.SECONDS,
+        device_class=SensorDeviceClass.TIMESTAMP,
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
-        value_fn=lambda diag, manifest: diag.get("uptime_s"),
+        value_fn=_boot_time,
     ),
     PUSensorDescription(
         key="engine_version", translation_key="engine_version",
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
         value_fn=lambda diag, manifest: manifest.get("engine_version"),
+    ),
+    PUSensorDescription(
+        key="wifi_signal", translation_key="wifi_signal",
+        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH, state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
+        value_fn=lambda diag, manifest: diag.get("rssi"),
+    ),
+    PUSensorDescription(
+        key="ip_address", translation_key="ip_address", icon="mdi:ip-network",
+        entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
+        value_fn=lambda diag, manifest: diag.get("ip"),
+    ),
+    PUSensorDescription(
+        key="reset_cause", translation_key="reset_cause", icon="mdi:restart-alert",
+        entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
+        value_fn=lambda diag, manifest: diag.get("reset_cause"),
+    ),
+    PUSensorDescription(
+        key="orientation", translation_key="orientation", icon="mdi:screen-rotation",
+        native_unit_of_measurement="°",
+        entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
+        value_fn=lambda diag, manifest: diag.get("orientation"),
+    ),
+    PUSensorDescription(
+        key="cpu_temp", translation_key="cpu_temp",
+        native_unit_of_measurement="°C", device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
+        value_fn=lambda diag, manifest: diag.get("cpu_temp"),
     ),
 )
 
@@ -77,10 +135,18 @@ class PimoroniUnicornSensor(SensorEntity):
             manufacturer="Pimoroni", model=model)
 
     @cached_property
-    def native_value(self) -> StateType:
+    def native_value(self) -> StateType | datetime:
         """Compute the value from the cached diag + firmware manifest payloads."""
         data = self._entry.runtime_data or {}
         return self._desc.value_fn(data.get("diag") or {}, data.get("fw_manifest") or {})
+
+    @cached_property
+    def extra_state_attributes(self) -> dict | None:
+        """Optional per-sensor attributes (e.g. playlist position on the page sensor)."""
+        if self._desc.attr_fn is None:
+            return None
+        data = self._entry.runtime_data or {}
+        return self._desc.attr_fn(data.get("diag") or {}, data.get("fw_manifest") or {})
 
     async def async_added_to_hass(self) -> None:
         """Refresh when new diag, manifest or status payloads arrive."""

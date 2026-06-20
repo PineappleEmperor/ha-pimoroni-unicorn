@@ -34,7 +34,7 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
-from . import layout, websocket as ws_api
+from . import layout, render_service, websocket as ws_api
 from .const import (
     CONF_BATTERY_CHARGING_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -131,12 +131,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await _async_subscribe_diag(hass, entry)
     await _async_subscribe_status(hass, entry)
     await _async_subscribe_ota_result(hass, entry)
+    await _async_subscribe_icons_result(hass, entry)
     await _async_setup_time_feed(hass, entry)
     await _async_setup_sensor_feed(hass, entry)
     await _async_publish_orientation(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-    await hass.config_entries.async_forward_entry_setups(entry, ["update", "sensor"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["update", "sensor", "camera"])
 
     if not hass.data.get(f"{DOMAIN}_ws_registered"):
         ws_api.async_register(hass)
@@ -156,7 +157,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     """Unload a config entry."""
-    await hass.config_entries.async_unload_platforms(entry, ["update", "sensor"])
+    await hass.config_entries.async_unload_platforms(entry, ["update", "sensor", "camera"])
     for unsub in (entry.runtime_data or {}).get("unsub", []):
         unsub()
 
@@ -253,15 +254,37 @@ async def _async_subscribe_diag(hass: HomeAssistant, entry: PUConfigEntry) -> No
     """Subscribe to the retained diagnostics topic (current page, free memory, uptime)."""
     device_id = _merged_opts(entry)[CONF_DEVICE_ID]
 
+    note_id = f"pimoroni_unicorn_orientation_drift_{device_id}"
+
     @callback
     def _on_diag(msg: Any) -> None:
         try:
             data = json.loads(msg.payload)
-            if isinstance(data, dict):
-                entry.runtime_data["diag"] = data
-                async_dispatcher_send(hass, f"{DOMAIN}_diag_{entry.entry_id}")
         except (json.JSONDecodeError, ValueError):
-            pass
+            return
+        if not isinstance(data, dict):
+            return
+        entry.runtime_data["diag"] = data
+        async_dispatcher_send(hass, f"{DOMAIN}_diag_{entry.entry_id}")
+
+        # Config-drift: the orientation the device actually applied vs what HA has configured.
+        applied = data.get("orientation")
+        try:
+            configured = int(_merged_opts(entry).get(CONF_ORIENTATION, 0) or 0)
+        except (ValueError, TypeError):
+            configured = 0
+        if isinstance(applied, int) and applied != configured:
+            notify_create(
+                hass,
+                title="Pimoroni Unicorn orientation drift",
+                message=(
+                    f"{device_id} is running at {applied}° but is configured for {configured}°. "
+                    "It applies a new orientation on reboot — reboot the device to sync."
+                ),
+                notification_id=note_id,
+            )
+        else:
+            notify_dismiss(hass, note_id)
 
     unsub = await async_subscribe(hass, f"{device_id}/diag", _on_diag)
     entry.runtime_data["unsub"].append(unsub)
@@ -277,6 +300,36 @@ async def _async_subscribe_status(hass: HomeAssistant, entry: PUConfigEntry) -> 
         async_dispatcher_send(hass, f"{DOMAIN}_status_{entry.entry_id}")
 
     unsub = await async_subscribe(hass, f"{device_id}/status", _on_status)
+    entry.runtime_data["unsub"].append(unsub)
+
+
+async def _async_subscribe_icons_result(hass: HomeAssistant, entry: PUConfigEntry) -> None:
+    """Surface the device's icon install/remove result (error -> notification)."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+    note_id = f"pimoroni_unicorn_icon_result_{device_id}"
+
+    @callback
+    def _on_result(msg: Any) -> None:
+        try:
+            data = json.loads(msg.payload)
+        except (json.JSONDecodeError, ValueError):
+            return
+        if not isinstance(data, dict):
+            return
+        if data.get("ok"):
+            notify_dismiss(hass, note_id)
+        else:
+            notify_create(
+                hass,
+                title="Pimoroni Unicorn icon install failed",
+                message=(
+                    f"{device_id} could not install icon "
+                    f"'{data.get('name', '?')}': {data.get('error', 'unknown error')}"
+                ),
+                notification_id=note_id,
+            )
+
+    unsub = await async_subscribe(hass, f"{device_id}/icons/result", _on_result)
     entry.runtime_data["unsub"].append(unsub)
 
 
@@ -422,6 +475,42 @@ def _weather_condition(state: Any) -> Any:
             return int(val)
     text = str(raw).lower()
     return _HA_CONDITION_MAP.get(text, text)  # known HA condition -> firmware string; else pass through
+
+
+def live_state(hass: HomeAssistant, entry: PUConfigEntry) -> dict[str, Any]:
+    """Assemble the render state the device is currently showing (for the screen camera)."""
+
+    opts = _merged_opts(entry)
+    sun_entity = (opts.get(CONF_SUN_ENTITY) or "sun.sun").strip() or "sun.sun"
+    sun = hass.states.get(sun_entity)
+
+    condition, temp = "clear", None
+    weather_entity = (opts.get(CONF_WEATHER_CODE_ENTITY) or "").strip()
+    if weather_entity:
+        st = hass.states.get(weather_entity)
+        if st and st.state not in ("unknown", "unavailable", ""):
+            cond = _weather_condition(st)
+            condition = render_service.map_owm(cond) if isinstance(cond, int) else str(cond)
+            t = st.attributes.get("temperature")
+            if isinstance(t, (int, float)):
+                temp = round(float(t), 1)
+
+    sensors = {
+        ent: {"state": bool((s := hass.states.get(ent)) and s.state == "on")}
+        for ent in (entry.runtime_data or {}).get("sensor_entities", set())
+    }
+    return {
+        "time": dt_util.now().timetuple(),
+        "solar": _float_state(hass, (opts.get(CONF_SOLAR_ENTITY) or "").strip()),
+        "consumption": _float_state(hass, (opts.get(CONF_CONSUMPTION_ENTITY) or "").strip()),
+        "soc": int(_float_state(hass, (opts.get(CONF_BATTERY_SOC_ENTITY) or "").strip())),
+        "charging": _bool_state(hass, (opts.get(CONF_BATTERY_CHARGING_ENTITY) or "").strip()),
+        "sun_below": sun is not None and sun.state == "below_horizon",
+        "weather": condition,
+        "temp": temp,
+        "display_sensors": sensors,
+        "elapsed_ms": int(time.monotonic() * 1000),
+    }
 
 
 def _setup_publishers(hass: HomeAssistant, entry: PUConfigEntry) -> None:

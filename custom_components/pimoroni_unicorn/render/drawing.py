@@ -5,18 +5,21 @@ import time
 from .bitfonts import font3x5, font5x9
 from .monospace_big_digits import BIG_DIGITS
 from .monospace_blocky import BLOCKY
+from .monospace_blocky_serif import BLOCKY_SERIF
 from .monospace_digits import DIGITS
+from .monospace_digits_serif import DIGITS_SERIF
 from .monospace_humanist import HUMANIST
 from .monospace_tall import TALL
 
-# Single-row clock faces: (glyph table, glyph width).
 # Clock digit faces: name -> (glyph table, glyph width). Height derives from the table.
 _CLOCK_FACES = {
-    "big":      (BIG_DIGITS, 5),
-    "digits":   (DIGITS, 3),
-    "blocky":   (BLOCKY, 4),
-    "tall":     (TALL, 3),
-    "humanist": (HUMANIST, 4),
+    "big":          (BIG_DIGITS, 5),
+    "digits":       (DIGITS, 3),
+    "digits-serif": (DIGITS_SERIF, 3),
+    "blocky":       (BLOCKY, 4),
+    "blocky-serif": (BLOCKY_SERIF, 4),
+    "tall":         (TALL, 3),
+    "humanist":     (HUMANIST, 4),
 }
 
 
@@ -24,6 +27,36 @@ def _clock_face(name):
     """Resolve a clock face name to (glyph table, width, height)."""
     table, w = _CLOCK_FACES.get(name, _CLOCK_FACES["big"])
     return table, w, len(table[0]) // w
+
+
+def reload_fonts():
+    """Re-import the installable digit-font tables and rebuild the clock-face map (no reboot).
+
+    Lets a newly installed or updated monospace_* font apply live. Text fonts (font3x5/
+    font5x9) live in the engine's bitfonts.py, so updating those still needs a reboot.
+    """
+    import sys  # noqa: PLC0415
+    global BIG_DIGITS, BLOCKY, BLOCKY_SERIF, DIGITS, DIGITS_SERIF, HUMANIST, TALL, _CLOCK_FACES
+    for m in ("monospace_big_digits", "monospace_blocky", "monospace_blocky_serif",
+              "monospace_digits", "monospace_digits_serif", "monospace_humanist",
+              "monospace_tall"):
+        sys.modules.pop(m, None)
+    from monospace_big_digits import BIG_DIGITS
+    from monospace_blocky import BLOCKY
+    from monospace_blocky_serif import BLOCKY_SERIF
+    from monospace_digits import DIGITS
+    from monospace_digits_serif import DIGITS_SERIF
+    from monospace_humanist import HUMANIST
+    from monospace_tall import TALL
+    _CLOCK_FACES = {
+        "big":          (BIG_DIGITS, 5),
+        "digits":       (DIGITS, 3),
+        "digits-serif": (DIGITS_SERIF, 3),
+        "blocky":       (BLOCKY, 4),
+        "blocky-serif": (BLOCKY_SERIF, 4),
+        "tall":         (TALL, 3),
+        "humanist":     (HUMANIST, 4),
+    }
 
 # Selectable text fonts: name -> (glyph table, force-uppercase). font3x5 is
 # uppercase-only; font5x9 is mixed-case so case is preserved.
