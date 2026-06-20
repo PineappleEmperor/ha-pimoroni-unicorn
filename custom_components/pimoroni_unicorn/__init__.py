@@ -3,14 +3,11 @@
 import ast
 from collections.abc import Callable, Coroutine
 from datetime import timedelta
-import ipaddress
 import json
 import logging
 from pathlib import Path
-import socket
 import time
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
 
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
@@ -23,18 +20,18 @@ from homeassistant.components.persistent_notification import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import HomeAssistantError
+import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
     async_track_time_interval,
 )
-from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
-from . import layout, render_service, websocket as ws_api
+from . import firmware_install, layout, render_service, websocket as ws_api
 from .const import (
     CONF_BATTERY_CHARGING_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -66,6 +63,9 @@ from .screens import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Config-entry-only integration (no YAML); declare an empty domain schema for hassfest.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 SOLAR_INTERVAL        = timedelta(seconds=10)
 TIME_INTERVAL         = timedelta(minutes=5)
@@ -130,6 +130,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await _async_subscribe_fw_manifest(hass, entry)
     await _async_subscribe_diag(hass, entry)
     await _async_subscribe_status(hass, entry)
+    await _async_subscribe_page(hass, entry)
     await _async_subscribe_ota_result(hass, entry)
     await _async_subscribe_icons_result(hass, entry)
     await _async_setup_time_feed(hass, entry)
@@ -137,7 +138,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await _async_publish_orientation(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-    await hass.config_entries.async_forward_entry_setups(entry, ["update", "sensor", "camera"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["update", "sensor", "image"])
 
     if not hass.data.get(f"{DOMAIN}_ws_registered"):
         ws_api.async_register(hass)
@@ -157,7 +158,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     """Unload a config entry."""
-    await hass.config_entries.async_unload_platforms(entry, ["update", "sensor", "camera"])
+    await hass.config_entries.async_unload_platforms(entry, ["update", "sensor", "image"])
     for unsub in (entry.runtime_data or {}).get("unsub", []):
         unsub()
 
@@ -264,6 +265,15 @@ async def _async_subscribe_diag(hass: HomeAssistant, entry: PUConfigEntry) -> No
             return
         if not isinstance(data, dict):
             return
+        # Stable boot timestamp: compute once from uptime, only recompute on a reboot
+        # (uptime dropped) — avoids the per-poll jitter of now-minus-uptime.
+        prev = entry.runtime_data.get("diag") or {}
+        up = data.get("uptime_s")
+        boot = prev.get("boot_time")
+        if isinstance(up, (int, float)):
+            if boot is None or up < (prev.get("uptime_s") or 0):
+                boot = dt_util.utcnow() - timedelta(seconds=int(up))
+        data["boot_time"] = boot
         entry.runtime_data["diag"] = data
         async_dispatcher_send(hass, f"{DOMAIN}_diag_{entry.entry_id}")
 
@@ -287,6 +297,22 @@ async def _async_subscribe_diag(hass: HomeAssistant, entry: PUConfigEntry) -> No
             notify_dismiss(hass, note_id)
 
     unsub = await async_subscribe(hass, f"{device_id}/diag", _on_diag)
+    entry.runtime_data["unsub"].append(unsub)
+
+
+async def _async_subscribe_page(hass: HomeAssistant, entry: PUConfigEntry) -> None:
+    """Cache the layout the device is actually rendering, so the camera mirrors it."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+
+    @callback
+    def _on_page(msg: Any) -> None:
+        try:
+            data = json.loads(msg.payload)
+        except (json.JSONDecodeError, ValueError):
+            return
+        entry.runtime_data["page"] = data if isinstance(data, dict) and data.get("widgets") else None
+
+    unsub = await async_subscribe(hass, f"{device_id}/page", _on_page)
     entry.runtime_data["unsub"].append(unsub)
 
 
@@ -588,31 +614,6 @@ def _setup_publishers(hass: HomeAssistant, entry: PUConfigEntry) -> None:
         )
 
 
-async def _async_resolve_host_to_ip(hass: HomeAssistant, base_url: str) -> str:
-    """Swap a hostname in base_url for its IP so the device needn't resolve names (mDNS unreliable)."""
-    parts = urlsplit(base_url)
-    host = parts.hostname
-    if not host:
-        return base_url
-    try:
-        ipaddress.ip_address(host)
-    except ValueError:
-        pass
-    else:
-        return base_url  # already an IP
-    try:
-        infos = await hass.async_add_executor_job(
-            socket.getaddrinfo, host, parts.port or 80, socket.AF_INET)
-        ip = str(infos[0][4][0])
-    except (OSError, IndexError):
-        _LOGGER.warning(
-            "Pimoroni Unicorn OTA: could not resolve %s to an IP; sending the hostname "
-            "(the device must resolve it itself, which MicroPython does unreliably)", host)
-        return base_url
-    netloc = ip if parts.port is None else f"{ip}:{parts.port}"
-    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
-
-
 def _make_push_firmware_handler(
     hass: HomeAssistant,
 ) -> Callable[[ServiceCall], Coroutine[Any, Any, None]]:
@@ -622,12 +623,7 @@ def _make_push_firmware_handler(
             _LOGGER.error("Pimoroni Unicorn: no configured entries found")
             return
 
-        try:
-            base_url = get_url(
-                hass, allow_internal=True, allow_external=False,
-                allow_cloud=False, allow_ip=True)
-        except NoURLAvailableError:
-            base_url = hass.config.internal_url
+        base_url = await firmware_install.async_device_base_url(hass)
         if not base_url:
             msg = (
                 "No local HA URL available for OTA. The device fetches firmware over plain HTTP "
@@ -640,7 +636,6 @@ def _make_push_firmware_handler(
                 hass, title="Pimoroni Unicorn OTA failed", message=msg,
                 notification_id="pimoroni_unicorn_ota_error")
             raise HomeAssistantError(msg)
-        base_url = await _async_resolve_host_to_ip(hass, base_url)
         _LOGGER.debug("Pimoroni Unicorn OTA: device will fetch files from %s", base_url)
         if base_url.lower().startswith("https"):
             _LOGGER.warning(

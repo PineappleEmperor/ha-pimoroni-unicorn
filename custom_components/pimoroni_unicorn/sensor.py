@@ -1,7 +1,7 @@
 """Sensor platform: current page + (disabled-by-default) device diagnostics."""
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from propcache.api import cached_property
 
@@ -21,17 +21,8 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
-from homeassistant.util import dt as dt_util
 
 from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN, PUConfigEntry
-
-
-def _boot_time(diag: dict, manifest: dict) -> datetime | None:
-    """Boot timestamp = now - uptime; rendered relatively by the HA frontend."""
-    s = diag.get("uptime_s")
-    if s is None:
-        return None
-    return dt_util.utcnow() - timedelta(seconds=int(s))
 
 PARALLEL_UPDATES = 0
 
@@ -54,19 +45,18 @@ SENSORS: tuple[PUSensorDescription, ...] = (
         },
     ),
     PUSensorDescription(
-        key="free_mem", translation_key="free_mem",
-        native_unit_of_measurement=UnitOfInformation.BYTES,
-        device_class=SensorDeviceClass.DATA_SIZE,
-        suggested_unit_of_measurement=UnitOfInformation.KILOBYTES,
+        key="free_mem", translation_key="free_mem", icon="mdi:memory",
+        native_unit_of_measurement=UnitOfInformation.KILOBYTES,
         suggested_display_precision=1, state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
-        value_fn=lambda diag, manifest: diag.get("free_mem"),
+        value_fn=lambda diag, manifest: (
+            round(diag["free_mem"] / 1024, 1) if diag.get("free_mem") is not None else None),
     ),
     PUSensorDescription(
         key="uptime", translation_key="uptime",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
-        value_fn=_boot_time,
+        value_fn=lambda diag, manifest: diag.get("boot_time"),
     ),
     PUSensorDescription(
         key="engine_version", translation_key="engine_version",
