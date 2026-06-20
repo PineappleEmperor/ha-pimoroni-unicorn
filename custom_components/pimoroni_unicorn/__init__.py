@@ -138,7 +138,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await _async_publish_orientation(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-    await hass.config_entries.async_forward_entry_setups(entry, ["update", "sensor", "camera"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["update", "sensor", "image"])
 
     if not hass.data.get(f"{DOMAIN}_ws_registered"):
         ws_api.async_register(hass)
@@ -158,7 +158,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     """Unload a config entry."""
-    await hass.config_entries.async_unload_platforms(entry, ["update", "sensor", "camera"])
+    await hass.config_entries.async_unload_platforms(entry, ["update", "sensor", "image"])
     for unsub in (entry.runtime_data or {}).get("unsub", []):
         unsub()
 
