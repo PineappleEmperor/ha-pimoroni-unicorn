@@ -721,13 +721,8 @@ def _make_push_firmware_handler(
                 continue
 
             ota_payload = {
-                "files": [
-                    {
-                        "url": f"{base_url.rstrip('/')}/local/pimoroni_unicorn/{device_id}/{src_name}",
-                        "path": device_path,
-                    }
-                    for src_name, device_path in staged
-                ]
+                "base": f"{base_url.rstrip('/')}/local/pimoroni_unicorn/{device_id}/",
+                "files": [[src_name, device_path] for src_name, device_path in staged],
             }
             await async_publish(
                 hass,

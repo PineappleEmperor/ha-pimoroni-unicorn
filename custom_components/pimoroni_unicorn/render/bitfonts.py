@@ -11,24 +11,33 @@ class BitFont:
 
     @micropython.native
     def draw_char(self, d, x, y, f):
-        """Draw a single character d from font f at (x, y)."""
-        for i in range(f[d]["h"]):
-            for j in range(f[d]["w"]):
-                if f[d]["data"] & (0b1 << ((i * f[d]["w"]) + j)):
-                    self.graphics.pixel(f[d]["w"] - 1 - j + x, f[d]["h"] - 1 - i + y)
+        """Draw a single character d from font f at (x, y); unknown glyphs are skipped."""
+        g = f.get(d)
+        if g is None:
+            return
+        for i in range(g["h"]):
+            for j in range(g["w"]):
+                if g["data"] & (0b1 << ((i * g["w"]) + j)):
+                    self.graphics.pixel(g["w"] - 1 - j + x, g["h"] - 1 - i + y)
 
     @micropython.native
     def draw_text(self, s, x, y, f, d=1):
         """Draw string s from font f at (x, y); d=1 left-justified, d=0 right-justified."""
         if d == 1:
-            for _, ch in enumerate(s):
+            for ch in s:
+                g = f.get(ch)
+                if g is None:
+                    continue
                 self.draw_char(ch, x, y, f)
-                x += f[ch]["w"] + f[ch]["s"]
+                x += g["w"] + g["s"]
         else:
             for i in reversed(range(len(s))):
-                x -= f[s[i]]["w"]
+                g = f.get(s[i])
+                if g is None:
+                    continue
+                x -= g["w"]
                 self.draw_char(s[i], x, y, f)
-                x -= f[s[i]]["s"]
+                x -= g["s"]
 
 
 font2x5 = {
