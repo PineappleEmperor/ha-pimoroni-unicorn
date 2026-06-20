@@ -1,8 +1,10 @@
 """Install/remove marketplace units over the existing OTA/remove transport."""
 
+import ipaddress
 import json
 import logging
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from homeassistant.components.mqtt import async_publish
 from homeassistant.core import HomeAssistant
@@ -12,6 +14,40 @@ from . import marketplace
 from .const import CONF_DEVICE_ID
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def async_device_base_url(hass: HomeAssistant) -> str | None:
+    """HA base URL the device can fetch from — prefers HA's own LAN IP so no DNS is needed.
+
+    The device pulls over plain HTTP on the LAN; resolving the configured hostname is
+    unreliable both on the device (MicroPython mDNS) and sometimes on the HA host itself
+    (e.g. a `.hass`/mDNS name getaddrinfo can't resolve), so we use the address HA is
+    actually reachable at on the LAN.
+    """
+    try:
+        configured = get_url(
+            hass, allow_internal=True, allow_external=False, allow_cloud=False, allow_ip=True)
+    except NoURLAvailableError:
+        configured = hass.config.internal_url or ""
+    parts = urlsplit(configured) if configured else None
+    scheme = (parts.scheme if parts and parts.scheme else "http")
+    port = (parts.port if parts else None) or (443 if scheme == "https" else 8123)
+    host = parts.hostname if parts else None
+    if host:
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            pass
+        else:
+            return configured  # already an IP — use as-is
+    try:
+        from homeassistant.components import network  # noqa: PLC0415
+        ip = await network.async_get_source_ip(hass, "224.0.0.251")  # HA's LAN-facing IP
+    except Exception:  # noqa: BLE001
+        ip = None
+    if ip:
+        return f"{scheme}://{ip}:{port}"
+    return configured or None
 
 
 def _device_id(entry) -> str:
@@ -32,12 +68,7 @@ async def _stage_and_ota(hass: HomeAssistant, entry, files: list[tuple[str, str]
     if not files:
         return True
     device_id = _device_id(entry)
-    try:
-        base_url = get_url(
-            hass, allow_internal=True, allow_external=False,
-            allow_cloud=False, allow_ip=True)
-    except NoURLAvailableError:
-        base_url = hass.config.internal_url
+    base_url = await async_device_base_url(hass)
     if not base_url:
         _LOGGER.error(
             "Pimoroni Unicorn install: no local HA URL. The device fetches over plain HTTP on "
