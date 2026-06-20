@@ -12,9 +12,10 @@ _BUCKET = {
 
 WIDGET = {
     "id": "weather", "label": "Weather icon", "w": 16, "h": 16, "variants": [], "multi": True,
-    "default_cfg": {"size": 16, "color": [160, 210, 255]},
+    "default_cfg": {"size": 16, "style": "outline", "color": [160, 210, 255]},
     "cfg_fields": [
         {"key": "size", "type": "select", "options": [8, 16, 32], "label": "Size"},
+        {"key": "style", "type": "select", "options": ["outline", "solid"], "label": "Style"},
         {"key": "color", "type": "rgb", "label": "Colour"},
     ],
     "requires": [],
@@ -33,9 +34,11 @@ def box(cfg):
 
 
 def render(g, x, y, w, h, cfg, state):
-    """Draw the bucketed weather icon at the configured size and colour."""
+    """Draw the bucketed weather icon at the configured size, style and colour."""
     bucket = _BUCKET.get(state.get("weather", "clear"), "clear")
-    sizes = WEATHER_ICONS.get(bucket) or WEATHER_ICONS["clear"]
+    styles = WEATHER_ICONS.get(bucket) or WEATHER_ICONS["clear"]
+    style = cfg.get("style", "outline")
+    sizes = styles.get(style) or styles["outline"]
     s = _size(cfg)
     rows = sizes.get(s) or sizes[16]
     color = cfg.get("color") or (160, 210, 255)
