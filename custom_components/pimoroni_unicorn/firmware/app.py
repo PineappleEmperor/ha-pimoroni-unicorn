@@ -548,6 +548,8 @@ def _diag_payload():
         "rssi": rssi,
         "reset_cause": _RESET_CAUSE,
         "cpu_temp": _cpu_temp(),
+        "weather": weather_condition,
+        "weather_temp": weather_temp,
         "screen_index": _screen_idx,
         "screen_count": len(_screens) if _screens else 0,
         "dwell_s": (_screen_dwell_ms // 1000) if _screen_dwell_ms else 0,

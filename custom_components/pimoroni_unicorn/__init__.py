@@ -512,15 +512,23 @@ def live_state(hass: HomeAssistant, entry: PUConfigEntry) -> dict[str, Any]:
     sun = hass.states.get(sun_entity)
 
     condition, temp = "clear", None
-    weather_entity = (opts.get(CONF_WEATHER_CODE_ENTITY) or "").strip()
-    if weather_entity:
-        st = hass.states.get(weather_entity)
-        if st and st.state not in ("unknown", "unavailable", ""):
-            cond = _weather_condition(st)
-            condition = render_service.map_owm(cond) if isinstance(cond, int) else str(cond)
-            t = st.attributes.get("temperature")
-            if isinstance(t, (int, float)):
-                temp = round(float(t), 1)
+    # Prefer the condition the device actually received (faithful mirror); fall back to
+    # re-deriving from the configured entity if the device hasn't reported it yet.
+    diag = (entry.runtime_data or {}).get("diag") or {}
+    if diag.get("weather"):
+        condition = diag["weather"]
+        if isinstance(diag.get("weather_temp"), (int, float)):
+            temp = round(float(diag["weather_temp"]), 1)
+    else:
+        weather_entity = (opts.get(CONF_WEATHER_CODE_ENTITY) or "").strip()
+        if weather_entity:
+            st = hass.states.get(weather_entity)
+            if st and st.state not in ("unknown", "unavailable", ""):
+                cond = _weather_condition(st)
+                condition = render_service.map_owm(cond) if isinstance(cond, int) else str(cond)
+                t = st.attributes.get("temperature")
+                if isinstance(t, (int, float)):
+                    temp = round(float(t), 1)
 
     sensors = {
         ent: {"state": bool((s := hass.states.get(ent)) and s.state == "on")}
