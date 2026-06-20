@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Orphan-branch guard: refuse to push to a feat/rcN branch whose PR origin/main has
+# already merged. New commits on a merged branch never reach a release and leave the
+# manifest equal to main (the trap that keeps biting). Branch fresh + cherry-pick instead.
+set -euo pipefail
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+[ "$branch" = "main" ] && exit 0
+
+git fetch -q origin main 2>/dev/null || exit 0
+
+if git log origin/main --merges --pretty=%s 2>/dev/null | grep -qE "from .*/${branch}\$"; then
+  cat >&2 <<EOF
+
+  ✗ push blocked: origin/main already merged '${branch}' — this branch is spent.
+    Commits pushed here orphan (won't reach a release) and leave manifest == main.
+
+    Fix:
+      git checkout -b feat/rc<N+1> origin/main
+      git cherry-pick <your commits>
+      # bump manifest.json (and ENGINE_VERSION if firmware changed), then push the new branch.
+
+EOF
+  exit 1
+fi
+exit 0
