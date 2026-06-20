@@ -976,13 +976,13 @@ export class PimoroniUnicornPanel extends LitElement {
   }
   private async installWidget(id: string) {
     await this.hass.callWS({ type: "pimoroni_unicorn/fw_install", entry_id: this.entryId, widget_id: id });
-    this.status = `Installing ${id}… device will reboot.`;
+    this.status = `Installing ${id}…`;
     this.reloadCatalogSoon();
   }
 
   private async removeWidgetUnit(id: string) {
     await this.hass.callWS({ type: "pimoroni_unicorn/fw_remove", entry_id: this.entryId, widget_id: id });
-    this.status = `Removing ${id}… device will reboot.`;
+    this.status = `Removing ${id}…`;
     this.reloadCatalogSoon();
   }
 

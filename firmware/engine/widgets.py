@@ -103,6 +103,11 @@ def _discover_installed():
 _discover_installed()
 
 
+def reload():
+    """Re-scan unit dirs to register newly installed widgets/overlays (no reboot)."""
+    _discover_installed()
+
+
 def widget_box(widget_id, cfg):
     """Return (w, h) bounding box for a widget instance, honouring variant."""
     meta = WIDGET_REGISTRY.get(widget_id)

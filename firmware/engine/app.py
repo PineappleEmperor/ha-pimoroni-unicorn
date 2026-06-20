@@ -245,6 +245,28 @@ def _show_ota_screen(label, n, total):
     unicorn.update(graphics)
 
 
+def _ota_needs_reboot(paths):
+    """True if any written path is the engine or an update to an already-loaded module.
+
+    New content (widget/overlay/font/json not yet imported) hot-loads without a reboot;
+    engine files and updates to live modules can't be hot-swapped, so they reboot.
+    """
+    import sys  # noqa: PLC0415
+    for p in paths:
+        if p.startswith("/engine/") or p in ("/main.py", "/boot.py"):
+            return True
+        base = p.rsplit("/", 1)[-1]
+        if base.startswith("widget_"):
+            if base[7:].rsplit(".", 1)[0] in widgets.WIDGET_REGISTRY:
+                return True
+        elif base.startswith("overlay_") and base.endswith(".py"):
+            if base[8:-3] in widgets.OVERLAY_REGISTRY:
+                return True
+        elif base.endswith(".py") and base[:-3] in sys.modules:
+            return True  # a font/module already imported into the running engine
+    return False
+
+
 def _run_ota(payload):
     global _ota_pending
     _ota_pending = None  # one-shot: don't retry-loop on failure, report it instead
@@ -319,13 +341,21 @@ def _run_ota(payload):
     except Exception:
         pass
     if written:
-        try:
-            with open("/ota_pending", "w") as f:
-                json.dump(written, f)
-        except OSError:
-            pass
-        time.sleep(1)
-        machine.reset()
+        if _ota_needs_reboot(written):
+            try:
+                with open("/ota_pending", "w") as f:
+                    json.dump(written, f)
+            except OSError:
+                pass
+            time.sleep(1)
+            machine.reset()
+        else:
+            # New content only — register it live and tell HA, no reboot.
+            try:
+                widgets.reload()
+            except Exception as e:
+                print("hot-load failed:", e)
+            _pub(TOPIC_FW_MANIFEST, json.dumps(_fw_manifest()), retain=True)
 
 
 def _ota_commit():
@@ -572,15 +602,29 @@ def on_message(topic, message):
             return
 
         if topic_str == TOPIC_FW_REMOVE:
+            removed = []
             try:
                 data = json.loads(message)
                 for path in data.get("files", []):
                     try:
                         uos.remove(path)
+                        removed.append(path)
                     except Exception:
                         pass
             except Exception:
                 pass
+            hot = bool(removed)
+            for path in removed:
+                base = path.rsplit("/", 1)[-1]
+                if base.startswith("widget_"):
+                    widgets.WIDGET_REGISTRY.pop(base[7:].rsplit(".", 1)[0], None)
+                elif base.startswith("overlay_") and base.endswith(".py"):
+                    widgets.OVERLAY_REGISTRY.pop(base[8:-3], None)
+                else:
+                    hot = False  # font/engine file -> reboot to be safe
+            if hot:
+                _pub(TOPIC_FW_MANIFEST, json.dumps(_fw_manifest()), retain=True)
+                return
             time.sleep(1)
             machine.reset()
             return
