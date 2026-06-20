@@ -24,7 +24,7 @@ DEFAULT_LAYOUTS = {
             {"id": "date",        "x": 0,  "y": 0,  "cfg": {"format": "weekday", "font": "font5x9", "color": [200, 0, 0]}},
             {"id": "date",        "x": 21, "y": 0,  "cfg": {"format": "day", "font": "font5x9", "color": [255, 255, 255]}},
             {"id": "clock",       "x": 4,  "y": 12, "cfg": {"font": "big", "color": [255, 255, 255]}},
-            {"id": "weather",     "x": 0,  "y": 24, "cfg": {}},
+            {"id": "weather",     "x": 0,  "y": 24, "cfg": {"size": 8}},
             {"id": "temperature", "x": 17, "y": 26, "cfg": {"unit": "C"}},
         ],
         "overlays": [],
@@ -32,7 +32,7 @@ DEFAULT_LAYOUTS = {
     "stellar": {
         "name": "default", "model": "stellar", "grid": 1,
         "widgets": [
-            {"id": "weather", "x": 0, "y": 0,  "cfg": {}},
+            {"id": "weather", "x": 0, "y": 0,  "cfg": {"size": 8}},
             {"id": "date",    "x": 9, "y": 2,  "cfg": {"format": "day", "font": "font3x5", "color": [255, 255, 255]}},
             {"id": "clock",   "x": 0, "y": 10, "cfg": {"font": "digits", "color": [255, 255, 255]}},
         ],
@@ -44,7 +44,7 @@ DEFAULT_LAYOUTS = {
         "widgets": [
             {"id": "date",        "x": 0, "y": 1,  "cfg": {"format": "day", "font": "font5x9", "color": [200, 0, 0]}},
             {"id": "clock",       "x": 0, "y": 13, "cfg": {"font": "big", "layout": "stacked", "color": [255, 255, 255]}},
-            {"id": "weather",     "x": 1, "y": 33, "cfg": {}},
+            {"id": "weather",     "x": 1, "y": 33, "cfg": {"size": 8}},
             {"id": "temperature", "x": 0, "y": 45, "cfg": {"unit": "none"}},
         ],
         "overlays": [],

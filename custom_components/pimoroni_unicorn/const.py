@@ -59,6 +59,7 @@ OTA_SOURCE_FILES = {
     "icons":               ("icons.py",                "/engine/icons.py"),
     "sounds":              ("sounds.py",               "/engine/sounds.py"),
     "weather_fx":          ("weather_fx.py",           "/engine/weather_fx.py"),
+    "weather_icons":       ("weather_icons.py",        "/engine/weather_icons.py"),
     "bitfonts":            ("bitfonts.py",             "/engine/bitfonts.py"),
     "widget_clock":        ("widget_clock.py",         "/widgets/widget_clock.py"),
     "widget_calendar":     ("widget_calendar.py",      "/widgets/widget_calendar.py"),
