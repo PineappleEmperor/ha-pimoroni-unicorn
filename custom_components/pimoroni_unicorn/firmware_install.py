@@ -77,6 +77,15 @@ async def async_install_widget(hass: HomeAssistant, entry, widget_id: str) -> bo
     return await _stage_and_ota(hass, entry, files)
 
 
+async def async_install_font(hass: HomeAssistant, entry, font_name: str) -> bool:
+    """Stage a single font unit and trigger an OTA download (hot-loaded, no reboot)."""
+    unit = marketplace.font_unit(font_name)
+    if unit is None:
+        return False
+    files = [(marketplace.device_path(unit["device_file"]), unit["path"].read_text())]
+    return await _stage_and_ota(hass, entry, files)
+
+
 async def async_deploy_layout(hass: HomeAssistant, entry, layout: dict) -> bool:
     """Install a layout's missing widget/font deps, then push it (retained) to the device."""
     custom_dir = marketplace.widgets_dir(hass.config.config_dir)

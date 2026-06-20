@@ -11,7 +11,7 @@ interface Layout { name?: string; model?: string; grid?: number; widgets: Widget
 interface Device { entry_id: string; device_id: string; model: string; name: string; active_layout?: string; }
 interface CatalogWidget { id: string; label: string; kind: string; requires: string[]; device_file: string; hash: string; status: string; thumb?: string; }
 interface ContentUnit { id: string; label: string; kind: string; compat: string[]; requires: string[]; screens: number; compatible: boolean; thumb?: string; }
-interface FontSpec { name: string; label: string; kind: "alpha" | "digits"; w: number; h: number; builtin?: boolean; sample: string; }
+interface FontSpec { name: string; label: string; kind: "alpha" | "digits"; w: number; h: number; builtin?: boolean; sample: string; installed?: boolean; device_file?: string; }
 interface FwManifest { engine_version?: string; files?: Record<string, string>; }
 
 const PREVIEW_TARGET_PX = 560;
@@ -339,7 +339,9 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private async loadFonts() {
     try {
-      const r = await this.hass.callWS({ type: "pimoroni_unicorn/fonts" });
+      const q: Record<string, unknown> = { type: "pimoroni_unicorn/fonts" };
+      if (this.entryId) q.entry_id = this.entryId;
+      const r = await this.hass.callWS(q);
       this.fonts = r.fonts ?? [];
       this.refreshFontPreviews();
     } catch { /* font catalog optional */ }
@@ -423,6 +425,7 @@ export class PimoroniUnicornPanel extends LitElement {
     this.entryId = entryId;
     await this.loadCaps({ entry_id: entryId });
     this.loadIcons();
+    this.loadFonts();  // refresh per-device font install state
     const active = dev.active_layout ? this.stored[dev.active_layout] : undefined;
     this.loadLayout(active ?? this.defaultLayout);
   }
@@ -974,6 +977,12 @@ export class PimoroniUnicornPanel extends LitElement {
   private reloadCatalogSoon() {
     for (const ms of [8000, 15000, 25000]) setTimeout(() => this.loadCatalog(), ms);
   }
+  private async installFont(name: string) {
+    if (!this.entryId) return;
+    await this.hass.callWS({ type: "pimoroni_unicorn/font_install", entry_id: this.entryId, font: name });
+    this.status = `Installing font ${name}…`;
+    for (const ms of [2000, 5000]) setTimeout(() => this.loadFonts(), ms);  // hot-loads, no reboot
+  }
   private async installWidget(id: string) {
     await this.hass.callWS({ type: "pimoroni_unicorn/fw_install", entry_id: this.entryId, widget_id: id });
     this.status = `Installing ${id}…`;
@@ -1108,7 +1117,7 @@ export class PimoroniUnicornPanel extends LitElement {
       `)}
 
       ${this._section("fonts", "Fonts", this.fonts.length, html`
-        <p class="hint">Type below to preview live in every font. Digit fonts (clock faces) show only numerals; alpha fonts cover A–Z. Fonts install automatically with any widget that needs them.</p>
+        <p class="hint">Type below to preview live in every font. Digit fonts (clock faces) show only numerals; alpha fonts cover A–Z. Fonts install automatically with any widget that needs them, or install one directly onto the selected device here (no reboot).</p>
         <div class="panelrow">
           <label>Preview text</label>
           <input style="width:220px" placeholder="type to preview…" .value=${this.fontText}
@@ -1120,6 +1129,11 @@ export class PimoroniUnicornPanel extends LitElement {
           ${this.fontPngs[f.name]
             ? html`<img class="fprev" src="data:image/png;base64,${this.fontPngs[f.name]}" />`
             : html`<div class="fprev"></div>`}
+          ${this.entryId && !f.builtin
+            ? (f.installed
+                ? html`<span class="badge ok">installed</span>`
+                : html`<button @click=${() => this.installFont(f.name)}>Install</button>`)
+            : ""}
         </div>`)}
       `)}
       <p class="hint">Deploying a page installs any widgets/fonts it needs over the air first, then pushes it; the device reboots if files changed.</p>
