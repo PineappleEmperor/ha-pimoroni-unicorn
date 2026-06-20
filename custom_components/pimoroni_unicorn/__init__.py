@@ -20,6 +20,7 @@ from homeassistant.components.persistent_notification import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import HomeAssistantError
+import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
     async_call_later,
@@ -62,6 +63,9 @@ from .screens import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Config-entry-only integration (no YAML); declare an empty domain schema for hassfest.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 SOLAR_INTERVAL        = timedelta(seconds=10)
 TIME_INTERVAL         = timedelta(minutes=5)
