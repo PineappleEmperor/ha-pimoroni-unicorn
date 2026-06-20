@@ -157,14 +157,22 @@ def _new_graphics(model: str, orientation: int = 0):
     return m, g, width, height
 
 
-def _encode(g, width, height) -> str:
+def _encode(g, width, height, scale: int = 1) -> str:
     from PIL import Image
 
     img = Image.new("RGB", (width, height))
     img.putdata(g.buffer)
+    if scale > 1:
+        img = img.resize((width * scale, height * scale), Image.Resampling.NEAREST)  # crisp pixels
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode()
+
+
+def fit_scale(model: str, orientation: int = 0, target: int = 512) -> int:
+    """Integer upscale factor so the longest side is ~target px (for the dashboard image)."""
+    width, height = oriented_dims(model, orientation)
+    return max(1, target // max(width, height))
 
 
 def _prime_icons(m, installed: dict | None) -> None:
@@ -194,7 +202,8 @@ def map_owm(code) -> str:
 
 
 def render_layout_png(model: str, layout: dict, installed_icons: dict | None = None,
-                      elapsed_ms: int = 0, orientation: int = 0, state: dict | None = None) -> str:
+                      elapsed_ms: int = 0, orientation: int = 0, state: dict | None = None,
+                      scale: int = 1) -> str:
     """Render a layout for a model; pass `state` to mirror the device's live values."""
     m, g, width, height = _new_graphics(model, orientation)
     _prime_icons(m, installed_icons)
@@ -206,7 +215,7 @@ def render_layout_png(model: str, layout: dict, installed_icons: dict | None = N
             ds.setdefault(ent, {"state": True})  # mock 'on' so sensor widgets preview
     state["display_sensors"] = ds
     m.widgets.render_layout(g, layout, state)
-    return _encode(g, width, height)
+    return _encode(g, width, height, scale)
 
 
 def render_layout_frames(model: str, layout: dict, installed_icons: dict | None = None,
