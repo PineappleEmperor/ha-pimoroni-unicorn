@@ -83,6 +83,8 @@ class PimoroniUnicornImage(ImageEntity):
             or render_service.default_layout(model, orientation)
         icons = await lametric.async_get_registry(self.hass)
         state = live_state(self.hass, self._entry)
+        scale = render_service.fit_scale(model, orientation)
         png_b64 = await self.hass.async_add_executor_job(
-            render_service.render_layout_png, model, lay, icons, state["elapsed_ms"], orientation, state)
+            render_service.render_layout_png, model, lay, icons,
+            state["elapsed_ms"], orientation, state, scale)
         return base64.b64decode(png_b64)

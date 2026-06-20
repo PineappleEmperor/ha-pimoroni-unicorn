@@ -48,7 +48,20 @@ from weather_fx import init_weather_drops, map_owm_code
 
 
 machine.freq(200_000_000)
-_RESET_CAUSE = machine.reset_cause()  # why the device last rebooted (WDT/power/soft) — for diagnostics
+
+
+def _reset_cause_label():
+    """Human label for the last reset, using machine's own constants (raw int if unknown)."""
+    rc = machine.reset_cause()
+    for name, label in (("PWRON_RESET", "Power-on"), ("HARD_RESET", "Hard reset"),
+                        ("WDT_RESET", "Watchdog"), ("DEEPSLEEP_RESET", "Deep sleep"),
+                        ("SOFT_RESET", "Soft reset"), ("BROWNOUT_RESET", "Brownout")):
+        if getattr(machine, name, None) == rc:
+            return label
+    return str(rc)
+
+
+_RESET_CAUSE = _reset_cause_label()  # why the device last rebooted — for diagnostics
 graphics = PicoGraphics(display=DISPLAY, pen_type=PEN_RGB888)
 graphics.set_font("bitmap6")
 # All render code draws into the logical (as-mounted) surface; unicorn.update() always
@@ -280,6 +293,15 @@ def _draw_ota_progress(frac, phase_ms):
     unicorn.update(graphics)
 
 
+_OTA_MIN_MS = 2500  # floor the progress sweep so it's visible even on a tiny/instant update
+
+
+def _ota_paced_frac(work, t0):
+    """Progress fraction paced by time so the sweep stays visible; capped below full until done."""
+    elapsed = time.ticks_diff(time.ticks_ms(), t0)
+    return max(work, min(0.95, elapsed / _OTA_MIN_MS))
+
+
 def _ota_needs_reboot(paths):
     """True if any written path is the engine or an update to an already-loaded module.
 
@@ -334,11 +356,12 @@ def _run_ota(payload):
     written   = []
     failed    = []
     last_draw = 0
+    t0 = time.ticks_ms()
     for i, (url, path) in enumerate(norm):
         if _wdt is not None:
             _wdt.feed()
-        frac = i / total if total else 0
-        _draw_ota_progress(frac, time.ticks_ms())
+        work = i / total if total else 0
+        _draw_ota_progress(_ota_paced_frac(work, t0), time.ticks_ms())
         parent = path.rsplit("/", 1)[0]
         if parent:
             try:
@@ -361,7 +384,7 @@ def _run_ota(payload):
                         now = time.ticks_ms()
                         if time.ticks_diff(now, last_draw) >= 80:
                             last_draw = now
-                            _draw_ota_progress(frac, now)
+                            _draw_ota_progress(_ota_paced_frac(work, t0), now)
                 r.close()
                 valid = True
                 if path.endswith(".py"):
@@ -397,6 +420,14 @@ def _run_ota(payload):
                 uos.remove(tmp)
             except Exception:
                 pass
+    while True:
+        elapsed = time.ticks_diff(time.ticks_ms(), t0)
+        if elapsed >= _OTA_MIN_MS:
+            break
+        if _wdt is not None:
+            _wdt.feed()
+        _draw_ota_progress(elapsed / _OTA_MIN_MS, time.ticks_ms())
+        time.sleep_ms(40)
     _draw_ota_progress(1.0, time.ticks_ms())
     failed = [p for (_u, p) in norm if p not in written]
     try:
@@ -456,7 +487,7 @@ def _file_hash(path):
     return ubinascii.hexlify(h.digest()).decode()[:16]
 
 
-_MANIFEST_DIRS = ("/engine", "/engine/animations", "/widgets", "/assets/fonts", "/icons")
+_MANIFEST_DIRS = ("/", "/engine", "/engine/animations", "/widgets", "/assets/fonts", "/icons")
 
 
 def _cpu_temp():
@@ -526,7 +557,7 @@ def _fw_manifest():
         for name in names:
             if (name.endswith(".py") or name.endswith(".json")) and name != "secrets.py":
                 try:
-                    files[name] = _file_hash(d + "/" + name)
+                    files[name] = _file_hash(("" if d == "/" else d) + "/" + name)
                 except Exception:
                     pass
     return {"engine_version": ENGINE_VERSION, "files": files}
