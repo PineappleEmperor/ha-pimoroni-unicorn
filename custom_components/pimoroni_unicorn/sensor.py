@@ -1,6 +1,7 @@
 """Sensor platform: current page + (disabled-by-default) device diagnostics."""
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from propcache.api import cached_property
 
@@ -14,15 +15,23 @@ from homeassistant.const import (
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     EntityCategory,
     UnitOfInformation,
-    UnitOfTime,
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
+from homeassistant.util import dt as dt_util
 
 from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN, PUConfigEntry
+
+
+def _boot_time(diag: dict, manifest: dict) -> datetime | None:
+    """Boot timestamp = now - uptime; rendered relatively by the HA frontend."""
+    s = diag.get("uptime_s")
+    if s is None:
+        return None
+    return dt_util.utcnow() - timedelta(seconds=int(s))
 
 PARALLEL_UPDATES = 0
 
@@ -30,7 +39,7 @@ PARALLEL_UPDATES = 0
 @dataclass(frozen=True, kw_only=True)
 class PUSensorDescription(SensorEntityDescription):
     """Sensor description with a value function over (diag, manifest)."""
-    value_fn: Callable[[dict, dict], StateType]
+    value_fn: Callable[[dict, dict], StateType | datetime]
     attr_fn: Callable[[dict, dict], dict] | None = None
 
 
@@ -47,14 +56,17 @@ SENSORS: tuple[PUSensorDescription, ...] = (
     PUSensorDescription(
         key="free_mem", translation_key="free_mem",
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
+        suggested_unit_of_measurement=UnitOfInformation.MEGABYTES,
+        suggested_display_precision=2, state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
         value_fn=lambda diag, manifest: diag.get("free_mem"),
     ),
     PUSensorDescription(
         key="uptime", translation_key="uptime",
-        native_unit_of_measurement=UnitOfTime.SECONDS,
+        device_class=SensorDeviceClass.TIMESTAMP,
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
-        value_fn=lambda diag, manifest: diag.get("uptime_s"),
+        value_fn=_boot_time,
     ),
     PUSensorDescription(
         key="engine_version", translation_key="engine_version",
@@ -123,7 +135,7 @@ class PimoroniUnicornSensor(SensorEntity):
             manufacturer="Pimoroni", model=model)
 
     @cached_property
-    def native_value(self) -> StateType:
+    def native_value(self) -> StateType | datetime:
         """Compute the value from the cached diag + firmware manifest payloads."""
         data = self._entry.runtime_data or {}
         return self._desc.value_fn(data.get("diag") or {}, data.get("fw_manifest") or {})
