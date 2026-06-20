@@ -253,9 +253,11 @@ def _ota_needs_reboot(paths):
     """
     import sys  # noqa: PLC0415
     for p in paths:
+        base = p.rsplit("/", 1)[-1]
+        if base.startswith("monospace_") and base.endswith(".py"):
+            continue  # digit-font unit -> hot via drawing.reload_fonts()
         if p.startswith("/engine/") or p in ("/main.py", "/boot.py"):
             return True
-        base = p.rsplit("/", 1)[-1]
         if base.startswith("widget_"):
             if base[7:].rsplit(".", 1)[0] in widgets.WIDGET_REGISTRY:
                 return True
@@ -352,6 +354,8 @@ def _run_ota(payload):
         else:
             # New content only — register it live and tell HA, no reboot.
             try:
+                if any(p.rsplit("/", 1)[-1].startswith("monospace_") for p in written):
+                    drawing.reload_fonts()
                 widgets.reload()
             except Exception as e:
                 print("hot-load failed:", e)
