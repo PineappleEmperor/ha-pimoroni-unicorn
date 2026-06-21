@@ -15,8 +15,12 @@ elif MODEL == "stellar":
     from picographics import DISPLAY_STELLAR_UNICORN as DISPLAY
     from stellar import StellarUnicorn as _Cls
     MODEL_NAME = "Stellar Unicorn"
-    Channel    = None
-    HAS_AUDIO  = False
+    try:
+        from stellar import Channel
+        HAS_AUDIO = True
+    except ImportError:
+        Channel    = None
+        HAS_AUDIO  = False
 elif MODEL == "unicorn_pack":
     # Unicorn Pack uses picounicorn, not PicoGraphics — main.py needs adaptation.
     from picounicorn import PicoUnicorn as _Cls
