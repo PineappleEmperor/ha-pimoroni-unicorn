@@ -226,6 +226,8 @@ export class PimoroniUnicornPanel extends LitElement {
     .wlist li.dragover { outline: 2px solid var(--pu-primary); outline-offset: -2px; }
     .wlist li .drag { cursor: grab; color: var(--secondary-text-color, #79747e); user-select: none; line-height: 1; }
     .wlist li .drag:active { cursor: grabbing; }
+    .wlist li .wlx { border: none; background: none; color: var(--secondary-text-color, #79747e); font-size: 20px; line-height: 1; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; padding: 0; display: grid; place-items: center; flex: none; }
+    .wlist li .wlx:hover { background: color-mix(in srgb, var(--error-color, #ba1a1a) 16%, transparent); color: var(--error-color, #ba1a1a); }
     .panelrow { display: flex; gap: 10px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
     .panelrow > label:first-child { min-width: 64px; }
     h3 { margin: 4px 0 14px; font-size: 16px; font-weight: 500; letter-spacing: .1px; }
@@ -974,6 +976,8 @@ export class PimoroniUnicornPanel extends LitElement {
                 <input type="checkbox" .checked=${w.enabled !== false} title="Show / hide"
                   @click=${(e: Event) => { e.stopPropagation(); w.enabled = (e.target as HTMLInputElement).checked; this.edited(); }} />
                 <span class="grow">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span>
+                <button class="wlx" title="Delete layer"
+                  @click=${(e: Event) => { e.stopPropagation(); this.removeWidget(i); }}>×</button>
               </li>`;
             })}
           </ul>
