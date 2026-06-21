@@ -314,5 +314,11 @@
     "no_notify_content": {
       "message": "Provide at least a message, icon, or effect."
     }
+  },
+  "issues": {
+    "reflash_required": {
+      "title": "Pimoroni Unicorn needs a USB reflash",
+      "description": "The engine on {device} predates the foldered file layout (1.1.0) and can't update over the air. Reflash the firmware/ tree once via USB (Thonny); OTA works afterwards."
+    }
   }
 }

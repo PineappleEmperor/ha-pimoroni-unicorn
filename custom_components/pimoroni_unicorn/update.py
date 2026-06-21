@@ -8,6 +8,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+import homeassistant.helpers.issue_registry as ir
 
 from .const import (
     CONF_DEVICE_ID,
@@ -93,6 +94,15 @@ class PimoroniUnicornUpdate(UpdateEntity):
             "⚠ This engine changes the on-device file layout and must be applied by a one-time "
             "**USB reflash** (Thonny), not OTA. Copy the firmware/ tree to the device."
             if self._reflash else None)
+
+        issue_id = f"reflash_required_{self._device_id}"
+        if self._reflash:
+            ir.async_create_issue(
+                self.hass, DOMAIN, issue_id, is_fixable=False,
+                severity=ir.IssueSeverity.WARNING, translation_key="reflash_required",
+                translation_placeholders={"device": self._device_id})
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     async def async_added_to_hass(self) -> None:
         """Seed installed version + refresh when a new device manifest/status arrives."""

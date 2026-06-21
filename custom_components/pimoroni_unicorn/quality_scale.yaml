@@ -62,8 +62,7 @@ rules:
   discovery-update-info:
     status: exempt
     comment: MQTT transport keyed on device_id; no network host/IP to refresh on rediscovery.
-  repair-issues:
-    status: todo
+  repair-issues: done
   docs-use-cases: done
   docs-supported-devices: done
   docs-supported-functions: done
