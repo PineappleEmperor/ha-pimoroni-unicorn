@@ -604,3 +604,11 @@ max-complexity = 25
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 property-decorators = ["propcache.api.cached_property"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The firmware harness is plain sync tests; the HA-integration pytest plugin injects
+# autouse async fixtures meant for HA tests and conflicts under pytest 9. Disable it
+# here (this repo's test suite is the firmware harness). Re-enable per-invocation if
+# HA integration tests are added later.
+addopts = "-p no:homeassistant"
