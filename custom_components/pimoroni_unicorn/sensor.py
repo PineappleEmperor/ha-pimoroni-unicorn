@@ -34,7 +34,7 @@ class PUSensorDescription(SensorEntityDescription):
 
 SENSORS: tuple[PUSensorDescription, ...] = (
     PUSensorDescription(
-        key="page", translation_key="page", icon="mdi:view-carousel",
+        key="page", translation_key="page",
         value_fn=lambda diag, manifest: diag.get("page"),
         attr_fn=lambda diag, manifest: {
             "index": diag.get("screen_index"),
@@ -43,7 +43,7 @@ SENSORS: tuple[PUSensorDescription, ...] = (
         },
     ),
     PUSensorDescription(
-        key="free_mem", translation_key="free_mem", icon="mdi:memory",
+        key="free_mem", translation_key="free_mem",
         native_unit_of_measurement=UnitOfInformation.KILOBYTES,
         suggested_display_precision=1, state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
@@ -69,17 +69,17 @@ SENSORS: tuple[PUSensorDescription, ...] = (
         value_fn=lambda diag, manifest: diag.get("rssi"),
     ),
     PUSensorDescription(
-        key="ip_address", translation_key="ip_address", icon="mdi:ip-network",
+        key="ip_address", translation_key="ip_address",
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
         value_fn=lambda diag, manifest: diag.get("ip"),
     ),
     PUSensorDescription(
-        key="reset_cause", translation_key="reset_cause", icon="mdi:restart-alert",
+        key="reset_cause", translation_key="reset_cause",
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
         value_fn=lambda diag, manifest: diag.get("reset_cause"),
     ),
     PUSensorDescription(
-        key="orientation", translation_key="orientation", icon="mdi:screen-rotation",
+        key="orientation", translation_key="orientation",
         native_unit_of_measurement="°",
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
         value_fn=lambda diag, manifest: diag.get("orientation"),

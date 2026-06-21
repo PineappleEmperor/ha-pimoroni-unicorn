@@ -1,0 +1,18 @@
+{
+  "entity": {
+    "sensor": {
+      "page": { "default": "mdi:view-carousel" },
+      "free_mem": { "default": "mdi:memory" },
+      "ip_address": { "default": "mdi:ip-network" },
+      "reset_cause": { "default": "mdi:restart-alert" },
+      "orientation": { "default": "mdi:screen-rotation" }
+    }
+  },
+  "services": {
+    "send_notification": { "service": "mdi:bell-ring" },
+    "dismiss_notification": { "service": "mdi:bell-off" },
+    "push_firmware": { "service": "mdi:cloud-upload" },
+    "show_page": { "service": "mdi:page-next" },
+    "set_playlist": { "service": "mdi:playlist-play" }
+  }
+}
