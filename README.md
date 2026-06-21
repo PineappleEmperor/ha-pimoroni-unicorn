@@ -63,8 +63,8 @@ After setup, open **Configure** to set optional data sources, currently these co
 
 **Settings → Devices & Services → Pimoroni Unicorn → ⋮ → Delete**
 
-Deleting the config entry removes its entities and the `notify.pimoroni_unicorn_<device_id>`
-service; the sidebar panel is dropped once no remaining device wants it. Stored layouts,
+Deleting the config entry removes its entities; the sidebar panel is dropped once no
+remaining device wants it. Stored layouts,
 playlists and installed marketplace icons/fonts persist in HA storage (shared across
 devices) and are restored if you add the integration again — uninstall the integration via
 HACS to clear them fully. Nothing is left in `configuration.yaml`.
@@ -114,30 +114,28 @@ marketplace* below.
 
 ### Notifications
 
-Two front doors to the same notification:
-
-- **`notify.pimoroni_unicorn_<device_id>`** — the canonical surface. Standard HA notify, works with `notify.*` blueprints/scripts. Pass the message directly and the rich options under `data:` (see fields below).
-- **`pimoroni_unicorn.send_notification`** — a guided builder with a sectioned form (basics, plus collapsed Appearance and Behaviour) and a device picker. Same result as the entity; exists because HA can only render a form for a custom action, not for an entity's free-form `data:`.
+**`pimoroni_unicorn.send_notification`** is the single notification surface — a
+device-targeted custom action with a guided, sectioned form (basics, plus collapsed
+Appearance and Behaviour) in the UI, and fully scriptable from YAML automations. It picks
+the device and carries the rich options as flat fields (see below).
 
 To clear the current notification, call **`pimoroni_unicorn.dismiss_notification`**; pass `all: true` to also empty the queue.
 
 ```yaml
-action: notify.send_message
-target:
-  entity_id: notify.pimoroni_unicorn_1
+action: pimoroni_unicorn.send_notification
 data:
+  device_id: 1a2b3c…        # the HA device
   message: "Garage open"
-  data:
-    icon: home
-    effect: rainbow
-    color: [0, 255, 0]
-    duration: 8
+  icon: garage          # name of an installed icon, or a LaMetric gallery code
+  effect: rainbow
+  color: [0, 255, 0]
+  duration: 8
 ```
 
 A notification with an `icon` shows it in a left panel beside the text; an `effect` plays a full-screen background animation.
 
 **Effects:** `rainbow`, `fire`, `matrix`, `scanner`, `comet`, `snow`, `confetti`, `flash`, `pulse`, `bounce`, `supercomputer`, `retroprompt`
-**Sounds** (Galactic/Cosmic only): `beep`, `chime`, `alert`
+**Sounds** (Galactic, Cosmic, Stellar — all have onboard audio): `beep`, `chime`, `alert`
 
 `data:` fields: `icon`, `effect`, `effect_speed`, `sound`, `color`, `bg_color`, `duration`, `scroll_speed`, `entrance`, `outlined`, plus behaviour — `hold` (stay until dismissed/replaced), `repeat` (full scroll passes), `stack` (off = replace immediately), `wakeup` (show while asleep). Duration auto-extends so overflowing text completes its scroll.
 
@@ -186,7 +184,7 @@ Pin a specific page on a device (by `index` or `name`), or `clear` the pin to re
 
 ### `pimoroni_unicorn.set_playlist`
 
-Define a device's playlist from named `pages` (in order), with `dwell` seconds and a `transition`. The `notify.pimoroni_unicorn_<device_id>` entity remains the canonical notification surface.
+Define a device's playlist from named `pages` (in order), with `dwell` seconds and a `transition`.
 
 
 ## Development

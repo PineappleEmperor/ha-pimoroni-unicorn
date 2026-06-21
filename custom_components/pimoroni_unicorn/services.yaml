@@ -10,23 +10,7 @@ send_notification:
         text: {}
     icon:
       selector:
-        select:
-          custom_value: true
-          options:
-            - battery_full
-            - battery_half
-            - battery_low
-            - battery_charging
-            - solar
-            - alert
-            - home
-            - lock
-            - unlock
-            - thermometer
-            - sun
-            - cloud
-            - rain
-            - check
+        text: {}
     effect:
       selector:
         select:

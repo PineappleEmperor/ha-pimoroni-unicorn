@@ -67,10 +67,12 @@ firmware draw code (build shapes from pixels instead), or device and preview div
 
 ## Notifications
 
-`notify.pimoroni_unicorn_<device_id>` is the canonical surface (rich options via `data:`).
-`pimoroni_unicorn.send_notification` is a guided form builder for the same payload (kept
-because HA only renders a form for a custom action, not an entity's `data:`). The payload
-model is heavily inspired by AWTRIX.
+`pimoroni_unicorn.send_notification` is the single surface — a device-targeted custom
+action (guided form in the UI, fully YAML-scriptable for automations). The per-device
+`notify.<device_id>` service was removed: HA's modern `NotifyEntity` platform only carries
+`message`/`title` (no `data:`), so it couldn't express the rich payload, and a hand-rolled
+notify service duplicated the custom action with no UI form. The payload model is heavily
+inspired by AWTRIX.
 
 ## Conventions
 

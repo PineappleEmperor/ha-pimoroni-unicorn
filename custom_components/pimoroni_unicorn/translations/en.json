@@ -149,7 +149,7 @@
         },
         "icon": {
           "name": "Icon",
-          "description": "Built-in icon name, an installed LaMetric icon name, or its gallery code."
+          "description": "Name of an icon installed on the device, or a LaMetric gallery code. Install icons from the Unicorn panel or Configure → Install LaMetric icon."
         },
         "effect": {
           "name": "Effect",
