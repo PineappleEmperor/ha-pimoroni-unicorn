@@ -86,6 +86,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private model = "galactic";
   @state() private layout: Layout = { widgets: [] };
   @state() private caps: WidgetCap[] = [];
+  @state() private widgetThumbs: Record<string, string> = {};
   @state() private overlayCaps: OverlayCap[] = [];
   @state() private defaultLayout: Layout = { widgets: [] };
   @state() private stored: Record<string, Layout> = {};
@@ -260,6 +261,11 @@ export class PimoroniUnicornPanel extends LitElement {
     .addchips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
     .addchip { font-size: 14px; font-weight: 500; line-height: 20px; padding: 9px 14px; min-height: 40px; border-radius: 20px; border: 1px solid var(--pu-outline); background: transparent; color: inherit; cursor: pointer; }
     .addchip:hover { background: color-mix(in srgb, var(--pu-primary) 12%, transparent); border-color: var(--pu-primary); color: var(--pu-primary); }
+    .addgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin: 6px 0 10px; }
+    .addtile { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border-radius: 12px; border: 1px solid var(--pu-outline); background: transparent; color: inherit; cursor: pointer; transition: background .12s, border-color .12s; }
+    .addtile:hover { background: color-mix(in srgb, var(--pu-primary) 12%, transparent); border-color: var(--pu-primary); }
+    .addthumb { width: 100%; height: 40px; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; }
+    .addtile-label { font-size: 12px; font-weight: 500; line-height: 16px; text-align: center; }
     .targets { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
     .chk { display: inline-flex; gap: 4px; align-items: center; font-weight: 400; }
     .catalog { list-style: none; padding: 0; margin: 0; max-width: 680px; }
@@ -441,7 +447,15 @@ export class PimoroniUnicornPanel extends LitElement {
     this.model = caps.model;
     this.orientation = caps.orientation ?? 0;
     this.dims = (caps.dims as Size) ?? MODELS[this.model] ?? [53, 11];
+    this.loadWidgetThumbs();
     await this.refreshStored();
+  }
+
+  private async loadWidgetThumbs(): Promise<void> {
+    try {
+      const r = await this.hass.callWS({ type: "pimoroni_unicorn/widget_thumbs", model: this.model });
+      this.widgetThumbs = (r as { thumbs?: Record<string, string> }).thumbs ?? {};
+    } catch { /* thumbnails are optional polish */ }
   }
 
   private async selectDevice(entryId: string): Promise<void> {
@@ -982,8 +996,13 @@ export class PimoroniUnicornPanel extends LitElement {
             })}
           </ul>
           ${this.layout.widgets.length > 1 ? html`<p class="hint">Top of the list draws on top.</p>` : ""}
-          ${addable.length ? html`<div class="addchips">
-            ${addable.map((c) => html`<button class="addchip" @click=${() => this.addWidget(c.id)} title="Add ${c.label}">+ ${c.label}</button>`)}
+          ${addable.length ? html`<div class="addgrid">
+            ${addable.map((c) => html`<button class="addtile" @click=${() => this.addWidget(c.id)} title="Add ${c.label}">
+              ${this.widgetThumbs[c.id]
+                ? html`<img class="addthumb" src="data:image/png;base64,${this.widgetThumbs[c.id]}" alt="" />`
+                : html`<div class="addthumb"></div>`}
+              <span class="addtile-label">${c.label}</span>
+            </button>`)}
           </div>` : ""}
           <h3>Overlays</h3>
           ${this.overlayCaps.map((o) => html`<div class="panelrow"><label>
