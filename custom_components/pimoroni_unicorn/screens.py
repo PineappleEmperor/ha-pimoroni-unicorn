@@ -5,9 +5,11 @@ import voluptuous as vol
 
 from homeassistant.components.mqtt import async_publish
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 
 from . import layout
+from .const import DOMAIN
 from .notify import _resolve_entry
 
 SHOW_PAGE_SCHEMA = vol.Schema({
@@ -30,7 +32,7 @@ def make_show_page_handler(hass: HomeAssistant):
     async def _handle(call):
         _, device_id = _resolve_entry(hass, call.data["device_id"])
         if not device_id:
-            return
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="no_device")
         if call.data.get("clear"):
             payload = {"clear": True}
         elif "index" in call.data:
@@ -38,7 +40,7 @@ def make_show_page_handler(hass: HomeAssistant):
         elif "name" in call.data:
             payload = {"name": call.data["name"]}
         else:
-            return
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="no_page_target")
         await async_publish(hass, f"{device_id}/screen/show", json.dumps(payload))
     return _handle
 
@@ -48,11 +50,13 @@ def make_set_playlist_handler(hass: HomeAssistant):
     async def _handle(call):
         _, device_id = _resolve_entry(hass, call.data["device_id"])
         if not device_id:
-            return
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="no_device")
         registry = await layout.async_get_registry(hass)
         screens = [registry[n] for n in call.data["pages"] if n in registry]
         if not screens:
-            return
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="no_matching_pages",
+                translation_placeholders={"pages": ", ".join(call.data["pages"])})
         payload = {"screens": screens, "dwell": call.data["dwell"],
                    "transition": call.data["transition"]}
         await async_publish(hass, f"{device_id}/screens", json.dumps(payload))

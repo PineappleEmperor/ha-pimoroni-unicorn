@@ -33,8 +33,7 @@ rules:
   config-entry-unloading: done
   log-when-unavailable: done
   entity-unavailable: done
-  action-exceptions:
-    status: todo
+  action-exceptions: done
   reauthentication-flow:
     status: exempt
     comment: No authentication to the device beyond MQTT broker creds (HA-managed).
@@ -54,8 +53,7 @@ rules:
   discovery: done
   stale-devices: done
   diagnostics: done
-  exception-translations:
-    status: todo
+  exception-translations: done
   icon-translations: done
   reconfiguration-flow: done
   dynamic-devices:

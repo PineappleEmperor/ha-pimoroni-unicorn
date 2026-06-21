@@ -300,5 +300,19 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "no_device": {
+      "message": "No Pimoroni Unicorn device was found for the selected device."
+    },
+    "no_page_target": {
+      "message": "Specify a page index or name, or set clear to resume the playlist."
+    },
+    "no_matching_pages": {
+      "message": "None of the requested pages exist: {pages}."
+    },
+    "no_notify_content": {
+      "message": "Provide at least a message, icon, or effect."
+    }
   }
 }
