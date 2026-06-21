@@ -110,6 +110,14 @@ def init(graphics, bitfont, width, height):
     _ENERGY_RED  = graphics.create_pen(220, 60,  60)
 
 
+def dim(rgb, b):
+    """Scale an (r, g, b) by a 0-100 brightness; 100 (or missing) is unchanged."""
+    if not rgb or b >= 100:
+        return rgb
+    f = max(0, b) / 100.0
+    return (int(rgb[0] * f), int(rgb[1] * f), int(rgb[2] * f))
+
+
 def lerp_colour(rgb_a, rgb_b, t):
     """Interpolate between two (r,g,b) tuples; t=0→rgb_a, t=1→rgb_b."""
     return (
@@ -151,12 +159,15 @@ def text_fx_colors(s, cfg, elapsed_ms=0):
         speed = cfg.get("speed", 3)
         spread = cfg.get("spread", 0.12)
         phase = (elapsed_ms * speed) / 6000.0
-        return [_hsv_to_rgb(i * spread - phase, 1.0, 1.0) for i in range(n)]
-    if mode == "per_char":
+        cols = [_hsv_to_rgb(i * spread - phase, 1.0, 1.0) for i in range(n)]
+    elif mode == "per_char":
         palette = cfg.get("colors") or [cfg.get("color") or (255, 255, 255)]
-        return [tuple(palette[i % len(palette)]) for i in range(n)]
-    base = tuple(cfg.get("color") or (255, 255, 255))
-    return [base for _ in range(n)]
+        cols = [tuple(palette[i % len(palette)]) for i in range(n)]
+    else:
+        base = tuple(cfg.get("color") or (255, 255, 255))
+        cols = [base for _ in range(n)]
+    b = cfg.get("brightness", 100)
+    return cols if b >= 100 else [dim(c, b) for c in cols]
 
 
 def draw_text_fx(s, x, y, cfg, elapsed_ms=0):

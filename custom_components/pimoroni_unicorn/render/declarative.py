@@ -26,11 +26,8 @@ def _resolve(op, cfg):
 
 
 def _dim(rgb, b):
-    """Scale an (r, g, b) by a 0-100 brightness; 100 (or missing) is unchanged."""
-    if not rgb or b >= 100:
-        return rgb
-    f = max(0, b) / 100.0
-    return (int(rgb[0] * f), int(rgb[1] * f), int(rgb[2] * f))
+    """Scale an (r, g, b) by a 0-100 brightness; delegates to the shared helper."""
+    return drawing.dim(rgb, b)
 
 
 def _value_text(op, state):
