@@ -386,10 +386,12 @@ async def ws_content_catalog(hass, connection, msg):
     pages = {**builtin, **published}            # published wins on a name clash
     thumb_source = {**builtin, **all_layouts}
     model = None
+    active_page = None
     if msg.get("entry_id"):
         entry = _entry(hass, msg["entry_id"])
         if entry is not None:
             model = _model_key(entry)
+            active_page = ((entry.runtime_data or {}).get("diag") or {}).get("page")
 
     # Thumbnail every catalogue page + the first page of each screenset.
     installed_icons = await lametric.async_get_registry(hass)
@@ -419,6 +421,7 @@ async def ws_content_catalog(hass, connection, msg):
 
     connection.send_result(msg["id"], {
         "model": model,
+        "active_page": active_page,
         "layouts": _tag(marketplace.layout_units(pages, custom)),
         "screensets": _tag(marketplace.screenset_units(screensets, all_layouts), first_key="layouts"),
     })

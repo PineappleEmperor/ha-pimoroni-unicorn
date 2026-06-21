@@ -106,6 +106,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private tab: "layout" | "market" | "edit" | "screens" = "layout";
   @state() private catalog: CatalogWidget[] = [];
   @state() private fwManifest: FwManifest | null = null;
+  @state() private activePage: string | null = null;  // page name the device reports rendering
   @state() private contentLayouts: ContentUnit[] = [];
   @state() private contentScreensets: ContentUnit[] = [];
   @state() private showAllContent = false;
@@ -121,6 +122,9 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private fontPngs: Record<string, string> = {};
   private fontTimer = 0;
   @state() private dirty = false;
+  @state() private undoStack: Layout[] = [];
+  @state() private redoStack: Layout[] = [];
+  private snapshot: Layout = { widgets: [] };
   @state() private sectionsOpen: Record<string, boolean> = {};
   @state() private screenLayouts: string[] = [];
   @state() private screenDwell = 10;
@@ -381,6 +385,16 @@ export class PimoroniUnicornPanel extends LitElement {
   private _onKey = (e: KeyboardEvent): void => {
     const tag = (e.target as HTMLElement)?.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && this.tab === "layout") {
+      e.preventDefault();
+      if (e.shiftKey) this.redo(); else this.undo();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y" && this.tab === "layout") {
+      e.preventDefault();
+      this.redo();
+      return;
+    }
     if ((e.key === "Delete" || e.key === "Backspace") && this.tab === "layout"
         && this.selected >= 0 && this.layout.widgets[this.selected]) {
       e.preventDefault();
@@ -454,6 +468,9 @@ export class PimoroniUnicornPanel extends LitElement {
     this.layoutName = this.layout.name ?? "default";
     this.selected = -1;
     this.dirty = false;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.snapshot = JSON.parse(JSON.stringify(this.layout));
     this.renderPreview();
   }
 
@@ -485,8 +502,15 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private edited(): void {
+    this.undoStack = [...this.undoStack.slice(-99), this.snapshot];
+    this.redoStack = [];
+    this.snapshot = JSON.parse(JSON.stringify(this.layout));
     this.dirty = true;
     this.requestUpdate();
+    this.scheduleRender();
+  }
+
+  private scheduleRender(): void {
     if (this.renderTimer) clearTimeout(this.renderTimer);
     this.renderTimer = window.setTimeout(() => this.renderPreview(), 80);
     if (this.live && this.entryId) {
@@ -495,8 +519,35 @@ export class PimoroniUnicornPanel extends LitElement {
     }
   }
 
+  private undo(): void {
+    if (!this.undoStack.length) return;
+    this.redoStack = [...this.redoStack, this.snapshot];
+    const prev = this.undoStack[this.undoStack.length - 1];
+    this.undoStack = this.undoStack.slice(0, -1);
+    this.applyHistory(prev);
+  }
+
+  private redo(): void {
+    if (!this.redoStack.length) return;
+    this.undoStack = [...this.undoStack, this.snapshot];
+    const next = this.redoStack[this.redoStack.length - 1];
+    this.redoStack = this.redoStack.slice(0, -1);
+    this.applyHistory(next);
+  }
+
+  private applyHistory(target: Layout): void {
+    this.layout = JSON.parse(JSON.stringify(target));
+    this.snapshot = JSON.parse(JSON.stringify(target));
+    if (this.selected >= this.layout.widgets.length) this.selected = this.layout.widgets.length - 1;
+    this.layoutName = this.layout.name ?? this.layoutName;
+    this.dirty = true;
+    this.requestUpdate();
+    this.scheduleRender();
+  }
+
   private async pushLive(): Promise<void> {
-    await this.hass.callWS({ type: "pimoroni_unicorn/push_layout", entry_id: this.entryId, layout: this.layout });
+    const layout = { ...this.layout, name: this.layoutName };
+    await this.hass.callWS({ type: "pimoroni_unicorn/push_layout", entry_id: this.entryId, layout });
   }
 
   private capFor(id: string): WidgetCap | undefined { return this.caps.find((c) => c.id === id); }
@@ -825,6 +876,10 @@ export class PimoroniUnicornPanel extends LitElement {
           <label>Name <input .value=${this.layoutName} @input=${(e: Event) => (this.layoutName = (e.target as HTMLInputElement).value)} /></label>
         </div>
         <div class="group">
+          <button class="secondary" @click=${this.undo} ?disabled=${!this.undoStack.length} title="Undo (Ctrl+Z)">↶ Undo</button>
+          <button class="secondary" @click=${this.redo} ?disabled=${!this.redoStack.length} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+        </div>
+        <div class="group">
           <button class="secondary" @click=${this.editCurrentPage} ?disabled=${!this.entryId} title=${this.entryId ? "Load the page currently active on the device to edit it" : "Select a device first"}>Edit current page</button>
           <button @click=${this.save} title="Save this page to the library (no device needed)">Save</button>
           <button class="secondary" @click=${this.deploy} ?disabled=${!this.entryId} title=${this.entryId ? "Push this page to the selected device now" : "Select a device to push"}>Push to device</button>
@@ -928,6 +983,7 @@ export class PimoroniUnicornPanel extends LitElement {
   private async loadContent() {
     const q = this.entryId ? { entry_id: this.entryId } : {};
     const c = await this.hass.callWS({ type: "pimoroni_unicorn/content_catalog", ...q });
+    this.activePage = c.active_page ?? null;
     this.contentLayouts = c.layouts ?? [];
     this.contentScreensets = c.screensets ?? [];
   }
@@ -1026,15 +1082,16 @@ export class PimoroniUnicornPanel extends LitElement {
     </div>`;
   }
   private _contentRow(u: ContentUnit, kind: "layout" | "screenset") {
+    const onDevice = kind === "layout" && !!this.activePage && u.id === this.activePage;
     return html`<div class="mrow">
       ${this._thumb(u.thumb)}
       <div class="cell-name">${u.label}
         ${u.compat?.length ? html`<span class="hint">[${u.compat.join("/")}]</span>` : ""}
         ${kind === "screenset" ? html`<span class="hint">${u.screens} page(s)</span>` : ""}</div>
       <div class="hint">${u.requires?.length ? html`<span title=${u.requires.join(", ")}>${u.requires.length} dep(s)</span>` : "—"}</div>
-      <div>${u.compatible ? html`<span class="badge ok">compatible</span>` : html`<span class="badge warn">other model</span>`}</div>
+      <div>${onDevice ? html`<span class="badge ok">on device</span>` : ""}${u.compatible ? html`<span class="badge ok">compatible</span>` : html`<span class="badge warn">other model</span>`}</div>
       <div class="cell-action"><button ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to deploy"}
-        @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>Deploy</button></div>
+        @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>${onDevice ? "Re-deploy" : "Deploy"}</button></div>
     </div>`;
   }
 
@@ -1136,15 +1193,17 @@ export class PimoroniUnicornPanel extends LitElement {
         </div>
         ${[...this.fonts].sort((a, b) => a.h - b.h || a.w - b.w || a.label.localeCompare(b.label)).map((f) => html`<div class="frow">
           <div class="fmeta"><span class="cell-name">${f.label}</span>
-            <span class="hint">${f.kind === "digits" ? "digits" : "A–Z 0–9"} · ${f.w}×${f.h}${f.builtin ? " · built-in" : ""}</span></div>
+            <span class="hint">${f.kind === "digits" ? "digits" : "A–Z 0–9"} · ${f.w}×${f.h}</span></div>
           ${this.fontPngs[f.name]
             ? html`<img class="fprev" src="data:image/png;base64,${this.fontPngs[f.name]}" />`
             : html`<div class="fprev"></div>`}
-          ${this.entryId && !f.builtin
-            ? (f.installed
-                ? html`<span class="badge ok">installed</span>`
-                : html`<button @click=${() => this.installFont(f.name)}>Install</button>`)
-            : ""}
+          ${f.builtin
+            ? html`<span class="badge ok">built-in</span>`
+            : (this.entryId
+                ? (f.installed
+                    ? html`<span class="badge ok">installed</span>`
+                    : html`<button @click=${() => this.installFont(f.name)}>Install</button>`)
+                : "")}
         </div>`)}
       `)}
       <p class="hint">Deploying a page installs any widgets/fonts it needs over the air first, then pushes it; the device reboots if files changed.</p>
