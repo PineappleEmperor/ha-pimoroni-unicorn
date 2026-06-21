@@ -194,6 +194,15 @@ def _advance_screen():
 display_sensors: dict = {}  # populated via MQTT {device_id}/display/{id}/config and state
 TOPIC_DISPLAY_PREFIX = f"{DEVICE_ID}/display/"
 
+
+def _set_display_sensor(sensor_id, raw):
+    """Apply a /display/<id>/state payload; '' removes, else create-on-first-state + set on/off."""
+    val = raw.strip()
+    if val == "":
+        display_sensors.pop(sensor_id, None)  # backend clears a removed sensor
+    else:
+        display_sensors.setdefault(sensor_id, {})["state"] = val.upper() == "ON"
+
 # Colour pens used directly in main.py (OTA screen + sleep clear)
 BLACK       = graphics.create_pen(0,   0,   0)
 WHITE       = graphics.create_pen(255, 255, 255)
@@ -613,8 +622,7 @@ def on_message(topic, message):
                     except Exception:
                         pass
                 elif msg_type == "state":
-                    if sensor_id in display_sensors:
-                        display_sensors[sensor_id]["state"] = message.decode().upper() == "ON"
+                    _set_display_sensor(sensor_id, message.decode())
             return
 
         if topic_str == TOPIC_NOTIFY:

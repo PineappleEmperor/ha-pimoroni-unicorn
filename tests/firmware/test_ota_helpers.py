@@ -49,3 +49,29 @@ def test_ota_anim_ms_clamped():
     """Sweep duration stays within [MIN, MAX] regardless of width."""
     ms = app._ota_anim_ms()
     assert app._OTA_ANIM_MIN_MS <= ms <= app._OTA_ANIM_MAX_MS
+
+
+def test_display_sensor_creates_on_first_state():
+    """A /state payload creates the dot entry (no /config needed) and sets on/off."""
+    app.display_sensors.clear()
+    app._set_display_sensor("sensor.lamp", "ON")
+    assert app.display_sensors["sensor.lamp"]["state"] is True
+    app._set_display_sensor("sensor.lamp", "OFF")
+    assert app.display_sensors["sensor.lamp"]["state"] is False
+
+
+def test_display_sensor_empty_payload_removes():
+    """The backend's empty clear-payload removes the dot."""
+    app.display_sensors.clear()
+    app._set_display_sensor("sensor.gone", "ON")
+    app._set_display_sensor("sensor.gone", "")
+    assert "sensor.gone" not in app.display_sensors
+
+
+def test_display_sensor_preserves_config_fields():
+    """Setting state doesn't wipe legacy /config fields (name/colours) on the same entry."""
+    app.display_sensors.clear()
+    app.display_sensors["sensor.x"] = {"name": "X", "on_rgb": (0, 255, 0)}
+    app._set_display_sensor("sensor.x", "ON")
+    assert app.display_sensors["sensor.x"]["name"] == "X"
+    assert app.display_sensors["sensor.x"]["state"] is True
