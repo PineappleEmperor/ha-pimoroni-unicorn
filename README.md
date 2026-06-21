@@ -186,6 +186,34 @@ Pin a specific page on a device (by `index` or `name`), or `clear` the pin to re
 
 Define a device's playlist from named `pages` (in order), with `dwell` seconds and a `transition`.
 
+## What this provides
+
+Per device you get: an **update** entity (engine OTA — installed vs latest `ENGINE_VERSION`, with an Install action), an **image** entity mirroring the live screen, **diagnostic sensors** (current page, connection state), and the sidebar **panel** (Designer / Marketplace / Widget editor / Playlists). Actions: `send_notification` (the single rich-notification surface), `push_firmware`, `show_page`, `set_playlist`.
+
+## Data updates
+
+This is a **local-push** integration (`iot_class: local_push`) — there is **no polling**. The device and Home Assistant exchange state over your local MQTT broker:
+
+- The device publishes **retained** topics on connect and on change — `<device_id>/status`, `/page`, `/diag`, `/fw/manifest` — so HA reflects the device's *actual* state (current page, engine version, online/offline via MQTT LWT).
+- HA pushes layout, playlist, sensor values, notifications and OTA commands to the device by publishing to the matching topics.
+
+State is therefore event-driven in both directions; entities update the instant the device reports, with no update interval to tune.
+
+## Known limitations
+
+- **First flash is physical.** The initial firmware install is over USB (Thonny); everything after is OTA. A major engine **file-layout** change (rare) needs a one-time USB reflash — OTA can't relocate `main.py` or restructure paths.
+- **Not standalone.** The device renders independently, but live entity data (sensor states, weather, energy) flows from HA over MQTT — with HA down, those widgets stop updating.
+- **Preview faithfulness.** The no-hardware preview only reproduces `pixel`, `rectangle` and bitmask fonts; firmware draw code is restricted to those so device and preview match. The shim has no `bitmap6` font, so the `tiny` clock variant renders approximately.
+- **One device per config entry.** Add each display as its own entry.
+- **Constrained hardware.** The Pico W has 264 KB RAM; very large layouts/animations can pressure it.
+
+## Troubleshooting
+
+- **Intermittent Wi-Fi / OTA failures, "HT not ready", `EHOSTUNREACH`, ping jitter** — almost always a **power** problem, not software: a thin USB cable or weak PSU browns out the Pico W's CYW43 radio. Use a quality cable and a 5 V supply with headroom.
+- **Wrong page *name* but the right screen** — push the page through the Designer (Save & Push) or `show_page`; the device reports its real page on `<device_id>/page`.
+- **No sound on a Stellar Unicorn** — needs engine ≥ 1.2.7 (earlier builds disabled Stellar audio). Update the engine via the device's update entity.
+- **Device offline in HA** — check the MQTT broker is reachable from both HA and the device, and that the credentials in `secrets.py` match.
+- **Diagnostics** — download via the device page (Settings → Devices → the device → Download diagnostics) to capture entry + runtime state for a bug report.
 
 ## Development
 

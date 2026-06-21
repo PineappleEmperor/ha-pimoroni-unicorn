@@ -78,14 +78,10 @@ rules:
     status: todo
   docs-use-cases: done
   docs-supported-devices: done
-  docs-supported-functions:
-    status: todo
-  docs-data-update:
-    status: todo
-  docs-known-limitations:
-    status: todo
-  docs-troubleshooting:
-    status: todo
+  docs-supported-functions: done
+  docs-data-update: done
+  docs-known-limitations: done
+  docs-troubleshooting: done
   docs-examples: done
   # Platinum
   async-dependency:
