@@ -1066,17 +1066,27 @@ export class PimoroniUnicornPanel extends LitElement {
   private async deployLayout(name: string, compatible: boolean) {
     if (!this.entryId) { this.status = "Select a device to deploy."; return; }
     if (!compatible && !confirm(`"${name}" isn't built for this device's model. Deploy anyway?`)) return;
-    const r = await this.hass.callWS({
-      type: "pimoroni_unicorn/deploy_layout", entry_id: this.entryId, name, override: !compatible });
-    this.status = r.ok ? `Deployed "${name}" (installing any missing widgets/fonts first).` : `Deploy failed.`;
+    this.status = `Deploying "${name}"…`;
+    try {
+      const r = await this.hass.callWS({
+        type: "pimoroni_unicorn/deploy_layout", entry_id: this.entryId, name, override: !compatible });
+      this.status = r.ok ? `Deployed "${name}" (installing any missing widgets/fonts first).` : `Deploy failed.`;
+    } catch (e) {
+      this.status = `Deploy failed: ${(e as { message?: string })?.message ?? e}`;
+    }
   }
 
   private async deployScreenset(id: string, compatible: boolean) {
     if (!this.entryId) { this.status = "Select a device to deploy."; return; }
     if (!compatible && !confirm(`"${id}" isn't built for this device's model. Deploy anyway?`)) return;
-    const r = await this.hass.callWS({
-      type: "pimoroni_unicorn/deploy_screenset", entry_id: this.entryId, id, override: !compatible });
-    this.status = r.ok ? `Deployed screen set "${id}".` : `Deploy failed.`;
+    this.status = `Deploying "${id}"…`;
+    try {
+      const r = await this.hass.callWS({
+        type: "pimoroni_unicorn/deploy_screenset", entry_id: this.entryId, id, override: !compatible });
+      this.status = r.ok ? `Deployed screen set "${id}".` : `Deploy failed.`;
+    } catch (e) {
+      this.status = `Deploy failed: ${(e as { message?: string })?.message ?? e}`;
+    }
   }
 
   private async exportLayout(): Promise<void> {
