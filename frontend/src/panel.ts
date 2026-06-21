@@ -573,6 +573,9 @@ export class PimoroniUnicornPanel extends LitElement {
   private typeOf(entry: WidgetEntry): string { return entry.type ?? entry.id; }
   private capForEntry(entry: WidgetEntry): WidgetCap | undefined { return this.capFor(this.typeOf(entry)); }
   private get scale(): number { return this.zoom || Math.max(4, Math.floor(PREVIEW_TARGET_PX / this.dims[0])); }
+  // Snap so scale*devicePixelRatio is whole: each source pixel maps to an integer number of
+  // device pixels, so lines stay straight on fractional-DPR (e.g. Windows 125%) displays.
+  private get pxScale(): number { const dpr = window.devicePixelRatio || 1; return Math.max(1, Math.round(this.scale * dpr)) / dpr; }
   private zoomBy(delta: number): void {
     this.zoom = Math.min(48, Math.max(4, this.scale + delta));
   }
@@ -669,8 +672,8 @@ export class PimoroniUnicornPanel extends LitElement {
     const sx = ev.clientX, sy = ev.clientY, ox = entry.x, oy = entry.y;
     (ev.target as HTMLElement).setPointerCapture(ev.pointerId);
     const move = (e: PointerEvent) => {
-      const dx = Math.round((e.clientX - sx) / this.scale / grid) * grid;
-      const dy = Math.round((e.clientY - sy) / this.scale / grid) * grid;
+      const dx = Math.round((e.clientX - sx) / this.pxScale / grid) * grid;
+      const dy = Math.round((e.clientY - sy) / this.pxScale / grid) * grid;
       // Allow hanging off either edge, keeping at least 1px on screen.
       entry.x = Math.max(1 - bw, Math.min(W - 1, ox + dx));
       entry.y = Math.max(1 - bh, Math.min(H - 1, oy + dy));
@@ -900,7 +903,7 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private _layoutView() {
-    const s = this.scale;
+    const s = this.pxScale;
     const presentTypes = new Set(this.layout.widgets.map((w) => this.typeOf(w)));
     const addable = this.caps.filter((c) => c.multi || !presentTypes.has(c.id));
     const overlays = new Set(this.layout.overlays ?? []);
