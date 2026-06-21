@@ -4,7 +4,6 @@ from datetime import timedelta
 
 from homeassistant.components.image import ImageEntity
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
@@ -19,6 +18,7 @@ from .const import (
     UNICORN_MODEL_KEYS,
     PUConfigEntry,
 )
+from .entity import device_info
 
 PARALLEL_UPDATES = 0
 REFRESH = timedelta(seconds=5)  # re-render cadence for the live mirror
@@ -51,9 +51,7 @@ class PimoroniUnicornImage(ImageEntity):
         super().__init__(hass)
         self._entry = entry
         self._attr_unique_id = f"{device_id}_screen"
-        self._attr_device_info = DeviceInfo(
-            identifiers={("mqtt", device_id)}, name="Pimoroni Unicorn",
-            manufacturer="Pimoroni", model=model)
+        self._attr_device_info = device_info(device_id, model)
 
     async def async_added_to_hass(self) -> None:
         """Refresh on a timer (live clock) and whenever page/state/status changes."""

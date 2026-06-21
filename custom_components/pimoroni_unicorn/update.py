@@ -5,7 +5,6 @@ from pathlib import Path
 from homeassistant.components.update import UpdateEntity, UpdateEntityFeature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 import homeassistant.helpers.issue_registry as ir
@@ -20,6 +19,7 @@ from .const import (
     OTA_SOURCE_FILES,
     PUConfigEntry,
 )
+from .entity import device_info
 
 PARALLEL_UPDATES = 0
 
@@ -71,9 +71,7 @@ class PimoroniUnicornUpdate(UpdateEntity):
         self._device_id = device_id
         self._reflash = False
         self._attr_unique_id = f"{device_id}_firmware"
-        self._attr_device_info = DeviceInfo(
-            identifiers={("mqtt", device_id)}, name="Pimoroni Unicorn",
-            manufacturer="Pimoroni", model=model)
+        self._attr_device_info = device_info(device_id, model)
 
     def _sync(self) -> None:
         """Recompute installed/latest version from the device manifest, incl. file-hash drift."""

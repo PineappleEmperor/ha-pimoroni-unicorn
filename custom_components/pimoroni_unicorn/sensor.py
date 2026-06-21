@@ -15,12 +15,12 @@ from homeassistant.const import (
     UnitOfInformation,
 )
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
 from .const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN, PUConfigEntry
+from .entity import device_info
 
 PARALLEL_UPDATES = 0
 
@@ -118,9 +118,7 @@ class PimoroniUnicornSensor(SensorEntity):
         self._desc = description
         self.entity_description = description
         self._attr_unique_id = f"{device_id}_{description.key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={("mqtt", device_id)}, name="Pimoroni Unicorn",
-            manufacturer="Pimoroni", model=model)
+        self._attr_device_info = device_info(device_id, model)
 
     @callback
     def _recompute(self) -> None:

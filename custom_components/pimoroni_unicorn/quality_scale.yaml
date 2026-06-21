@@ -6,8 +6,7 @@ rules:
     status: exempt
     comment: Local push over MQTT; no polling.
   brands: done
-  common-modules:
-    status: todo
+  common-modules: done
     comment: No coordinator (push); audit module layout.
   config-flow-test-coverage:
     status: todo
