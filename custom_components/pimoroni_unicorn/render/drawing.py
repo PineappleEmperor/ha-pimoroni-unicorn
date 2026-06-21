@@ -326,6 +326,25 @@ def draw_sun_moon(x, y, w, h, solar=0.0, sun_below_horizon=False, brightness=100
                 _g.pixel(x + ix, y + iy)
 
 
+def draw_sleep(x, y, w, h, t):
+    """A 'Zzz' going-to-sleep cue in the (x,y,w,h) box; t is 0..1 over the transition.
+
+    Three Z's cascade up-right and appear in turn, cooling/dimming as they rise.
+    Bitmap-font only, so the device and the CPython shim render identically.
+    """
+    t = 0.0 if t < 0 else (1.0 if t > 1 else t)
+    count = 1 + int(min(0.999, t) * 3)  # 1..3 Z's reveal over time
+    bx = x + 1
+    by = y + h - 5  # bottom Z (font3x5 is 5 tall)
+    for i in range(count):
+        py = by - i * 4
+        if py < y:
+            break
+        lvl = int(70 + 150 * (1.0 - i / 3.0))  # lower (newer) Z brightest
+        _g.set_pen(_g.create_pen(int(lvl * 0.55), int(lvl * 0.7), lvl))  # cool tint
+        _bitfont.draw_text("Z", bx + i * 3, py, font3x5, d=1)
+
+
 def draw_custom_digit(digit_idx, x, y, colour, background=None):
     """Draw a single 3x5 digit from the DIGITS bitmask."""
     bg = background if background is not None else _BLACK

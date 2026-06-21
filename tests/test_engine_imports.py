@@ -32,3 +32,19 @@ def test_widget_registry_populated():
     widgets = importlib.import_module("widgets")
     for wid in ("clock", "sensor", "energy", "weather", "temperature", "sun_moon"):
         assert wid in widgets.WIDGET_REGISTRY
+
+
+def test_draw_sleep_renders_all_geometries():
+    """The Zzz sleep cue runs for every panel size + progress point without raising."""
+    importlib.import_module("app")  # triggers drawing.init(surface, ...)
+    drawing = importlib.import_module("drawing")
+    for w, h in ((53, 11), (32, 32), (16, 16)):
+        for frac in (0.0, 0.33, 0.66, 1.0):
+            drawing.draw_sleep(0, 0, w, h, frac)
+
+
+def test_sleep_animation_state():
+    """app exposes the sleep-cue counter/constant the main loop drives."""
+    app = importlib.import_module("app")
+    assert app.SLEEP_ANIM_FRAMES > 0
+    assert app._sleep_anim_left == 0
