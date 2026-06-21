@@ -152,15 +152,17 @@ async def ws_layouts(hass, connection, msg):
     vol.Required("model"): vol.In(list(render_service.MODEL_DIMS)),
     vol.Required("layout"): dict,
     vol.Optional("orientation", default=0): vol.In(ORIENTATION_ANGLES),
+    vol.Optional("weather"): vol.Any(None, str),
 })
 @websocket_api.async_response
 async def ws_render(hass, connection, msg):
     """Render a layout to animated base64 PNG frames using the device's own render code."""
     installed = await lametric.async_get_registry(hass)
     orientation = msg["orientation"]
+    state = {"weather": msg["weather"]} if msg.get("weather") else None
     frames = await hass.async_add_executor_job(
         render_service.render_layout_frames, msg["model"], msg["layout"], installed, 8, 200,
-        orientation)
+        orientation, state)
     boxes = render_service.layout_boxes(msg["layout"])
     dims = list(render_service.oriented_dims(msg["model"], orientation))
     connection.send_result(msg["id"], {
@@ -308,6 +310,7 @@ async def ws_fw_remove(hass, connection, msg):
     vol.Required("type"): WS_WIDGET_PREVIEW,
     vol.Required("model"): vol.In(list(render_service.MODEL_DIMS)),
     vol.Required("spec"): dict,
+    vol.Optional("weather"): vol.Any(None, str),
 })
 @websocket_api.async_response
 async def ws_widget_preview(hass, connection, msg):
@@ -316,8 +319,9 @@ async def ws_widget_preview(hass, connection, msg):
     if err:
         connection.send_error(msg["id"], "invalid", err)
         return
+    state = {"weather": msg["weather"]} if msg.get("weather") else None
     frames = await hass.async_add_executor_job(
-        render_service.render_widget_frames, msg["model"], msg["spec"])
+        render_service.render_widget_frames, msg["model"], msg["spec"], None, 8, 200, state)
     connection.send_result(msg["id"], {"png": frames[0], "frames": frames})
 
 

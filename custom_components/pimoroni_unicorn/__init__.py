@@ -121,9 +121,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     """Set up Pimoroni Unicorn from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    entry.runtime_data = {
-        "unsub": [], "sensor_entities": set(), "diag": {}, "available": False,
-        "weather_override": None}
+    entry.runtime_data = {"unsub": [], "sensor_entities": set(), "diag": {}, "available": False}
 
     opts      = _merged_opts(entry)
     device_id = opts[CONF_DEVICE_ID]
@@ -141,7 +139,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await _async_publish_orientation(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-    await hass.config_entries.async_forward_entry_setups(entry, ["update", "sensor", "image", "select"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["update", "sensor", "image"])
 
     if not hass.data.get(f"{DOMAIN}_ws_registered"):
         ws_api.async_register(hass)
@@ -161,7 +159,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     """Unload a config entry."""
-    await hass.config_entries.async_unload_platforms(entry, ["update", "sensor", "image", "select"])
+    await hass.config_entries.async_unload_platforms(entry, ["update", "sensor", "image"])
     for unsub in (entry.runtime_data or {}).get("unsub", []):
         unsub()
 
@@ -506,34 +504,6 @@ def _weather_condition(state: Any) -> Any:
     return _HA_CONDITION_MAP.get(text, text)  # known HA condition -> firmware string; else pass through
 
 
-def _build_weather_payload(hass: HomeAssistant, entry: PUConfigEntry) -> dict[str, Any] | None:
-    """Device weather payload, honoring a test override; None when there's nothing to send."""
-    opts = _merged_opts(entry)
-    weather_entity = (opts.get(CONF_WEATHER_CODE_ENTITY) or "").strip()
-    state = hass.states.get(weather_entity) if weather_entity else None
-    override = (entry.runtime_data or {}).get("weather_override")
-    if override:
-        data: dict[str, Any] = {"condition": override}
-    elif state is None or state.state in ("unknown", "unavailable", ""):
-        return None
-    else:
-        data = {"condition": _weather_condition(state)}
-    if state is not None:
-        temp = state.attributes.get("temperature")
-        if isinstance(temp, (int, float)):
-            data["temp"] = round(float(temp), 1)
-    return data
-
-
-async def async_publish_weather(hass: HomeAssistant, entry: PUConfigEntry) -> None:
-    """Publish the current weather payload (override or live) to the device."""
-    data = _build_weather_payload(hass, entry)
-    if data is None:
-        return
-    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
-    await async_publish(hass, f"{device_id}/weather", json.dumps(data), retain=True)
-
-
 def live_state(hass: HomeAssistant, entry: PUConfigEntry) -> dict[str, Any]:
     """Assemble the render state the device is currently showing (for the screen camera)."""
 
@@ -542,18 +512,23 @@ def live_state(hass: HomeAssistant, entry: PUConfigEntry) -> dict[str, Any]:
     sun = hass.states.get(sun_entity)
 
     condition, temp = "clear", None
-    weather_entity = (opts.get(CONF_WEATHER_CODE_ENTITY) or "").strip()
-    st = hass.states.get(weather_entity) if weather_entity else None
-    override = (entry.runtime_data or {}).get("weather_override")
-    if override:
-        condition = override
-    elif st and st.state not in ("unknown", "unavailable", ""):
-        cond = _weather_condition(st)
-        condition = render_service.map_owm(cond) if isinstance(cond, int) else str(cond)
-    if st and st.state not in ("unknown", "unavailable", ""):
-        t = st.attributes.get("temperature")
-        if isinstance(t, (int, float)):
-            temp = round(float(t), 1)
+    # Prefer the condition the device actually received (faithful mirror); fall back to
+    # re-deriving from the configured entity if the device hasn't reported it yet.
+    diag = (entry.runtime_data or {}).get("diag") or {}
+    if diag.get("weather"):
+        condition = diag["weather"]
+        if isinstance(diag.get("weather_temp"), (int, float)):
+            temp = round(float(diag["weather_temp"]), 1)
+    else:
+        weather_entity = (opts.get(CONF_WEATHER_CODE_ENTITY) or "").strip()
+        if weather_entity:
+            st = hass.states.get(weather_entity)
+            if st and st.state not in ("unknown", "unavailable", ""):
+                cond = _weather_condition(st)
+                condition = render_service.map_owm(cond) if isinstance(cond, int) else str(cond)
+                t = st.attributes.get("temperature")
+                if isinstance(t, (int, float)):
+                    temp = round(float(t), 1)
 
     sensors = {
         ent: {"state": bool((s := hass.states.get(ent)) and s.state == "on")}
@@ -633,11 +608,15 @@ def _setup_publishers(hass: HomeAssistant, entry: PUConfigEntry) -> None:
 
         @callback
         def _publish_weather(_event: Any = None) -> None:
-            data = _build_weather_payload(hass, entry)
-            if data is None:
+            state = hass.states.get(weather_code_entity)
+            if state is None or state.state in ("unknown", "unavailable", ""):
                 return
-            hass.async_create_task(
-                async_publish(hass, weather_topic, json.dumps(data), retain=True))
+            data: dict[str, Any] = {"condition": _weather_condition(state)}
+            temp = state.attributes.get("temperature")
+            if isinstance(temp, (int, float)):
+                data["temp"] = round(float(temp), 1)
+            payload = json.dumps(data)
+            hass.async_create_task(async_publish(hass, weather_topic, payload, retain=True))
 
         store["unsub"].append(
             async_track_state_change_event(hass, watch_entities, _publish_weather)

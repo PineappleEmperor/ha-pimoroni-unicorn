@@ -219,9 +219,10 @@ def render_layout_png(model: str, layout: dict, installed_icons: dict | None = N
 
 
 def render_layout_frames(model: str, layout: dict, installed_icons: dict | None = None,
-                         n: int = 8, step_ms: int = 200, orientation: int = 0) -> list[str]:
+                         n: int = 8, step_ms: int = 200, orientation: int = 0,
+                         state: dict | None = None) -> list[str]:
     """N base64 PNG frames stepped through time, so the panel can animate the preview."""
-    return [render_layout_png(model, layout, installed_icons, i * step_ms, orientation)
+    return [render_layout_png(model, layout, installed_icons, i * step_ms, orientation, state)
             for i in range(n)]
 
 
@@ -270,9 +271,10 @@ def render_widget_png(model: str, spec: dict, cfg=None, state=None, elapsed_ms: 
     return _encode(g, width, height)
 
 
-def render_widget_frames(model: str, spec: dict, cfg=None, n: int = 8, step_ms: int = 200) -> list[str]:
+def render_widget_frames(model: str, spec: dict, cfg=None, n: int = 8, step_ms: int = 200,
+                         state: dict | None = None) -> list[str]:
     """N base64 PNG frames of a widget spec stepped through time, for an animated preview."""
-    return [render_widget_png(model, spec, cfg, None, i * step_ms) for i in range(n)]
+    return [render_widget_png(model, spec, cfg, state, i * step_ms) for i in range(n)]
 
 
 # Marketplace font catalog. alpha fonts are bitmask dicts in the engine's bitfonts.py

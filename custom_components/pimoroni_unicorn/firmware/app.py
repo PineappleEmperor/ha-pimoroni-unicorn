@@ -293,13 +293,21 @@ def _draw_ota_progress(frac, phase_ms):
     unicorn.update(graphics)
 
 
-_OTA_MIN_MS = 2500  # floor the progress sweep so it's visible even on a tiny/instant update
+# Time-driven progress sweep: ~_OTA_PER_COL_MS per column, clamped to [MIN, MAX] total so the
+# fill is a smooth snake (not tied to jumpy per-file progress) and wide panels don't crawl.
+_OTA_PER_COL_MS = 140
+_OTA_ANIM_MIN_MS = 1800
+_OTA_ANIM_MAX_MS = 3500
 
 
-def _ota_paced_frac(work, t0):
-    """Progress fraction paced by time so the sweep stays visible; capped below full until done."""
-    elapsed = time.ticks_diff(time.ticks_ms(), t0)
-    return max(work, min(0.95, elapsed / _OTA_MIN_MS))
+def _ota_anim_ms():
+    """Total progress-sweep duration for this display width, capped for wide panels."""
+    return min(_OTA_ANIM_MAX_MS, max(_OTA_ANIM_MIN_MS, width * _OTA_PER_COL_MS))
+
+
+def _ota_sweep_frac(t0, anim_ms, cap=0.97):
+    """Smooth time-driven fill fraction, held below full until the downloads finish."""
+    return min(cap, time.ticks_diff(time.ticks_ms(), t0) / anim_ms)
 
 
 def _ota_needs_reboot(paths):
@@ -357,11 +365,11 @@ def _run_ota(payload):
     failed    = []
     last_draw = 0
     t0 = time.ticks_ms()
+    anim_ms = _ota_anim_ms()
     for i, (url, path) in enumerate(norm):
         if _wdt is not None:
             _wdt.feed()
-        work = i / total if total else 0
-        _draw_ota_progress(_ota_paced_frac(work, t0), time.ticks_ms())
+        _draw_ota_progress(_ota_sweep_frac(t0, anim_ms), time.ticks_ms())
         parent = path.rsplit("/", 1)[0]
         if parent:
             try:
@@ -382,9 +390,9 @@ def _run_ota(payload):
                         if _wdt is not None:
                             _wdt.feed()
                         now = time.ticks_ms()
-                        if time.ticks_diff(now, last_draw) >= 80:
+                        if time.ticks_diff(now, last_draw) >= 50:
                             last_draw = now
-                            _draw_ota_progress(_ota_paced_frac(work, t0), now)
+                            _draw_ota_progress(_ota_sweep_frac(t0, anim_ms), now)
                 r.close()
                 valid = True
                 if path.endswith(".py"):
@@ -422,12 +430,12 @@ def _run_ota(payload):
                 pass
     while True:
         elapsed = time.ticks_diff(time.ticks_ms(), t0)
-        if elapsed >= _OTA_MIN_MS:
+        if elapsed >= anim_ms:
             break
         if _wdt is not None:
             _wdt.feed()
-        _draw_ota_progress(elapsed / _OTA_MIN_MS, time.ticks_ms())
-        time.sleep_ms(40)
+        _draw_ota_progress(elapsed / anim_ms, time.ticks_ms())
+        time.sleep_ms(33)
     _draw_ota_progress(1.0, time.ticks_ms())
     failed = [p for (_u, p) in norm if p not in written]
     try:
@@ -540,6 +548,8 @@ def _diag_payload():
         "rssi": rssi,
         "reset_cause": _RESET_CAUSE,
         "cpu_temp": _cpu_temp(),
+        "weather": weather_condition,
+        "weather_temp": weather_temp,
         "screen_index": _screen_idx,
         "screen_count": len(_screens) if _screens else 0,
         "dwell_s": (_screen_dwell_ms // 1000) if _screen_dwell_ms else 0,

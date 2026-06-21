@@ -132,11 +132,6 @@
       "cpu_temp": {
         "name": "Board temperature"
       }
-    },
-    "select": {
-      "weather_test": {
-        "name": "Weather (test)"
-      }
     }
   },
   "services": {

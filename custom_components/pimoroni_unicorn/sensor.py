@@ -3,8 +3,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from propcache.api import cached_property
-
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -124,23 +122,24 @@ class PimoroniUnicornSensor(SensorEntity):
             identifiers={("mqtt", device_id)}, name="Pimoroni Unicorn",
             manufacturer="Pimoroni", model=model)
 
-    @cached_property
-    def native_value(self) -> StateType | datetime:
-        """Compute the value from the cached diag + firmware manifest payloads."""
-        data = self._entry.runtime_data or {}
-        return self._desc.value_fn(data.get("diag") or {}, data.get("fw_manifest") or {})
+    @callback
+    def _recompute(self) -> None:
+        """Recompute value + attributes from the cached diag + firmware manifest payloads.
 
-    @cached_property
-    def extra_state_attributes(self) -> dict | None:
-        """Optional per-sensor attributes (e.g. playlist position on the page sensor)."""
-        if self._desc.attr_fn is None:
-            return None
+        Sets the _attr_* backing fields so HA's cached_property values are invalidated;
+        computing in an overridden cached_property would freeze at the first read.
+        """
         data = self._entry.runtime_data or {}
-        return self._desc.attr_fn(data.get("diag") or {}, data.get("fw_manifest") or {})
+        diag = data.get("diag") or {}
+        manifest = data.get("fw_manifest") or {}
+        self._attr_available = bool(data.get("available"))
+        self._attr_native_value = self._desc.value_fn(diag, manifest)
+        if self._desc.attr_fn is not None:
+            self._attr_extra_state_attributes = self._desc.attr_fn(diag, manifest)
 
     async def async_added_to_hass(self) -> None:
-        """Refresh when new diag, manifest or status payloads arrive."""
-        self._attr_available = bool((self._entry.runtime_data or {}).get("available"))
+        """Seed state, then refresh when new diag, manifest or status payloads arrive."""
+        self._recompute()
         for sig in (f"{DOMAIN}_diag_{self._entry.entry_id}",
                     f"{DOMAIN}_manifest_{self._entry.entry_id}",
                     f"{DOMAIN}_status_{self._entry.entry_id}"):
@@ -148,5 +147,5 @@ class PimoroniUnicornSensor(SensorEntity):
 
     @callback
     def _refresh(self) -> None:
-        self._attr_available = bool((self._entry.runtime_data or {}).get("available"))
+        self._recompute()
         self.async_write_ha_state()
