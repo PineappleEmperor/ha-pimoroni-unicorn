@@ -278,7 +278,7 @@ def _draw_ota_progress(frac, phase_ms):
         ph = (phase_ms % 1400) / 700
         if ph > 1:
             ph = 2 - ph
-        lvl = int(30 + 176 * ph)
+        lvl = int(96 + 110 * ph)
         graphics.set_pen(graphics.create_pen(0, lvl, lvl))
         c = filled // ppc
         k = filled % ppc
