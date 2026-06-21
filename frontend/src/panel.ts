@@ -769,6 +769,9 @@ export class PimoroniUnicornPanel extends LitElement {
         const mode = this.cfgVal(entry, "color_mode");
         if (f.key === "speed" && mode !== "rainbow") return "";
         if (f.type === "rgblist" && mode !== "per_char") return "";
+        const offMode = this.cfgVal(entry, "off_mode");
+        if (f.key === "off_brightness" && offMode === "colour") return "";
+        if (f.key === "off_color" && offMode !== "colour") return "";
         if (f.type === "rgblist") {
           const palette = this.cfgPalette(entry, f.key);
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>

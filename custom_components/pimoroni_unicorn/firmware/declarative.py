@@ -86,10 +86,21 @@ def _draw_dot(g, op, x, y, state, bright):
     if on:
         rgb = on_rgb
     else:
-        ob = op.get("off_brightness")
-        rgb = _dim(on_rgb, ob) if ob is not None else op.get("off_color", (20, 20, 20))
+        rgb = _dot_off(op, on_rgb)
     g.set_pen(g.create_pen(*_dim(rgb, bright)))
     g.rectangle(x, y, op.get("w", 2), op.get("h", 2))
+
+
+def _dot_off(op, on_rgb):
+    """Off-state colour: dim the on-colour, or a separate off-colour, per off_mode."""
+    mode = op.get("off_mode")
+    if mode == "colour":
+        return op.get("off_color") or (20, 20, 20)
+    if mode == "dim":
+        return _dim(on_rgb, op.get("off_brightness", 15))
+    oc = op.get("off_color")  # legacy specs: no off_mode -> honour explicit off_color
+    ob = op.get("off_brightness")
+    return oc if oc is not None else (_dim(on_rgb, ob) if ob is not None else (20, 20, 20))
 
 
 def render(g, spec, x, y, w, h, cfg, state):

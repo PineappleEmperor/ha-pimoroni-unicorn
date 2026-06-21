@@ -158,37 +158,37 @@ var Ot=Object.defineProperty;var Nt=Object.getOwnPropertyDescriptor;var h=(l,i,t
         <label>Y</label><input type="number" style="width:60px" .value=${String(t.y)}
           @change=${s=>this.setPos(t,"y",+s.target.value)} />
       </div>
-      ${e.cfg_fields.map(s=>{let r=this.cfgVal(t,"color_mode");if(s.key==="speed"&&r!=="rainbow"||s.type==="rgblist"&&r!=="per_char")return"";if(s.type==="rgblist"){let n=this.cfgPalette(t,s.key);return o`<div class="panelrow"><label>${s.label??s.key}</label>
+      ${e.cfg_fields.map(s=>{let r=this.cfgVal(t,"color_mode");if(s.key==="speed"&&r!=="rainbow"||s.type==="rgblist"&&r!=="per_char")return"";let n=this.cfgVal(t,"off_mode");if(s.key==="off_brightness"&&n==="colour"||s.key==="off_color"&&n!=="colour")return"";if(s.type==="rgblist"){let a=this.cfgPalette(t,s.key);return o`<div class="panelrow"><label>${s.label??s.key}</label>
             <span class="swatches">
-              ${n.map((a,c)=>o`<span class="swatch">
-                <input type="color" .value=${rt(a)}
-                  @input=${d=>this.setCfgColor(t,s.key,c,nt(d.target.value))} />
-                ${n.length>1?o`<button class="x" title="Remove"
-                  @click=${()=>this.removeCfgColor(t,s.key,c)}>×</button>`:""}
+              ${a.map((c,d)=>o`<span class="swatch">
+                <input type="color" .value=${rt(c)}
+                  @input=${g=>this.setCfgColor(t,s.key,d,nt(g.target.value))} />
+                ${a.length>1?o`<button class="x" title="Remove"
+                  @click=${()=>this.removeCfgColor(t,s.key,d)}>×</button>`:""}
               </span>`)}
               <button class="add" title="Add colour" @click=${()=>this.addCfgColor(t,s.key)}>+</button>
             </span></div>`}if(s.type==="select")return o`<div class="panelrow"><label>${s.label??s.key}</label>
-            <select @change=${n=>this.setCfg(t,s.key,n.target.value)}>
-              ${(s.options??[]).map(n=>o`<option ?selected=${this.cfgVal(t,s.key)===n}>${n}</option>`)}
+            <select @change=${a=>this.setCfg(t,s.key,a.target.value)}>
+              ${(s.options??[]).map(a=>o`<option ?selected=${this.cfgVal(t,s.key)===a}>${a}</option>`)}
             </select></div>`;if(s.type==="number")return o`<div class="panelrow"><label>${s.label??s.key}</label>
             <input type="number" style="width:60px" min=${s.min??1} max=${s.max??64} step=${s.step??1}
               .value=${String(this.cfgVal(t,s.key))}
-              @change=${n=>this.setCfg(t,s.key,+n.target.value)} /></div>`;if(s.type==="range"){let n=Number(this.cfgVal(t,s.key)??s.max??100);return o`<div class="panelrow"><label>${s.label??s.key}</label>
-            <input type="range" min=${s.min??0} max=${s.max??100} step=${s.step??1} .value=${String(n)}
-              @input=${a=>this.setCfg(t,s.key,+a.target.value)} />
-            <span class="rangeval">${n}</span></div>`}return s.type==="icon"?o`<div class="panelrow"><label>${s.label??s.key}</label>
-            <select @change=${n=>this.setCfg(t,s.key,n.target.value)}>
-              ${this.iconNames.map(n=>o`<option ?selected=${this.cfgVal(t,s.key)===n}>${n}</option>`)}
+              @change=${a=>this.setCfg(t,s.key,+a.target.value)} /></div>`;if(s.type==="range"){let a=Number(this.cfgVal(t,s.key)??s.max??100);return o`<div class="panelrow"><label>${s.label??s.key}</label>
+            <input type="range" min=${s.min??0} max=${s.max??100} step=${s.step??1} .value=${String(a)}
+              @input=${c=>this.setCfg(t,s.key,+c.target.value)} />
+            <span class="rangeval">${a}</span></div>`}return s.type==="icon"?o`<div class="panelrow"><label>${s.label??s.key}</label>
+            <select @change=${a=>this.setCfg(t,s.key,a.target.value)}>
+              ${this.iconNames.map(a=>o`<option ?selected=${this.cfgVal(t,s.key)===a}>${a}</option>`)}
             </select></div>`:s.type==="entity"?o`<div class="panelrow"><label>${s.label??s.key}</label>
             <input type="text" style="width:200px" list="pu-entity-list" placeholder="entity id…"
               .value=${String(this.cfgVal(t,s.key)??"")}
-              @change=${n=>this.setCfg(t,s.key,n.target.value)} />
+              @change=${a=>this.setCfg(t,s.key,a.target.value)} />
             <datalist id="pu-entity-list">
-              ${Object.keys(this.hass?.states??{}).map(n=>o`<option value=${n}></option>`)}
+              ${Object.keys(this.hass?.states??{}).map(a=>o`<option value=${a}></option>`)}
             </datalist></div>`:s.type==="text"?o`<div class="panelrow"><label>${s.label??s.key}</label>
             <input type="text" style="width:120px" .value=${String(this.cfgVal(t,s.key)??"")}
-              @change=${n=>this.setCfg(t,s.key,n.target.value)} /></div>`:o`<div class="panelrow"><label>${s.label??s.key}</label>
-          ${this.colorCtl(this.cfgVal(t,s.key)??[255,255,255],n=>this.setCfg(t,s.key,n))}</div>`})}
+              @change=${a=>this.setCfg(t,s.key,a.target.value)} /></div>`:o`<div class="panelrow"><label>${s.label??s.key}</label>
+          ${this.colorCtl(this.cfgVal(t,s.key)??[255,255,255],a=>this.setCfg(t,s.key,a))}</div>`})}
       <div class="panelrow"><button class="danger" @click=${()=>this.removeWidget(this.selected)}>Remove widget</button></div>
     `:""}switchTab(t){this.tab=t,t==="market"?this.loadCatalog():t==="edit"?this.previewSpec():t==="screens"&&this.buildScreenPreview()}_appBar(){let t=this.devices.find(e=>e.entry_id===this.entryId);return o`
       <div class="appbar">
