@@ -58,8 +58,7 @@ rules:
   exception-translations:
     status: todo
   icon-translations: done
-  reconfiguration-flow:
-    status: todo
+  reconfiguration-flow: done
     comment: Options flow exists; add a dedicated reconfigure step.
   dynamic-devices:
     status: exempt

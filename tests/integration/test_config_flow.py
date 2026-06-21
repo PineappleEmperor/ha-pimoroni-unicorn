@@ -84,6 +84,22 @@ async def test_mqtt_discovery_creates_entry(hass: HomeAssistant) -> None:
     assert result2["data"][CONF_DEVICE_ID] == "disco1"
 
 
+async def test_reconfigure_changes_model(hass: HomeAssistant) -> None:
+    """Reconfigure updates the model on the existing entry and aborts successfully."""
+    e = MockConfigEntry(
+        domain=DOMAIN, unique_id="dev1",
+        data={CONF_DEVICE_ID: "dev1", CONF_MODEL: UNICORN_MODELS[0]},
+    )
+    e.add_to_hass(hass)
+    with patch("custom_components.pimoroni_unicorn.async_setup_entry", return_value=True):
+        result = await e.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_MODEL: UNICORN_MODELS[1]})
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert e.data[CONF_MODEL] == UNICORN_MODELS[1]
+
+
 async def test_mqtt_discovery_invalid_payload_aborts(hass: HomeAssistant) -> None:
     """A malformed discovery payload aborts rather than creating a broken entry."""
     info = MqttServiceInfo(

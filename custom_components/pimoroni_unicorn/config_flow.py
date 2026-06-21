@@ -135,6 +135,17 @@ class PimoroniUnicornConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
+    async def async_step_reconfigure(self, user_input: dict | None = None):
+        """Change the device model on an existing entry (device id is the identity, fixed)."""
+        entry = self._get_reconfigure_entry()
+        if user_input is not None:
+            return self.async_update_reload_and_abort(entry, data_updates=user_input)
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema({vol.Required(CONF_MODEL): vol.In(UNICORN_MODELS)}), entry.data),
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
