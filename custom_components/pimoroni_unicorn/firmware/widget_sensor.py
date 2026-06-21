@@ -3,16 +3,17 @@ import declarative
 
 _SPEC = {"draw": [{
     "op": "dot", "x": 0, "y": 0, "w": "$w", "h": "$h",
-    "bind": "$entity", "on_color": "$on_color", "off_mode": "$off_mode",
+    "bind": "$entity", "invert": "$invert", "on_color": "$on_color", "off_mode": "$off_mode",
     "off_color": "$off_color", "off_brightness": "$off_brightness",
 }]}
 
 WIDGET = {
     "id": "sensor", "label": "Sensor", "w": 2, "h": 2, "variants": [], "multi": True,
-    "default_cfg": {"entity": "", "on_color": [0, 255, 0], "off_mode": "dim",
+    "default_cfg": {"entity": "", "invert": False, "on_color": [0, 255, 0], "off_mode": "dim",
                     "off_brightness": 15, "off_color": [40, 40, 40], "w": 2, "h": 2},
     "cfg_fields": [
         {"key": "entity", "type": "entity", "label": "Entity"},
+        {"key": "invert", "type": "bool", "label": "Invert on/off"},
         {"key": "on_color", "type": "rgb", "label": "Colour"},
         {"key": "off_mode", "type": "select", "options": ["dim", "colour"], "label": "Off state"},
         {"key": "off_brightness", "type": "range", "min": 0, "max": 100, "step": 5, "label": "Off brightness"},

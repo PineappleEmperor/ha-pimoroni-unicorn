@@ -3,7 +3,7 @@ import { property, state } from "lit/decorators.js";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
-interface CfgField { key: string; type: "select" | "rgb" | "rgblist" | "number" | "range" | "text" | "entity" | "icon"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
+interface CfgField { key: string; type: "select" | "rgb" | "rgblist" | "number" | "range" | "bool" | "text" | "entity" | "icon"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
 interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; multi?: boolean; }
 interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; type?: string; name?: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
@@ -812,6 +812,11 @@ export class PimoroniUnicornPanel extends LitElement {
             <input type="number" style="width:60px" min=${f.min ?? 1} max=${f.max ?? 64} step=${f.step ?? 1}
               .value=${String(this.cfgVal(entry, f.key))}
               @change=${(e: Event) => this.setCfg(entry, f.key, +(e.target as HTMLInputElement).value)} /></div>`;
+        }
+        if (f.type === "bool") {
+          return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+            <input type="checkbox" .checked=${!!this.cfgVal(entry, f.key)}
+              @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLInputElement).checked)} /></div>`;
         }
         if (f.type === "range") {
           const rv = Number(this.cfgVal(entry, f.key) ?? f.max ?? 100);
