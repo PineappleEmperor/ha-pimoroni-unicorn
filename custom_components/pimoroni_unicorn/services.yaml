@@ -11,6 +11,13 @@ send_notification:
     icon:
       selector:
         text: {}
+    icon_scale:
+      selector:
+        number:
+          min: 1
+          max: 4
+          step: 1
+          mode: slider
     effect:
       selector:
         select:

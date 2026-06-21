@@ -16,7 +16,7 @@ _fire_heat = None
 _SCROLL_MS_PER_PX    = 50
 _SPLIT_WIDTH_DEFAULT = 13
 _ICON_PANEL_WIDTH    = 9   # 8px icon + 1px gap
-_ENTRANCE_DURATION_MS = 400
+_ENTRANCE_DURATION_MS = 850  # long enough to actually see the entrance transition
 
 NOTIFY_ANIMATIONS   = {}
 NOTIFY_CAPABILITIES = {}
@@ -309,11 +309,14 @@ def _draw_v2_notification(notif, elapsed_ms):
         _g.clear()
 
     if icon is not None:
+        iscale = notif.get("icon_scale", 1)
+        isz = _icons.ICON_SIZE * (int(iscale) if iscale and iscale > 1 else 1)
+        panel_w = min(_width, isz + 1)
         if anim_fn is None:
             _g.set_pen(_g.create_pen(*bg_color))
-            _g.rectangle(0, 0, _icons.ICON_SIZE, _height)
-        _icons.draw_icon(icon, 0, (_height - _icons.ICON_SIZE) // 2, elapsed_ms)
-        tx, tw = _ICON_PANEL_WIDTH, _width - _ICON_PANEL_WIDTH
+            _g.rectangle(0, 0, panel_w, _height)
+        _icons.draw_icon(icon, 0, max(0, (_height - isz) // 2), elapsed_ms, iscale)
+        tx, tw = panel_w, max(0, _width - panel_w)
     else:
         tx, tw = 0, _width
 

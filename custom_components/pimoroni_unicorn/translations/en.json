@@ -158,6 +158,10 @@
           "name": "Icon",
           "description": "Name of an icon installed on the device, or a LaMetric gallery code. Install icons from the Unicorn panel or Configure → Install LaMetric icon."
         },
+        "icon_scale": {
+          "name": "Icon scale",
+          "description": "Enlarge the icon by this factor (1–4). Useful on bigger displays (Cosmic/Stellar)."
+        },
         "effect": {
           "name": "Effect",
           "description": "Full-screen background animation."
