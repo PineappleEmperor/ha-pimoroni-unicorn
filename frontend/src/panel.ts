@@ -395,8 +395,10 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private _onKey = (e: KeyboardEvent): void => {
-    const tag = (e.target as HTMLElement)?.tagName;
-    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    // composedPath()[0] pierces the shadow DOM; e.target is retargeted to the host on window.
+    const t = e.composedPath()[0] as HTMLElement | undefined;
+    const tag = t?.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || t?.isContentEditable) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && this.tab === "layout") {
       e.preventDefault();
       if (e.shiftKey) this.redo(); else this.undo();
@@ -706,8 +708,27 @@ export class PimoroniUnicornPanel extends LitElement {
     this.edited();
   }
   private removeWidget(idx: number): void {
+    const w = this.layout.widgets[idx];
+    if (!w) return;
+    const name = w.name ?? this.capForEntry(w)?.label ?? w.id;
+    if (!confirm(`Delete "${name}"?`)) return;
     this.layout.widgets.splice(idx, 1);
     this.selected = -1;
+    this.edited();
+  }
+  private duplicateWidget(idx: number): void {
+    const src = this.layout.widgets[idx];
+    if (!src) return;
+    const present = new Set(this.layout.widgets.map((w) => w.id));
+    const base = src.type ?? src.id;
+    let n = 2, id = `${base}-${n}`;
+    while (present.has(id)) id = `${base}-${++n}`;
+    const copy: WidgetEntry = JSON.parse(JSON.stringify(src));
+    copy.id = id;
+    copy.x = (src.x ?? 0) + 1;
+    copy.y = (src.y ?? 0) + 1;
+    this.layout.widgets.splice(idx + 1, 0, copy);
+    this.selected = idx + 1;
     this.edited();
   }
   // Array order is z-order: later entries draw on top. Drag a layer onto another to reorder.
@@ -999,6 +1020,8 @@ export class PimoroniUnicornPanel extends LitElement {
                 <input type="checkbox" .checked=${w.enabled !== false} title="Show / hide"
                   @click=${(e: Event) => { e.stopPropagation(); w.enabled = (e.target as HTMLInputElement).checked; this.edited(); }} />
                 <span class="grow">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span>
+                <button class="wlx" title="Duplicate layer"
+                  @click=${(e: Event) => { e.stopPropagation(); this.duplicateWidget(i); }}>⧉</button>
                 <button class="wlx" title="Delete layer"
                   @click=${(e: Event) => { e.stopPropagation(); this.removeWidget(i); }}>×</button>
               </li>`;
