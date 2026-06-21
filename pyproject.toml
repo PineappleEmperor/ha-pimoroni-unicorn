@@ -607,8 +607,7 @@ property-decorators = ["propcache.api.cached_property"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# The firmware harness is plain sync tests; the HA-integration pytest plugin injects
-# autouse async fixtures meant for HA tests and conflicts under pytest 9. Disable it
-# here (this repo's test suite is the firmware harness). Re-enable per-invocation if
-# HA integration tests are added later.
-addopts = "-p no:homeassistant"
+asyncio_mode = "auto"
+# tests/firmware are plain sync tests; tests/integration use pytest-homeassistant-custom-
+# component. The HA plugin's async autouse `enable_event_loop_debug` fixture is overridden
+# (sync no-op) in tests/firmware/conftest.py so both suites run together under one pytest.

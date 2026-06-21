@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-_ROOT = Path(__file__).resolve().parent.parent
+_ROOT = Path(__file__).resolve().parents[2]  # tests/firmware/conftest.py -> repo root
 _ENGINE = _ROOT / "firmware" / "engine"
 _WIDGETS = _ROOT / "firmware" / "widgets"
 _FONTS = _ROOT / "firmware" / "assets" / "fonts"
@@ -220,6 +220,17 @@ def _install_stubs() -> None:
 
 
 _install_stubs()
+
+
+@pytest.fixture(autouse=True)
+def enable_event_loop_debug():
+    """Shadow pytest-homeassistant-custom-component's async autouse fixture.
+
+    That plugin installs an async autouse `enable_event_loop_debug` meant for HA tests;
+    it breaks these plain sync firmware tests under pytest 9. Overriding it here (sync,
+    no-op, firmware-scope only) lets the firmware + integration suites coexist in one run.
+    """
+    yield
 
 
 @pytest.fixture(scope="session")

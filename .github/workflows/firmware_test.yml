@@ -31,4 +31,4 @@ jobs:
           exit $err
 
       - name: Import + logic harness for the OTA-critical engine
-        run: python -m pytest tests/ -q
+        run: python -m pytest tests/firmware -q
