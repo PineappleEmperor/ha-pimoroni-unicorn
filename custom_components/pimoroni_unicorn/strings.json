@@ -162,6 +162,10 @@
           "name": "Icon scale",
           "description": "Enlarge the icon by this factor (1–4). Useful on bigger displays (Cosmic/Stellar)."
         },
+        "icon_position": {
+          "name": "Icon position",
+          "description": "Where the icon sits: left panel + text (default), centred (icon-focused, e.g. Stellar), or right."
+        },
         "effect": {
           "name": "Effect",
           "description": "Full-screen background animation."

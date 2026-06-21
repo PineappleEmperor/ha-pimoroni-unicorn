@@ -312,11 +312,18 @@ def _draw_v2_notification(notif, elapsed_ms):
         iscale = notif.get("icon_scale", 1)
         isz = _icons.ICON_SIZE * (int(iscale) if iscale and iscale > 1 else 1)
         panel_w = min(_width, isz + 1)
-        if anim_fn is None:
+        iy = max(0, (_height - isz) // 2)
+        pos = notif.get("icon_position", "left")
+        if pos == "center":
+            ix, tx, tw = max(0, (_width - isz) // 2), 0, _width  # icon centred, text spans full width
+        elif pos == "right":
+            ix, tx, tw = _width - panel_w, 0, max(0, _width - panel_w)
+        else:  # left
+            ix, tx, tw = 0, panel_w, max(0, _width - panel_w)
+        if anim_fn is None and pos != "center":
             _g.set_pen(_g.create_pen(*bg_color))
-            _g.rectangle(0, 0, panel_w, _height)
-        _icons.draw_icon(icon, 0, max(0, (_height - isz) // 2), elapsed_ms, iscale)
-        tx, tw = panel_w, max(0, _width - panel_w)
+            _g.rectangle(ix, 0, panel_w, _height)
+        _icons.draw_icon(icon, ix, iy, elapsed_ms, iscale)
     else:
         tx, tw = 0, _width
 

@@ -49,7 +49,7 @@ DISMISS_SCHEMA = vol.Schema({
 })
 
 _V2_FIELDS = (
-    "icon", "icon_scale", "effect", "effect_speed", "sound", "color", "bg_color",
+    "icon", "icon_scale", "icon_position", "effect", "effect_speed", "sound", "color", "bg_color",
     "duration", "repeat", "hold", "stack", "scroll_speed", "entrance",
     "outlined", "wakeup",
 )
