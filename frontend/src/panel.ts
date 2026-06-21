@@ -274,7 +274,8 @@ export class PimoroniUnicornPanel extends LitElement {
       border: 1px solid var(--pu-outline); border-radius: 10px; margin-bottom: 8px;
     }
     .catalog li .grow { flex: 1; }
-    .badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 12px; background: color-mix(in srgb, var(--pu-primary) 12%, transparent); color: var(--pu-primary); }
+    .badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 12px; white-space: nowrap; background: color-mix(in srgb, var(--pu-primary) 12%, transparent); color: var(--pu-primary); }
+    .badges { display: flex; flex-wrap: wrap; gap: 6px; }
     .badge.ok { background: color-mix(in srgb, var(--success-color, #2e7d32) 18%, transparent); color: var(--success-color, #2e7d32); }
     .badge.warn { background: color-mix(in srgb, var(--warning-color, #ed6c02) 20%, transparent); color: var(--warning-color, #ed6c02); }
     .spec { width: 380px; height: 320px; font: 13px ui-monospace, monospace; resize: vertical; }
@@ -1140,7 +1141,7 @@ export class PimoroniUnicornPanel extends LitElement {
         ${u.compat?.length ? html`<span class="hint">[${u.compat.join("/")}]</span>` : ""}
         ${kind === "screenset" ? html`<span class="hint">${u.screens} page(s)</span>` : ""}</div>
       <div class="hint">${u.requires?.length ? html`<span title=${u.requires.join(", ")}>${u.requires.length} dep(s)</span>` : "—"}</div>
-      <div>${onDevice ? html`<span class="badge ok">on device</span>` : ""}${u.compatible ? html`<span class="badge ok">compatible</span>` : html`<span class="badge warn">other model</span>`}</div>
+      <div class="badges">${onDevice ? html`<span class="badge ok">on device</span>` : ""}${u.compatible ? html`<span class="badge ok">compatible</span>` : html`<span class="badge warn">other model</span>`}</div>
       <div class="cell-action"><button ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to deploy"}
         @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>${onDevice ? "Re-deploy" : "Deploy"}</button></div>
     </div>`;

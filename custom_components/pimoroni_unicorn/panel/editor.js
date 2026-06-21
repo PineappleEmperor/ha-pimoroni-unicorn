@@ -130,7 +130,8 @@ var Ot=Object.defineProperty;var Nt=Object.getOwnPropertyDescriptor;var h=(l,i,t
       border: 1px solid var(--pu-outline); border-radius: 10px; margin-bottom: 8px;
     }
     .catalog li .grow { flex: 1; }
-    .badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 12px; background: color-mix(in srgb, var(--pu-primary) 12%, transparent); color: var(--pu-primary); }
+    .badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 12px; white-space: nowrap; background: color-mix(in srgb, var(--pu-primary) 12%, transparent); color: var(--pu-primary); }
+    .badges { display: flex; flex-wrap: wrap; gap: 6px; }
     .badge.ok { background: color-mix(in srgb, var(--success-color, #2e7d32) 18%, transparent); color: var(--success-color, #2e7d32); }
     .badge.warn { background: color-mix(in srgb, var(--warning-color, #ed6c02) 20%, transparent); color: var(--warning-color, #ed6c02); }
     .spec { width: 380px; height: 320px; font: 13px ui-monospace, monospace; resize: vertical; }
@@ -332,7 +333,7 @@ var Ot=Object.defineProperty;var Nt=Object.getOwnPropertyDescriptor;var h=(l,i,t
         ${t.compat?.length?o`<span class="hint">[${t.compat.join("/")}]</span>`:""}
         ${e==="screenset"?o`<span class="hint">${t.screens} page(s)</span>`:""}</div>
       <div class="hint">${t.requires?.length?o`<span title=${t.requires.join(", ")}>${t.requires.length} dep(s)</span>`:"\u2014"}</div>
-      <div>${s?o`<span class="badge ok">on device</span>`:""}${t.compatible?o`<span class="badge ok">compatible</span>`:o`<span class="badge warn">other model</span>`}</div>
+      <div class="badges">${s?o`<span class="badge ok">on device</span>`:""}${t.compatible?o`<span class="badge ok">compatible</span>`:o`<span class="badge warn">other model</span>`}</div>
       <div class="cell-action"><button ?disabled=${!this.entryId} title=${this.entryId?"":"Select a device to deploy"}
         @click=${()=>e==="layout"?this.deployLayout(t.id,t.compatible):this.deployScreenset(t.id,t.compatible)}>${s?"Re-deploy":"Deploy"}</button></div>
     </div>`}_marketplaceView(){let t=this.showAllContent,e=this.contentLayouts.filter(a=>t||a.compatible),s=this.contentScreensets.filter(a=>t||a.compatible),r={installed:"ok",outdated:"warn",not_installed:""},n={installed:"installed",outdated:"update available",not_installed:"not installed"};return o`
