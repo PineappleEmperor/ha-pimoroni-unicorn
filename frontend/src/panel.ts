@@ -297,6 +297,16 @@ export class PimoroniUnicornPanel extends LitElement {
   `;
 
   protected firstUpdated(): void { this.loadDevices(); this.loadIcons(); this.loadFonts(); }
+  protected updated(): void {
+    if (this._ro) return;
+    const wrap = this.renderRoot.querySelector(".stagewrap");
+    if (!wrap) return;
+    this._ro = new ResizeObserver((es) => {
+      const w = es[0]?.contentRect.width;
+      if (w && w > 8) this.fitPx = Math.max(120, Math.floor(w));
+    });
+    this._ro.observe(wrap);
+  }
 
   private async loadIcons() {
     try {
@@ -391,6 +401,8 @@ export class PimoroniUnicornPanel extends LitElement {
   }
   disconnectedCallback(): void {
     window.removeEventListener("keydown", this._onKey);
+    this._ro?.disconnect();
+    this._ro = undefined;
     super.disconnectedCallback();
   }
 
@@ -575,7 +587,10 @@ export class PimoroniUnicornPanel extends LitElement {
   private capFor(id: string): WidgetCap | undefined { return this.caps.find((c) => c.id === id); }
   private typeOf(entry: WidgetEntry): string { return entry.type ?? entry.id; }
   private capForEntry(entry: WidgetEntry): WidgetCap | undefined { return this.capFor(this.typeOf(entry)); }
-  private get scale(): number { return this.zoom || Math.max(4, Math.floor(PREVIEW_TARGET_PX / this.dims[0])); }
+  @state() private fitPx = PREVIEW_TARGET_PX;  // measured preview-container width (auto-fit)
+  private _ro?: ResizeObserver;
+  // Auto-fit: scale the preview to fill its container; an explicit zoom overrides.
+  private get scale(): number { return this.zoom || Math.max(4, Math.floor(this.fitPx / this.dims[0])); }
   // Snap so scale*devicePixelRatio is whole: each source pixel maps to an integer number of
   // device pixels, so lines stay straight on fractional-DPR (e.g. Windows 125%) displays.
   private get pxScale(): number { const dpr = window.devicePixelRatio || 1; return Math.max(1, Math.round(this.scale * dpr)) / dpr; }
