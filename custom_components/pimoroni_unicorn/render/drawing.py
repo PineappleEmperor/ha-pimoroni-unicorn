@@ -435,6 +435,9 @@ def draw_calendar(day_val, x, y, header_color):
     elif 9 < day_val < 20 and day_val != 11:
         draw_custom_digit(day_val // 10, x + 1, y + 4, _BLACK, _WHITE)
         draw_custom_digit(day_val % 10,  x + 4, y + 4, _BLACK, _WHITE)
+    elif day_val == 21:
+        draw_custom_digit(2, x + 2, y + 4, _BLACK, _WHITE)  # nudge the 2 right to balance "21"
+        draw_custom_digit(1, x + 5, y + 4, _BLACK, _WHITE)
     else:
         draw_custom_digit(day_val // 10, x + 1, y + 4, _BLACK, _WHITE)
         draw_custom_digit(day_val % 10,  x + 5, y + 4, _BLACK, _WHITE)
