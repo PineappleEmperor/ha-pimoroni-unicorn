@@ -79,6 +79,8 @@ def _draw_bar(g, op, x, y, state, pen, bright):
 
 def _draw_dot(g, op, x, y, state, bright):
     on = state.get("display_sensors", {}).get(op.get("bind"), {}).get("state")
+    if op.get("invert"):
+        on = not on
     on_rgb = op.get("on_color", (0, 255, 0))
     if on:
         rgb = on_rgb

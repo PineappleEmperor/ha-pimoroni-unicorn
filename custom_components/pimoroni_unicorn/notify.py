@@ -9,11 +9,13 @@ import voluptuous as vol
 from homeassistant.components.mqtt import async_publish
 from homeassistant.components.notify.const import ATTR_MESSAGE
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 import homeassistant.helpers.config_validation as cv
 
 from .const import (
     CONF_DEVICE_ID,
+    DOMAIN,
     NOTIFY_EFFECTS,
     NOTIFY_ENTRANCES,
     NOTIFY_PAYLOAD_VERSION,
@@ -49,7 +51,7 @@ DISMISS_SCHEMA = vol.Schema({
 })
 
 _V2_FIELDS = (
-    "icon", "effect", "effect_speed", "sound", "color", "bg_color",
+    "icon", "icon_scale", "icon_position", "effect", "effect_speed", "sound", "color", "bg_color",
     "duration", "repeat", "hold", "stack", "scroll_speed", "entrance",
     "outlined", "wakeup",
 )
@@ -109,12 +111,11 @@ def make_generic_notify_handler(hass: HomeAssistant):
     async def async_handle(call: ServiceCall) -> None:
         entry, device_id = _resolve_entry(hass, call.data["device_id"])
         if not device_id:
-            _LOGGER.error("Pimoroni Unicorn notify: no MQTT device for the selected device")
-            return
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="no_device")
         payload = _build_payload_v2(call.data.get(ATTR_MESSAGE, ""), call.data)
         if not _has_content(payload):
-            _LOGGER.warning("Pimoroni Unicorn notify: provide at least 'message', 'icon' or 'effect'")
-            return
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="no_notify_content")
         payload = _maybe_downconvert(hass, entry, payload)
         await async_publish(hass, f"{device_id}/notify", json.dumps(payload))
 

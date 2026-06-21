@@ -12,11 +12,18 @@
       "mqtt_confirm": {
         "title": "Pimoroni Unicorn discovered",
         "description": "Set up {device_id} ({model})?"
+      },
+      "reconfigure": {
+        "title": "Change device model",
+        "data": {
+          "model": "Model"
+        }
       }
     },
     "abort": {
       "already_configured": "Device already configured.",
-      "invalid_discovery": "The device's discovery message was invalid."
+      "invalid_discovery": "The device's discovery message was invalid.",
+      "reconfigure_successful": "Model updated."
     }
   },
   "options": {
@@ -151,6 +158,14 @@
           "name": "Icon",
           "description": "Name of an icon installed on the device, or a LaMetric gallery code. Install icons from the Unicorn panel or Configure → Install LaMetric icon."
         },
+        "icon_scale": {
+          "name": "Icon scale",
+          "description": "Enlarge the icon by this factor (1–4). Useful on bigger displays (Cosmic/Stellar)."
+        },
+        "icon_position": {
+          "name": "Icon position",
+          "description": "Where the icon sits: left panel + text (default), centred (icon-focused, e.g. Stellar), or right."
+        },
         "effect": {
           "name": "Effect",
           "description": "Full-screen background animation."
@@ -284,6 +299,26 @@
           "description": "Optional map of file key to content string, used instead of reading from disk."
         }
       }
+    }
+  },
+  "exceptions": {
+    "no_device": {
+      "message": "No Pimoroni Unicorn device was found for the selected device."
+    },
+    "no_page_target": {
+      "message": "Specify a page index or name, or set clear to resume the playlist."
+    },
+    "no_matching_pages": {
+      "message": "None of the requested pages exist: {pages}."
+    },
+    "no_notify_content": {
+      "message": "Provide at least a message, icon, or effect."
+    }
+  },
+  "issues": {
+    "reflash_required": {
+      "title": "Pimoroni Unicorn needs a USB reflash",
+      "description": "The engine on {device} predates the foldered file layout (1.1.0) and can't update over the air. Reflash the firmware/ tree once via USB (Thonny); OTA works afterwards."
     }
   }
 }

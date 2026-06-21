@@ -6,9 +6,7 @@ rules:
     status: exempt
     comment: Local push over MQTT; no polling.
   brands: done
-  common-modules:
-    status: todo
-    comment: No coordinator (push); audit module layout.
+  common-modules: done
   config-flow-test-coverage:
     status: todo
     comment: No tests yet.
@@ -23,19 +21,17 @@ rules:
   has-entity-name: done
   runtime-data: done
   test-before-configure:
-    status: todo
-    comment: Config flow does not yet test the MQTT/device connection.
-  test-before-setup:
-    status: todo
-    comment: Raise ConfigEntryNotReady when the device/broker is unavailable.
+    status: exempt
+    comment: >-
+      The flow creates an entry from device id + model with no synchronous device/broker
+      connection to validate; devices announce themselves via MQTT discovery. Nothing to test.
+  test-before-setup: done
   unique-config-entry: done
   # Silver
   config-entry-unloading: done
-  log-when-unavailable:
-    status: todo
+  log-when-unavailable: done
   entity-unavailable: done
-  action-exceptions:
-    status: todo
+  action-exceptions: done
   reauthentication-flow:
     status: exempt
     comment: No authentication to the device beyond MQTT broker creds (HA-managed).
@@ -47,35 +43,24 @@ rules:
   docs-installation-parameters: done
   docs-configuration-parameters: done
   # Gold
-  entity-translations:
-    status: todo
-  entity-device-class:
-    status: todo
+  entity-translations: done
+  entity-device-class: done
   devices: done
-  entity-category:
-    status: todo
-    comment: Diagnostic entities pending (#63).
-  entity-disabled-by-default:
-    status: todo
-    comment: Diagnostic sensors disabled-by-default pending (#63).
+  entity-category: done
+  entity-disabled-by-default: done
   discovery: done
   stale-devices: done
   diagnostics: done
-  exception-translations:
-    status: todo
-  icon-translations:
-    status: todo
-  reconfiguration-flow:
-    status: todo
-    comment: Options flow exists; add a dedicated reconfigure step.
+  exception-translations: done
+  icon-translations: done
+  reconfiguration-flow: done
   dynamic-devices:
     status: exempt
     comment: One device per config entry; not a hub.
   discovery-update-info:
     status: exempt
     comment: MQTT transport keyed on device_id; no network host/IP to refresh on rediscovery.
-  repair-issues:
-    status: todo
+  repair-issues: done
   docs-use-cases: done
   docs-supported-devices: done
   docs-supported-functions: done

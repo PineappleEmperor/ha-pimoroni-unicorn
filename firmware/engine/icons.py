@@ -139,12 +139,13 @@ def _frame_at(frames, durations, elapsed_ms):
     return frames[-1]
 
 
-def draw_icon(icon, x, y, elapsed_ms=0):
-    """Draw an 8×8 icon at (x, y). icon is a name, LaMetric code, or flat [r,g,b] list."""
+def draw_icon(icon, x, y, elapsed_ms=0, scale=1):
+    """Draw an 8×8 icon at (x, y), optionally scaled up (each pixel -> scale×scale block)."""
     resolved = _resolve(icon)
     if resolved is None:
         return False
     data = _frame_at(resolved[0], resolved[1], elapsed_ms)
+    scale = int(scale) if scale and scale > 1 else 1
 
     for i in range(ICON_SIZE * ICON_SIZE):
         r = data[i * 3]
@@ -152,5 +153,10 @@ def draw_icon(icon, x, y, elapsed_ms=0):
         b = data[i * 3 + 2]
         if r or g or b:
             _g.set_pen(_g.create_pen(r, g, b))
-            _g.pixel(x + (i % ICON_SIZE), y + (i // ICON_SIZE))
+            px = x + (i % ICON_SIZE) * scale
+            py = y + (i // ICON_SIZE) * scale
+            if scale == 1:
+                _g.pixel(px, py)
+            else:
+                _g.rectangle(px, py, scale, scale)
     return True

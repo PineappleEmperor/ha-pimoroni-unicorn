@@ -40,6 +40,7 @@ WS_FW_MANIFEST    = "pimoroni_unicorn/fw_manifest"
 WS_FW_INSTALL     = "pimoroni_unicorn/fw_install"
 WS_FW_REMOVE      = "pimoroni_unicorn/fw_remove"
 WS_WIDGET_PREVIEW = "pimoroni_unicorn/widget_preview"
+WS_WIDGET_THUMBS  = "pimoroni_unicorn/widget_thumbs"
 WS_WIDGET_SAVE    = "pimoroni_unicorn/widget_save"
 WS_WIDGET_IMPORT  = "pimoroni_unicorn/widget_import"
 WS_WIDGET_DELETE  = "pimoroni_unicorn/widget_delete"
@@ -65,7 +66,7 @@ def async_register(hass: HomeAssistant) -> None:
     for handler in (ws_devices, ws_capabilities, ws_layouts, ws_render,
                     ws_save_layout, ws_push_layout, ws_delete_layout, ws_push_screens,
                     ws_catalog, ws_fw_manifest, ws_fw_install, ws_fw_remove,
-                    ws_widget_preview, ws_widget_save, ws_widget_import, ws_widget_delete,
+                    ws_widget_preview, ws_widget_thumbs, ws_widget_save, ws_widget_import, ws_widget_delete,
                     ws_content_catalog, ws_deploy_layout, ws_deploy_screenset,
                     ws_publish_layout, ws_save_screenset, ws_delete_screenset, ws_icons,
                     ws_icon_install, ws_icon_remove, ws_icon_push, ws_icon_device_remove,
@@ -323,6 +324,25 @@ async def ws_widget_preview(hass, connection, msg):
     frames = await hass.async_add_executor_job(
         render_service.render_widget_frames, msg["model"], msg["spec"], None, 8, 200, state)
     connection.send_result(msg["id"], {"png": frames[0], "frames": frames})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_WIDGET_THUMBS,
+    vol.Required("model"): vol.In(list(render_service.MODEL_DIMS)),
+})
+@websocket_api.async_response
+async def ws_widget_thumbs(hass, connection, msg):
+    """Per-built-in-widget thumbnails for the add-widget grid (model-only, works in Mock)."""
+    installed = await lametric.async_get_registry(hass)
+    caps = await hass.async_add_executor_job(render_service.layout_capabilities, None)
+    ids = [w["id"] for w in caps.get("widgets", [])]
+    thumbs: dict[str, str] = {}
+    for wid in ids:
+        thumb = await hass.async_add_executor_job(
+            render_service.render_unit_thumb, msg["model"], wid, installed)
+        if thumb:
+            thumbs[wid] = thumb
+    connection.send_result(msg["id"], {"thumbs": thumbs})
 
 
 @websocket_api.websocket_command({

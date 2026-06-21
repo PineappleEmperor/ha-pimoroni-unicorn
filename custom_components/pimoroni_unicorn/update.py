@@ -5,9 +5,9 @@ from pathlib import Path
 from homeassistant.components.update import UpdateEntity, UpdateEntityFeature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+import homeassistant.helpers.issue_registry as ir
 
 from .const import (
     CONF_DEVICE_ID,
@@ -19,6 +19,7 @@ from .const import (
     OTA_SOURCE_FILES,
     PUConfigEntry,
 )
+from .entity import device_info
 
 PARALLEL_UPDATES = 0
 
@@ -70,9 +71,7 @@ class PimoroniUnicornUpdate(UpdateEntity):
         self._device_id = device_id
         self._reflash = False
         self._attr_unique_id = f"{device_id}_firmware"
-        self._attr_device_info = DeviceInfo(
-            identifiers={("mqtt", device_id)}, name="Pimoroni Unicorn",
-            manufacturer="Pimoroni", model=model)
+        self._attr_device_info = device_info(device_id, model)
 
     def _sync(self) -> None:
         """Recompute installed/latest version from the device manifest, incl. file-hash drift."""
@@ -93,6 +92,15 @@ class PimoroniUnicornUpdate(UpdateEntity):
             "⚠ This engine changes the on-device file layout and must be applied by a one-time "
             "**USB reflash** (Thonny), not OTA. Copy the firmware/ tree to the device."
             if self._reflash else None)
+
+        issue_id = f"reflash_required_{self._device_id}"
+        if self._reflash:
+            ir.async_create_issue(
+                self.hass, DOMAIN, issue_id, is_fixable=False,
+                severity=ir.IssueSeverity.WARNING, translation_key="reflash_required",
+                translation_placeholders={"device": self._device_id})
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     async def async_added_to_hass(self) -> None:
         """Seed installed version + refresh when a new device manifest/status arrives."""

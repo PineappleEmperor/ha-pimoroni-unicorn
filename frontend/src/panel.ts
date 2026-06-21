@@ -3,7 +3,7 @@ import { property, state } from "lit/decorators.js";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
-interface CfgField { key: string; type: "select" | "rgb" | "rgblist" | "number" | "range" | "text" | "entity" | "icon"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
+interface CfgField { key: string; type: "select" | "rgb" | "rgblist" | "number" | "range" | "bool" | "text" | "entity" | "icon"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
 interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; multi?: boolean; }
 interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; type?: string; name?: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
@@ -86,6 +86,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private model = "galactic";
   @state() private layout: Layout = { widgets: [] };
   @state() private caps: WidgetCap[] = [];
+  @state() private widgetThumbs: Record<string, string> = {};
   @state() private overlayCaps: OverlayCap[] = [];
   @state() private defaultLayout: Layout = { widgets: [] };
   @state() private stored: Record<string, Layout> = {};
@@ -226,6 +227,8 @@ export class PimoroniUnicornPanel extends LitElement {
     .wlist li.dragover { outline: 2px solid var(--pu-primary); outline-offset: -2px; }
     .wlist li .drag { cursor: grab; color: var(--secondary-text-color, #79747e); user-select: none; line-height: 1; }
     .wlist li .drag:active { cursor: grabbing; }
+    .wlist li .wlx { border: none; background: none; color: var(--secondary-text-color, #79747e); font-size: 20px; line-height: 1; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; padding: 0; display: grid; place-items: center; flex: none; }
+    .wlist li .wlx:hover { background: color-mix(in srgb, var(--error-color, #ba1a1a) 16%, transparent); color: var(--error-color, #ba1a1a); }
     .panelrow { display: flex; gap: 10px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
     .panelrow > label:first-child { min-width: 64px; }
     h3 { margin: 4px 0 14px; font-size: 16px; font-weight: 500; letter-spacing: .1px; }
@@ -258,6 +261,11 @@ export class PimoroniUnicornPanel extends LitElement {
     .addchips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
     .addchip { font-size: 14px; font-weight: 500; line-height: 20px; padding: 9px 14px; min-height: 40px; border-radius: 20px; border: 1px solid var(--pu-outline); background: transparent; color: inherit; cursor: pointer; }
     .addchip:hover { background: color-mix(in srgb, var(--pu-primary) 12%, transparent); border-color: var(--pu-primary); color: var(--pu-primary); }
+    .addgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin: 6px 0 10px; }
+    .addtile { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border-radius: 12px; border: 1px solid var(--pu-outline); background: transparent; color: inherit; cursor: pointer; transition: background .12s, border-color .12s; }
+    .addtile:hover { background: color-mix(in srgb, var(--pu-primary) 12%, transparent); border-color: var(--pu-primary); }
+    .addthumb { width: 100%; height: 40px; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; }
+    .addtile-label { font-size: 12px; font-weight: 500; line-height: 16px; text-align: center; }
     .targets { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
     .chk { display: inline-flex; gap: 4px; align-items: center; font-weight: 400; }
     .catalog { list-style: none; padding: 0; margin: 0; max-width: 680px; }
@@ -266,7 +274,8 @@ export class PimoroniUnicornPanel extends LitElement {
       border: 1px solid var(--pu-outline); border-radius: 10px; margin-bottom: 8px;
     }
     .catalog li .grow { flex: 1; }
-    .badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 12px; background: color-mix(in srgb, var(--pu-primary) 12%, transparent); color: var(--pu-primary); }
+    .badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 12px; white-space: nowrap; background: color-mix(in srgb, var(--pu-primary) 12%, transparent); color: var(--pu-primary); }
+    .badges { display: flex; flex-wrap: wrap; gap: 6px; }
     .badge.ok { background: color-mix(in srgb, var(--success-color, #2e7d32) 18%, transparent); color: var(--success-color, #2e7d32); }
     .badge.warn { background: color-mix(in srgb, var(--warning-color, #ed6c02) 20%, transparent); color: var(--warning-color, #ed6c02); }
     .spec { width: 380px; height: 320px; font: 13px ui-monospace, monospace; resize: vertical; }
@@ -439,7 +448,15 @@ export class PimoroniUnicornPanel extends LitElement {
     this.model = caps.model;
     this.orientation = caps.orientation ?? 0;
     this.dims = (caps.dims as Size) ?? MODELS[this.model] ?? [53, 11];
+    this.loadWidgetThumbs();
     await this.refreshStored();
+  }
+
+  private async loadWidgetThumbs(): Promise<void> {
+    try {
+      const r = await this.hass.callWS({ type: "pimoroni_unicorn/widget_thumbs", model: this.model });
+      this.widgetThumbs = (r as { thumbs?: Record<string, string> }).thumbs ?? {};
+    } catch { /* thumbnails are optional polish */ }
   }
 
   private async selectDevice(entryId: string): Promise<void> {
@@ -557,6 +574,9 @@ export class PimoroniUnicornPanel extends LitElement {
   private typeOf(entry: WidgetEntry): string { return entry.type ?? entry.id; }
   private capForEntry(entry: WidgetEntry): WidgetCap | undefined { return this.capFor(this.typeOf(entry)); }
   private get scale(): number { return this.zoom || Math.max(4, Math.floor(PREVIEW_TARGET_PX / this.dims[0])); }
+  // Snap so scale*devicePixelRatio is whole: each source pixel maps to an integer number of
+  // device pixels, so lines stay straight on fractional-DPR (e.g. Windows 125%) displays.
+  private get pxScale(): number { const dpr = window.devicePixelRatio || 1; return Math.max(1, Math.round(this.scale * dpr)) / dpr; }
   private zoomBy(delta: number): void {
     this.zoom = Math.min(48, Math.max(4, this.scale + delta));
   }
@@ -653,8 +673,8 @@ export class PimoroniUnicornPanel extends LitElement {
     const sx = ev.clientX, sy = ev.clientY, ox = entry.x, oy = entry.y;
     (ev.target as HTMLElement).setPointerCapture(ev.pointerId);
     const move = (e: PointerEvent) => {
-      const dx = Math.round((e.clientX - sx) / this.scale / grid) * grid;
-      const dy = Math.round((e.clientY - sy) / this.scale / grid) * grid;
+      const dx = Math.round((e.clientX - sx) / this.pxScale / grid) * grid;
+      const dy = Math.round((e.clientY - sy) / this.pxScale / grid) * grid;
       // Allow hanging off either edge, keeping at least 1px on screen.
       entry.x = Math.max(1 - bw, Math.min(W - 1, ox + dx));
       entry.y = Math.max(1 - bh, Math.min(H - 1, oy + dy));
@@ -797,6 +817,11 @@ export class PimoroniUnicornPanel extends LitElement {
               .value=${String(this.cfgVal(entry, f.key))}
               @change=${(e: Event) => this.setCfg(entry, f.key, +(e.target as HTMLInputElement).value)} /></div>`;
         }
+        if (f.type === "bool") {
+          return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+            <input type="checkbox" .checked=${!!this.cfgVal(entry, f.key)}
+              @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLInputElement).checked)} /></div>`;
+        }
         if (f.type === "range") {
           const rv = Number(this.cfgVal(entry, f.key) ?? f.max ?? 100);
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
@@ -879,7 +904,7 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private _layoutView() {
-    const s = this.scale;
+    const s = this.pxScale;
     const presentTypes = new Set(this.layout.widgets.map((w) => this.typeOf(w)));
     const addable = this.caps.filter((c) => c.multi || !presentTypes.has(c.id));
     const overlays = new Set(this.layout.overlays ?? []);
@@ -974,12 +999,19 @@ export class PimoroniUnicornPanel extends LitElement {
                 <input type="checkbox" .checked=${w.enabled !== false} title="Show / hide"
                   @click=${(e: Event) => { e.stopPropagation(); w.enabled = (e.target as HTMLInputElement).checked; this.edited(); }} />
                 <span class="grow">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span>
+                <button class="wlx" title="Delete layer"
+                  @click=${(e: Event) => { e.stopPropagation(); this.removeWidget(i); }}>×</button>
               </li>`;
             })}
           </ul>
           ${this.layout.widgets.length > 1 ? html`<p class="hint">Top of the list draws on top.</p>` : ""}
-          ${addable.length ? html`<div class="addchips">
-            ${addable.map((c) => html`<button class="addchip" @click=${() => this.addWidget(c.id)} title="Add ${c.label}">+ ${c.label}</button>`)}
+          ${addable.length ? html`<div class="addgrid">
+            ${addable.map((c) => html`<button class="addtile" @click=${() => this.addWidget(c.id)} title="Add ${c.label}">
+              ${this.widgetThumbs[c.id]
+                ? html`<img class="addthumb" src="data:image/png;base64,${this.widgetThumbs[c.id]}" alt="" />`
+                : html`<div class="addthumb"></div>`}
+              <span class="addtile-label">${c.label}</span>
+            </button>`)}
           </div>` : ""}
           <h3>Overlays</h3>
           ${this.overlayCaps.map((o) => html`<div class="panelrow"><label>
@@ -1109,7 +1141,7 @@ export class PimoroniUnicornPanel extends LitElement {
         ${u.compat?.length ? html`<span class="hint">[${u.compat.join("/")}]</span>` : ""}
         ${kind === "screenset" ? html`<span class="hint">${u.screens} page(s)</span>` : ""}</div>
       <div class="hint">${u.requires?.length ? html`<span title=${u.requires.join(", ")}>${u.requires.length} dep(s)</span>` : "—"}</div>
-      <div>${onDevice ? html`<span class="badge ok">on device</span>` : ""}${u.compatible ? html`<span class="badge ok">compatible</span>` : html`<span class="badge warn">other model</span>`}</div>
+      <div class="badges">${onDevice ? html`<span class="badge ok">on device</span>` : ""}${u.compatible ? html`<span class="badge ok">compatible</span>` : html`<span class="badge warn">other model</span>`}</div>
       <div class="cell-action"><button ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to deploy"}
         @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>${onDevice ? "Re-deploy" : "Deploy"}</button></div>
     </div>`;
