@@ -322,7 +322,15 @@ async def _async_subscribe_status(hass: HomeAssistant, entry: PUConfigEntry) -> 
 
     @callback
     def _on_status(msg: Any) -> None:
-        entry.runtime_data["available"] = (msg.payload == "online")
+        online = msg.payload == "online"
+        rd = entry.runtime_data
+        rd["available"] = online
+        if not online and not rd.get("logged_offline"):
+            _LOGGER.warning("%s is offline (MQTT last-will)", device_id)
+            rd["logged_offline"] = True
+        elif online and rd.get("logged_offline"):
+            _LOGGER.info("%s is back online", device_id)
+            rd["logged_offline"] = False
         async_dispatcher_send(hass, f"{DOMAIN}_status_{entry.entry_id}")
 
     unsub = await async_subscribe(hass, f"{device_id}/status", _on_status)

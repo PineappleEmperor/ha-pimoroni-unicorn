@@ -31,8 +31,7 @@ rules:
   unique-config-entry: done
   # Silver
   config-entry-unloading: done
-  log-when-unavailable:
-    status: todo
+  log-when-unavailable: done
   entity-unavailable: done
   action-exceptions:
     status: todo
