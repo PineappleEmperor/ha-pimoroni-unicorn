@@ -1,6 +1,7 @@
 """Update platform: device engine version vs the bundled firmware."""
 import hashlib
 from pathlib import Path
+import time
 
 from homeassistant.components.update import UpdateEntity, UpdateEntityFeature
 from homeassistant.core import HomeAssistant, callback
@@ -70,13 +71,15 @@ class PimoroniUnicornUpdate(UpdateEntity):
         self._entry = entry
         self._device_id = device_id
         self._reflash = False
+        self._installing = False
+        self._install_started = 0.0
         self._attr_unique_id = f"{device_id}_firmware"
         self._attr_device_info = device_info(device_id, model)
 
     def _sync(self) -> None:
         """Recompute installed/latest version from the device manifest, incl. file-hash drift."""
         store = self._entry.runtime_data or {}
-        self._attr_available = bool(store.get("available"))
+        available = bool(store.get("available"))
         manifest = store.get("fw_manifest") or {}
         installed = manifest.get("engine_version")
         self._attr_installed_version = installed
@@ -92,6 +95,15 @@ class PimoroniUnicornUpdate(UpdateEntity):
             "⚠ This engine changes the on-device file layout and must be applied by a one-time "
             "**USB reflash** (Thonny), not OTA. Copy the firmware/ tree to the device."
             if self._reflash else None)
+
+        # During an OTA the device reboots (briefly offline). Keep the entity available and show
+        # in-progress instead of flicking to "unavailable", until the new version lands (or timeout).
+        if self._installing and (
+                (installed == ENGINE_VERSION and not drift)
+                or time.monotonic() - self._install_started > 180):
+            self._installing = False
+        self._attr_in_progress = self._installing
+        self._attr_available = available or self._installing
 
         issue_id = f"reflash_required_{self._device_id}"
         if self._reflash:
@@ -120,5 +132,9 @@ class PimoroniUnicornUpdate(UpdateEntity):
             raise HomeAssistantError(
                 "This engine update changes the on-device file layout and cannot be applied "
                 "over the air. Reflash the firmware/ tree via USB (Thonny) once; OTA works after.")
+        self._installing = True
+        self._install_started = time.monotonic()
+        self._attr_in_progress = True
+        self.async_write_ha_state()
         await self.hass.services.async_call(
             DOMAIN, "push_firmware", {"files": ENGINE_FILE_KEYS}, blocking=True)
