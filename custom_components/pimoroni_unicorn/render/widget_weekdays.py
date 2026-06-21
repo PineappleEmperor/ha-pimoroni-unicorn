@@ -4,11 +4,12 @@ from . import drawing
 
 WIDGET = {
     "id": "weekdays", "label": "Weekdays", "w": 20, "h": 1, "variants": ["big", "small"],
-    "default_cfg": {"variant": "big", "active": [0, 0, 128], "inactive": [60, 60, 60]},
+    "default_cfg": {"variant": "big", "active": [0, 0, 128], "inactive": [60, 60, 60], "brightness": 100},
     "cfg_fields": [
         {"key": "variant", "type": "select", "options": ["big", "small"]},
         {"key": "active", "type": "rgb", "label": "Active"},
         {"key": "inactive", "type": "rgb", "label": "Inactive"},
+        {"key": "brightness", "type": "range", "min": 10, "max": 100, "step": 5, "label": "Brightness"},
     ],
     "requires": [],
 }
@@ -21,8 +22,9 @@ def box(cfg):
 
 def render(g, x, y, w, h, cfg, state):
     """Draw the weekday row."""
-    active   = g.create_pen(*(cfg.get("active")   or (0, 0, 128)))
-    inactive = g.create_pen(*(cfg.get("inactive") or (60, 60, 60)))
+    b = cfg.get("brightness", 100)
+    active   = g.create_pen(*drawing.dim(cfg.get("active")   or (0, 0, 128), b))
+    inactive = g.create_pen(*drawing.dim(cfg.get("inactive") or (60, 60, 60), b))
     if cfg.get("variant", "big") == "small":
         drawing.draw_weekdays(state["time"][6], x, y, active, inactive)
     else:

@@ -63,8 +63,8 @@ After setup, open **Configure** to set optional data sources, currently these co
 
 **Settings → Devices & Services → Pimoroni Unicorn → ⋮ → Delete**
 
-Deleting the config entry removes its entities and the `notify.pimoroni_unicorn_<device_id>`
-service; the sidebar panel is dropped once no remaining device wants it. Stored layouts,
+Deleting the config entry removes its entities; the sidebar panel is dropped once no
+remaining device wants it. Stored layouts,
 playlists and installed marketplace icons/fonts persist in HA storage (shared across
 devices) and are restored if you add the integration again — uninstall the integration via
 HACS to clear them fully. Nothing is left in `configuration.yaml`.
@@ -114,30 +114,28 @@ marketplace* below.
 
 ### Notifications
 
-Two front doors to the same notification:
-
-- **`notify.pimoroni_unicorn_<device_id>`** — the canonical surface. Standard HA notify, works with `notify.*` blueprints/scripts. Pass the message directly and the rich options under `data:` (see fields below).
-- **`pimoroni_unicorn.send_notification`** — a guided builder with a sectioned form (basics, plus collapsed Appearance and Behaviour) and a device picker. Same result as the entity; exists because HA can only render a form for a custom action, not for an entity's free-form `data:`.
+**`pimoroni_unicorn.send_notification`** is the single notification surface — a
+device-targeted custom action with a guided, sectioned form (basics, plus collapsed
+Appearance and Behaviour) in the UI, and fully scriptable from YAML automations. It picks
+the device and carries the rich options as flat fields (see below).
 
 To clear the current notification, call **`pimoroni_unicorn.dismiss_notification`**; pass `all: true` to also empty the queue.
 
 ```yaml
-action: notify.send_message
-target:
-  entity_id: notify.pimoroni_unicorn_1
+action: pimoroni_unicorn.send_notification
 data:
+  device_id: 1a2b3c…        # the HA device
   message: "Garage open"
-  data:
-    icon: home
-    effect: rainbow
-    color: [0, 255, 0]
-    duration: 8
+  icon: garage          # name of an installed icon, or a LaMetric gallery code
+  effect: rainbow
+  color: [0, 255, 0]
+  duration: 8
 ```
 
 A notification with an `icon` shows it in a left panel beside the text; an `effect` plays a full-screen background animation.
 
 **Effects:** `rainbow`, `fire`, `matrix`, `scanner`, `comet`, `snow`, `confetti`, `flash`, `pulse`, `bounce`, `supercomputer`, `retroprompt`
-**Sounds** (Galactic/Cosmic only): `beep`, `chime`, `alert`
+**Sounds** (Galactic, Cosmic, Stellar — all have onboard audio): `beep`, `chime`, `alert`
 
 `data:` fields: `icon`, `effect`, `effect_speed`, `sound`, `color`, `bg_color`, `duration`, `scroll_speed`, `entrance`, `outlined`, plus behaviour — `hold` (stay until dismissed/replaced), `repeat` (full scroll passes), `stack` (off = replace immediately), `wakeup` (show while asleep). Duration auto-extends so overflowing text completes its scroll.
 
@@ -186,8 +184,36 @@ Pin a specific page on a device (by `index` or `name`), or `clear` the pin to re
 
 ### `pimoroni_unicorn.set_playlist`
 
-Define a device's playlist from named `pages` (in order), with `dwell` seconds and a `transition`. The `notify.pimoroni_unicorn_<device_id>` entity remains the canonical notification surface.
+Define a device's playlist from named `pages` (in order), with `dwell` seconds and a `transition`.
 
+## What this provides
+
+Per device you get: an **update** entity (engine OTA — installed vs latest `ENGINE_VERSION`, with an Install action), an **image** entity mirroring the live screen, **diagnostic sensors** (current page, connection state), and the sidebar **panel** (Designer / Marketplace / Widget editor / Playlists). Actions: `send_notification` (the single rich-notification surface), `push_firmware`, `show_page`, `set_playlist`.
+
+## Data updates
+
+This is a **local-push** integration (`iot_class: local_push`) — there is **no polling**. The device and Home Assistant exchange state over your local MQTT broker:
+
+- The device publishes **retained** topics on connect and on change — `<device_id>/status`, `/page`, `/diag`, `/fw/manifest` — so HA reflects the device's *actual* state (current page, engine version, online/offline via MQTT LWT).
+- HA pushes layout, playlist, sensor values, notifications and OTA commands to the device by publishing to the matching topics.
+
+State is therefore event-driven in both directions; entities update the instant the device reports, with no update interval to tune.
+
+## Known limitations
+
+- **First flash is physical.** The initial firmware install is over USB (Thonny); everything after is OTA. A major engine **file-layout** change (rare) needs a one-time USB reflash — OTA can't relocate `main.py` or restructure paths.
+- **Not standalone.** The device renders independently, but live entity data (sensor states, weather, energy) flows from HA over MQTT — with HA down, those widgets stop updating.
+- **Preview faithfulness.** The no-hardware preview only reproduces `pixel`, `rectangle` and bitmask fonts; firmware draw code is restricted to those so device and preview match. The shim has no `bitmap6` font, so the `tiny` clock variant renders approximately.
+- **One device per config entry.** Add each display as its own entry.
+- **Constrained hardware.** The Pico W has 264 KB RAM; very large layouts/animations can pressure it.
+
+## Troubleshooting
+
+- **Intermittent Wi-Fi / OTA failures, "HT not ready", `EHOSTUNREACH`, ping jitter** — almost always a **power** problem, not software: a thin USB cable or weak PSU browns out the Pico W's CYW43 radio. Use a quality cable and a 5 V supply with headroom.
+- **Wrong page *name* but the right screen** — push the page through the Designer (Save & Push) or `show_page`; the device reports its real page on `<device_id>/page`.
+- **No sound on a Stellar Unicorn** — needs engine ≥ 1.2.7 (earlier builds disabled Stellar audio). Update the engine via the device's update entity.
+- **Device offline in HA** — check the MQTT broker is reachable from both HA and the device, and that the credentials in `secrets.py` match.
+- **Diagnostics** — download via the device page (Settings → Devices → the device → Download diagnostics) to capture entry + runtime state for a bug report.
 
 ## Development
 

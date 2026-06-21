@@ -171,6 +171,8 @@ _screen_pinned = False
 _screen_switch_ms = 0
 _fade_left = 0
 FADE_FRAMES = 12
+_sleep_anim_left = 0
+SLEEP_ANIM_FRAMES = 60  # ~0.6s Zzz cue on screen-off before the panel blanks
 _wdt = None
 WDT_TIMEOUT_MS = 8000
 
@@ -278,7 +280,7 @@ def _draw_ota_progress(frac, phase_ms):
         ph = (phase_ms % 1400) / 700
         if ph > 1:
             ph = 2 - ph
-        lvl = int(30 + 176 * ph)
+        lvl = int(96 + 110 * ph)
         graphics.set_pen(graphics.create_pen(0, lvl, lvl))
         c = filled // ppc
         k = filled % ppc
@@ -938,10 +940,11 @@ async def mqtt_task():
 
 async def main_loop():
     """Handle button presses, draw each frame, and sleep; runs as the main display loop."""
-    global brightness, system_state, msg, icon_type, _fade_left
+    global brightness, system_state, msg, icon_type, _fade_left, _sleep_anim_left
     global _notify_active, _notify_start_ms, _notify_end_ms, _ota_pending
 
     last_button_time = 0
+    last_state = system_state
 
     while True:
         if _wdt is not None:
@@ -957,6 +960,10 @@ async def main_loop():
                 system_state     = "SLEEP" if system_state == "AWAKE" else "AWAKE"
                 last_button_time = current_time
                 send_ha_state()
+
+        if system_state != "AWAKE" and last_state == "AWAKE":
+            _sleep_anim_left = SLEEP_ANIM_FRAMES  # just fell asleep (button or HA) -> play Zzz
+        last_state = system_state
 
         notify_wakeup = system_state != "AWAKE" and (
             (_notify_active is not None and _notify_active.get("wakeup"))
@@ -1032,7 +1039,12 @@ async def main_loop():
         else:
             graphics.set_pen(BLACK)
             graphics.clear()
-            unicorn.set_brightness(0)
+            if _sleep_anim_left > 0:
+                unicorn.set_brightness(brightness)
+                drawing.draw_sleep(0, 0, width, height, 1.0 - _sleep_anim_left / SLEEP_ANIM_FRAMES)
+                _sleep_anim_left -= 1
+            else:
+                unicorn.set_brightness(0)
 
         unicorn.update(graphics)
         await asyncio.sleep(0.01)

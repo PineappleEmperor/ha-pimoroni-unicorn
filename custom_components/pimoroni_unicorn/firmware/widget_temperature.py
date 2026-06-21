@@ -5,7 +5,8 @@ WIDGET = {
     "id": "temperature", "label": "Temperature", "w": 15, "h": 5, "variants": [],
     "default_cfg": {"unit": "C", "decimals": 0, "color_mode": "value",
                     "color": [255, 255, 255], "cold": [80, 150, 255],
-                    "mid": [255, 255, 255], "hot": [255, 80, 40], "low": 5, "high": 25},
+                    "mid": [255, 255, 255], "hot": [255, 80, 40], "low": 5, "high": 25,
+                    "brightness": 100},
     "cfg_fields": [
         {"key": "unit", "type": "select", "options": ["C", "F", "none"], "label": "Unit"},
         {"key": "decimals", "type": "number", "min": 0, "max": 1, "step": 1, "label": "Decimals"},
@@ -16,6 +17,7 @@ WIDGET = {
         {"key": "hot", "type": "rgb", "label": "Hot colour"},
         {"key": "low", "type": "number", "min": -40, "max": 60, "step": 1, "label": "Cold below"},
         {"key": "high", "type": "number", "min": -40, "max": 60, "step": 1, "label": "Hot at/above"},
+        {"key": "brightness", "type": "range", "min": 10, "max": 100, "step": 5, "label": "Brightness"},
     ],
     "multi": True,
     "requires": [],
@@ -54,5 +56,6 @@ def render(g, x, y, w, h, cfg, state):
     temp = state.get("temp")
     if temp is None:
         return
-    tcfg = {"font": "font3x5", "color_mode": "solid", "color": _color(cfg, float(temp)), "spacing": 0}
+    tcfg = {"font": "font3x5", "color_mode": "solid", "color": _color(cfg, float(temp)),
+            "spacing": 0, "brightness": cfg.get("brightness", 100)}
     drawing.draw_text_fx(_text(cfg, float(temp)), x, y, tcfg, state.get("elapsed_ms", 0))

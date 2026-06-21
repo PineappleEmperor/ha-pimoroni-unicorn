@@ -3,7 +3,7 @@ import { property, state } from "lit/decorators.js";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
-interface CfgField { key: string; type: "select" | "rgb" | "rgblist" | "number" | "text" | "entity" | "icon"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
+interface CfgField { key: string; type: "select" | "rgb" | "rgblist" | "number" | "range" | "text" | "entity" | "icon"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
 interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; multi?: boolean; }
 interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; type?: string; name?: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
@@ -106,6 +106,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private tab: "layout" | "market" | "edit" | "screens" = "layout";
   @state() private catalog: CatalogWidget[] = [];
   @state() private fwManifest: FwManifest | null = null;
+  @state() private activePage: string | null = null;  // page name the device reports rendering
   @state() private contentLayouts: ContentUnit[] = [];
   @state() private contentScreensets: ContentUnit[] = [];
   @state() private showAllContent = false;
@@ -121,6 +122,9 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private fontPngs: Record<string, string> = {};
   private fontTimer = 0;
   @state() private dirty = false;
+  @state() private undoStack: Layout[] = [];
+  @state() private redoStack: Layout[] = [];
+  private snapshot: Layout = { widgets: [] };
   @state() private sectionsOpen: Record<string, boolean> = {};
   @state() private screenLayouts: string[] = [];
   @state() private screenDwell = 10;
@@ -185,6 +189,9 @@ export class PimoroniUnicornPanel extends LitElement {
     select:focus, input:focus, .spec:focus { border-color: var(--pu-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--pu-primary) 30%, transparent); }
     input[type="color"] { padding: 0; width: 38px; height: 34px; cursor: pointer; }
     input[type="range"] { padding: 0; border: none; box-shadow: none; accent-color: var(--pu-primary); }
+    .colorctl { display: inline-flex; align-items: center; gap: 8px; }
+    .hexin { width: 84px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: lowercase; }
+    .rangeval { min-width: 32px; text-align: right; color: var(--secondary-text-color, #49454f); font-variant-numeric: tabular-nums; }
     input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--pu-primary); }
     button {
       font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
@@ -381,6 +388,16 @@ export class PimoroniUnicornPanel extends LitElement {
   private _onKey = (e: KeyboardEvent): void => {
     const tag = (e.target as HTMLElement)?.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && this.tab === "layout") {
+      e.preventDefault();
+      if (e.shiftKey) this.redo(); else this.undo();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y" && this.tab === "layout") {
+      e.preventDefault();
+      this.redo();
+      return;
+    }
     if ((e.key === "Delete" || e.key === "Backspace") && this.tab === "layout"
         && this.selected >= 0 && this.layout.widgets[this.selected]) {
       e.preventDefault();
@@ -454,6 +471,9 @@ export class PimoroniUnicornPanel extends LitElement {
     this.layoutName = this.layout.name ?? "default";
     this.selected = -1;
     this.dirty = false;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.snapshot = JSON.parse(JSON.stringify(this.layout));
     this.renderPreview();
   }
 
@@ -485,8 +505,15 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private edited(): void {
+    this.undoStack = [...this.undoStack.slice(-99), this.snapshot];
+    this.redoStack = [];
+    this.snapshot = JSON.parse(JSON.stringify(this.layout));
     this.dirty = true;
     this.requestUpdate();
+    this.scheduleRender();
+  }
+
+  private scheduleRender(): void {
     if (this.renderTimer) clearTimeout(this.renderTimer);
     this.renderTimer = window.setTimeout(() => this.renderPreview(), 80);
     if (this.live && this.entryId) {
@@ -495,8 +522,35 @@ export class PimoroniUnicornPanel extends LitElement {
     }
   }
 
+  private undo(): void {
+    if (!this.undoStack.length) return;
+    this.redoStack = [...this.redoStack, this.snapshot];
+    const prev = this.undoStack[this.undoStack.length - 1];
+    this.undoStack = this.undoStack.slice(0, -1);
+    this.applyHistory(prev);
+  }
+
+  private redo(): void {
+    if (!this.redoStack.length) return;
+    this.undoStack = [...this.undoStack, this.snapshot];
+    const next = this.redoStack[this.redoStack.length - 1];
+    this.redoStack = this.redoStack.slice(0, -1);
+    this.applyHistory(next);
+  }
+
+  private applyHistory(target: Layout): void {
+    this.layout = JSON.parse(JSON.stringify(target));
+    this.snapshot = JSON.parse(JSON.stringify(target));
+    if (this.selected >= this.layout.widgets.length) this.selected = this.layout.widgets.length - 1;
+    this.layoutName = this.layout.name ?? this.layoutName;
+    this.dirty = true;
+    this.requestUpdate();
+    this.scheduleRender();
+  }
+
   private async pushLive(): Promise<void> {
-    await this.hass.callWS({ type: "pimoroni_unicorn/push_layout", entry_id: this.entryId, layout: this.layout });
+    const layout = { ...this.layout, name: this.layoutName };
+    await this.hass.callWS({ type: "pimoroni_unicorn/push_layout", entry_id: this.entryId, layout });
   }
 
   private capFor(id: string): WidgetCap | undefined { return this.caps.find((c) => c.id === id); }
@@ -542,6 +596,14 @@ export class PimoroniUnicornPanel extends LitElement {
   }
   private cfgVal(entry: WidgetEntry, key: string): unknown {
     return entry.cfg?.[key] ?? this.capForEntry(entry)?.default_cfg[key];
+  }
+  private colorCtl(rgb: Rgb, on: (v: Rgb) => void) {
+    return html`<span class="colorctl">
+      <input type="color" .value=${hex(rgb)}
+        @input=${(e: Event) => on(unhex((e.target as HTMLInputElement).value))} />
+      <input type="text" class="hexin" .value=${hex(rgb)} maxlength="7" spellcheck="false" aria-label="Hex colour"
+        @change=${(e: Event) => on(unhex((e.target as HTMLInputElement).value))} />
+    </span>`;
   }
   private setCfg(entry: WidgetEntry, key: string, value: unknown): void {
     entry.cfg = { ...(entry.cfg ?? {}), [key]: value };
@@ -707,6 +769,9 @@ export class PimoroniUnicornPanel extends LitElement {
         const mode = this.cfgVal(entry, "color_mode");
         if (f.key === "speed" && mode !== "rainbow") return "";
         if (f.type === "rgblist" && mode !== "per_char") return "";
+        const offMode = this.cfgVal(entry, "off_mode");
+        if (f.key === "off_brightness" && offMode === "colour") return "";
+        if (f.key === "off_color" && offMode !== "colour") return "";
         if (f.type === "rgblist") {
           const palette = this.cfgPalette(entry, f.key);
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
@@ -732,6 +797,13 @@ export class PimoroniUnicornPanel extends LitElement {
               .value=${String(this.cfgVal(entry, f.key))}
               @change=${(e: Event) => this.setCfg(entry, f.key, +(e.target as HTMLInputElement).value)} /></div>`;
         }
+        if (f.type === "range") {
+          const rv = Number(this.cfgVal(entry, f.key) ?? f.max ?? 100);
+          return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+            <input type="range" min=${f.min ?? 0} max=${f.max ?? 100} step=${f.step ?? 1} .value=${String(rv)}
+              @input=${(e: Event) => this.setCfg(entry, f.key, +(e.target as HTMLInputElement).value)} />
+            <span class="rangeval">${rv}</span></div>`;
+        }
         if (f.type === "icon") {
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
             <select @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLSelectElement).value)}>
@@ -753,8 +825,7 @@ export class PimoroniUnicornPanel extends LitElement {
               @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLInputElement).value)} /></div>`;
         }
         return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
-          <input type="color" .value=${hex(this.cfgVal(entry, f.key) as Rgb)}
-            @input=${(e: Event) => this.setCfg(entry, f.key, unhex((e.target as HTMLInputElement).value))} /></div>`;
+          ${this.colorCtl((this.cfgVal(entry, f.key) as Rgb) ?? [255, 255, 255], (v) => this.setCfg(entry, f.key, v))}</div>`;
       })}
       <div class="panelrow"><button class="danger" @click=${() => this.removeWidget(this.selected)}>Remove widget</button></div>
     `;
@@ -823,6 +894,10 @@ export class PimoroniUnicornPanel extends LitElement {
             </select>
           </label>
           <label>Name <input .value=${this.layoutName} @input=${(e: Event) => (this.layoutName = (e.target as HTMLInputElement).value)} /></label>
+        </div>
+        <div class="group">
+          <button class="secondary" @click=${this.undo} ?disabled=${!this.undoStack.length} title="Undo (Ctrl+Z)">↶ Undo</button>
+          <button class="secondary" @click=${this.redo} ?disabled=${!this.redoStack.length} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
         </div>
         <div class="group">
           <button class="secondary" @click=${this.editCurrentPage} ?disabled=${!this.entryId} title=${this.entryId ? "Load the page currently active on the device to edit it" : "Select a device first"}>Edit current page</button>
@@ -928,6 +1003,7 @@ export class PimoroniUnicornPanel extends LitElement {
   private async loadContent() {
     const q = this.entryId ? { entry_id: this.entryId } : {};
     const c = await this.hass.callWS({ type: "pimoroni_unicorn/content_catalog", ...q });
+    this.activePage = c.active_page ?? null;
     this.contentLayouts = c.layouts ?? [];
     this.contentScreensets = c.screensets ?? [];
   }
@@ -1026,15 +1102,16 @@ export class PimoroniUnicornPanel extends LitElement {
     </div>`;
   }
   private _contentRow(u: ContentUnit, kind: "layout" | "screenset") {
+    const onDevice = kind === "layout" && !!this.activePage && u.id === this.activePage;
     return html`<div class="mrow">
       ${this._thumb(u.thumb)}
       <div class="cell-name">${u.label}
         ${u.compat?.length ? html`<span class="hint">[${u.compat.join("/")}]</span>` : ""}
         ${kind === "screenset" ? html`<span class="hint">${u.screens} page(s)</span>` : ""}</div>
       <div class="hint">${u.requires?.length ? html`<span title=${u.requires.join(", ")}>${u.requires.length} dep(s)</span>` : "—"}</div>
-      <div>${u.compatible ? html`<span class="badge ok">compatible</span>` : html`<span class="badge warn">other model</span>`}</div>
+      <div>${onDevice ? html`<span class="badge ok">on device</span>` : ""}${u.compatible ? html`<span class="badge ok">compatible</span>` : html`<span class="badge warn">other model</span>`}</div>
       <div class="cell-action"><button ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to deploy"}
-        @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>Deploy</button></div>
+        @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>${onDevice ? "Re-deploy" : "Deploy"}</button></div>
     </div>`;
   }
 
@@ -1136,15 +1213,17 @@ export class PimoroniUnicornPanel extends LitElement {
         </div>
         ${[...this.fonts].sort((a, b) => a.h - b.h || a.w - b.w || a.label.localeCompare(b.label)).map((f) => html`<div class="frow">
           <div class="fmeta"><span class="cell-name">${f.label}</span>
-            <span class="hint">${f.kind === "digits" ? "digits" : "A–Z 0–9"} · ${f.w}×${f.h}${f.builtin ? " · built-in" : ""}</span></div>
+            <span class="hint">${f.kind === "digits" ? "digits" : "A–Z 0–9"} · ${f.w}×${f.h}</span></div>
           ${this.fontPngs[f.name]
             ? html`<img class="fprev" src="data:image/png;base64,${this.fontPngs[f.name]}" />`
             : html`<div class="fprev"></div>`}
-          ${this.entryId && !f.builtin
-            ? (f.installed
-                ? html`<span class="badge ok">installed</span>`
-                : html`<button @click=${() => this.installFont(f.name)}>Install</button>`)
-            : ""}
+          ${f.builtin
+            ? html`<span class="badge ok">built-in</span>`
+            : (this.entryId
+                ? (f.installed
+                    ? html`<span class="badge ok">installed</span>`
+                    : html`<button @click=${() => this.installFont(f.name)}>Install</button>`)
+                : "")}
         </div>`)}
       `)}
       <p class="hint">Deploying a page installs any widgets/fonts it needs over the air first, then pushes it; the device reboots if files changed.</p>
@@ -1214,7 +1293,7 @@ export class PimoroniUnicornPanel extends LitElement {
     const hint = FIELD_META[key]?.hint;
     const label = html`<span class="flabel">${fieldLabel(key)}</span>`;
     let control;
-    if (type === "rgb") control = html`<input type="color" .value=${hex(op[key] as Rgb)} @input=${(e: Event) => this.setOpField(i, key, unhex((e.target as HTMLInputElement).value))} />`;
+    if (type === "rgb") control = this.colorCtl((op[key] as Rgb) ?? [255, 255, 255], (v) => this.setOpField(i, key, v));
     else if (type === "num") control = html`<input type="number" style="width:64px" .value=${String(op[key] ?? 0)} @change=${(e: Event) => this.setOpField(i, key, +(e.target as HTMLInputElement).value)} />`;
     else if (type === "icon") control = html`<select @change=${(e: Event) => this.setOpField(i, key, (e.target as HTMLSelectElement).value)}>
         ${this.iconNames.map((o) => html`<option ?selected=${op[key] === o}>${o}</option>`)}</select>`;

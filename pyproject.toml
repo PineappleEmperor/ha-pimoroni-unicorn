@@ -604,3 +604,10 @@ max-complexity = 25
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 property-decorators = ["propcache.api.cached_property"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# tests/firmware are plain sync tests; tests/integration use pytest-homeassistant-custom-
+# component. The HA plugin's async autouse `enable_event_loop_debug` fixture is overridden
+# (sync no-op) in tests/firmware/conftest.py so both suites run together under one pytest.

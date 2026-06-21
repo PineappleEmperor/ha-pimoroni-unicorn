@@ -110,6 +110,14 @@ def init(graphics, bitfont, width, height):
     _ENERGY_RED  = graphics.create_pen(220, 60,  60)
 
 
+def dim(rgb, b):
+    """Scale an (r, g, b) by a 0-100 brightness; 100 (or missing) is unchanged."""
+    if not rgb or b >= 100:
+        return rgb
+    f = max(0, b) / 100.0
+    return (int(rgb[0] * f), int(rgb[1] * f), int(rgb[2] * f))
+
+
 def lerp_colour(rgb_a, rgb_b, t):
     """Interpolate between two (r,g,b) tuples; t=0→rgb_a, t=1→rgb_b."""
     return (
@@ -151,12 +159,15 @@ def text_fx_colors(s, cfg, elapsed_ms=0):
         speed = cfg.get("speed", 3)
         spread = cfg.get("spread", 0.12)
         phase = (elapsed_ms * speed) / 6000.0
-        return [_hsv_to_rgb(i * spread - phase, 1.0, 1.0) for i in range(n)]
-    if mode == "per_char":
+        cols = [_hsv_to_rgb(i * spread - phase, 1.0, 1.0) for i in range(n)]
+    elif mode == "per_char":
         palette = cfg.get("colors") or [cfg.get("color") or (255, 255, 255)]
-        return [tuple(palette[i % len(palette)]) for i in range(n)]
-    base = tuple(cfg.get("color") or (255, 255, 255))
-    return [base for _ in range(n)]
+        cols = [tuple(palette[i % len(palette)]) for i in range(n)]
+    else:
+        base = tuple(cfg.get("color") or (255, 255, 255))
+        cols = [base for _ in range(n)]
+    b = cfg.get("brightness", 100)
+    return cols if b >= 100 else [dim(c, b) for c in cols]
 
 
 def draw_text_fx(s, x, y, cfg, elapsed_ms=0):
@@ -187,37 +198,39 @@ def soc_colour(soc_pct, is_charging):
 
 
 def _energy_colour(solar, consumption, mode, soc):
-    """Pick the energy value colour by mode, surplus/deficit and battery state."""
+    """Pick the energy value (r,g,b) by mode, surplus/deficit and battery state."""
+    charcoal = (54, 69, 79)
+    white = (255, 255, 255)
     net = solar - consumption
     surplus = net > 0.1
-    surplus_colour = _SUN_YELLOW if soc >= 100 else _ENERGY_CYAN
+    surplus_colour = (255, 255, 0) if soc >= 100 else (0, 206, 206)
     no_data = solar <= 0.1 and consumption <= 0.1
     if mode == "Solar":
-        return _CHARCOAL if solar <= 0.1 else (surplus_colour if surplus else _WHITE)
+        return charcoal if solar <= 0.1 else (surplus_colour if surplus else white)
     if mode == "Consumption":
         if no_data:
-            return _CHARCOAL
+            return charcoal
         if surplus:
             return surplus_colour
-        return _WHITE if net >= -0.1 else _ENERGY_RED
+        return white if net >= -0.1 else (220, 60, 60)
     if no_data:
-        return _CHARCOAL
+        return charcoal
     if surplus:
         return surplus_colour
     if net < -0.1:
-        return _ENERGY_RED
-    return _WHITE
+        return (220, 60, 60)
+    return white
 
 
-def draw_battery(x, y, soc, is_charging, battery_animation):
+def draw_battery(x, y, soc, is_charging, battery_animation, brightness=100):
     """Draw a 4x5 battery indicator with its top-left at (x, y)."""
-    rgb        = soc_colour(soc, is_charging)
+    rgb        = dim(soc_colour(soc, is_charging), brightness)
     exact_fill = (soc / 100.0) * BATTERY_ROWS
     full_rows  = int(exact_fill)
     frac       = exact_fill - full_rows
     tick       = time.ticks_ms()
 
-    _g.set_pen(_DARK_GREY)
+    _g.set_pen(_DARK_GREY if brightness >= 100 else _g.create_pen(*dim((169, 169, 169), brightness)))
     _g.rectangle(x,     y + 1, 1, 4)
     _g.rectangle(x + 3, y + 1, 1, 4)
     _g.rectangle(x + 1, y,     2, 1)
@@ -279,27 +292,29 @@ def draw_battery(x, y, soc, is_charging, battery_animation):
 
 
 def draw_energy(x, y, w, h, solar=0.0, battery_soc=0, is_charging=False,
-                mode="Net", consumption=0.0, battery_animation=False, decimals=1):
+                mode="Net", consumption=0.0, battery_animation=False, decimals=1, brightness=100):
     """Battery indicator plus the left-aligned energy value, top-left at (x, y)."""
-    draw_battery(x, y, battery_soc, is_charging, battery_animation)
+    draw_battery(x, y, battery_soc, is_charging, battery_animation, brightness)
     if mode == "Consumption":
         val = consumption
     elif mode == "Net":
         val = abs(solar - consumption)
     else:
         val = solar
-    _g.set_pen(_energy_colour(solar, consumption, mode, battery_soc))
+    _g.set_pen(_g.create_pen(*dim(_energy_colour(solar, consumption, mode, battery_soc), brightness)))
     _bitfont.draw_text(f"{val:.{decimals}f}", x + 5, y, font3x5, d=1)
 
 
-def draw_sun_moon(x, y, w, h, solar=0.0, sun_below_horizon=False):
+def draw_sun_moon(x, y, w, h, solar=0.0, sun_below_horizon=False, brightness=100):
     """Draw a sun (day) or moon (night) filled disc in the w*h box at (x, y).
 
     Uses explicit pixels (not _g.circle) so the device and the CPython shim
     render an identical shape.
     """
     # Day/night follows the horizon, not solar output: sun by day, moon at night.
-    _g.set_pen(_MOON_SILVER if sun_below_horizon else _SUN_YELLOW)
+    base = (180, 190, 210) if sun_below_horizon else (255, 255, 0)
+    _g.set_pen((_MOON_SILVER if sun_below_horizon else _SUN_YELLOW)
+               if brightness >= 100 else _g.create_pen(*dim(base, brightness)))
     d = min(w, h)
     r = (d - 1) / 2.0
     lim = (r + 0.5) * (r + 0.5)
@@ -309,6 +324,25 @@ def draw_sun_moon(x, y, w, h, solar=0.0, sun_below_horizon=False):
             dy = iy - r
             if dx * dx + dy * dy <= lim:
                 _g.pixel(x + ix, y + iy)
+
+
+def draw_sleep(x, y, w, h, t):
+    """A 'Zzz' going-to-sleep cue in the (x,y,w,h) box; t is 0..1 over the transition.
+
+    Three Z's cascade up-right and appear in turn, cooling/dimming as they rise.
+    Bitmap-font only, so the device and the CPython shim render identically.
+    """
+    t = 0.0 if t < 0 else (1.0 if t > 1 else t)
+    count = 1 + int(min(0.999, t) * 3)  # 1..3 Z's reveal over time
+    bx = x + 1
+    by = y + h - 5  # bottom Z (font3x5 is 5 tall)
+    for i in range(count):
+        py = by - i * 4
+        if py < y:
+            break
+        lvl = int(70 + 150 * (1.0 - i / 3.0))  # lower (newer) Z brightest
+        _g.set_pen(_g.create_pen(int(lvl * 0.55), int(lvl * 0.7), lvl))  # cool tint
+        _bitfont.draw_text("Z", bx + i * 3, py, font3x5, d=1)
 
 
 def draw_custom_digit(digit_idx, x, y, colour, background=None):

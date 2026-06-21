@@ -15,7 +15,8 @@ _SAMPLE = {"weekday": "WWW", "day": "30", "month": "WWW", "month_full": "SEPTEMB
 WIDGET = {
     "id": "date", "label": "Date text", "w": 11, "h": 5, "variants": [],
     "default_cfg": {"format": "weekday", "color": [255, 255, 255],
-                    "font": "font3x5", "color_mode": "solid", "speed": 3, "spacing": 0},
+                    "font": "font3x5", "color_mode": "solid", "speed": 3, "spacing": 0,
+                    "brightness": 100},
     "cfg_fields": [
         {"key": "format", "type": "select", "options": _FORMATS, "label": "Format"},
         {"key": "font", "type": "select", "options": ["font3x5", "font5x9"], "label": "Font"},
@@ -25,6 +26,7 @@ WIDGET = {
         {"key": "colors", "type": "rgblist", "label": "Per-char colours"},
         {"key": "speed", "type": "number", "min": 0, "max": 10, "step": 1, "label": "Rainbow speed"},
         {"key": "spacing", "type": "number", "min": -2, "max": 6, "step": 1, "label": "Letter spacing"},
+        {"key": "brightness", "type": "range", "min": 10, "max": 100, "step": 5, "label": "Brightness"},
     ],
     "multi": True,
     "requires": [],

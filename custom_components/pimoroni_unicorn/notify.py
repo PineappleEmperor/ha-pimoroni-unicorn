@@ -7,7 +7,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.components.mqtt import async_publish
-from homeassistant.components.notify.const import ATTR_DATA, ATTR_MESSAGE, ATTR_TITLE
+from homeassistant.components.notify.const import ATTR_MESSAGE
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import device_registry as dr
 import homeassistant.helpers.config_validation as cv
@@ -23,12 +23,6 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 _SPEED = vol.All(vol.Coerce(float), vol.Range(min=0.1, max=5.0))
-
-SERVICE_SCHEMA = vol.Schema({
-    vol.Required(ATTR_MESSAGE): cv.string,
-    vol.Optional(ATTR_TITLE):   cv.string,
-    vol.Optional(ATTR_DATA):    dict,
-})
 
 GENERIC_NOTIFY_SCHEMA = vol.Schema({
     vol.Required("device_id"):                 cv.string,
@@ -108,31 +102,6 @@ def _maybe_downconvert(hass: HomeAssistant, entry, payload: dict[str, Any]) -> d
     if caps is not None and caps.get("v") != NOTIFY_PAYLOAD_VERSION:
         return _downconvert_v2(payload)
     return payload
-
-
-def make_notify_handler(hass: HomeAssistant, device_id: str):
-    """Return a notify-entity handler; legacy data.mode passes through, else v2."""
-    async def async_handle(call: ServiceCall) -> None:
-        message: str = call.data.get(ATTR_MESSAGE, "")
-        data: dict[str, Any] = call.data.get(ATTR_DATA) or {}
-
-        if "mode" in data:  # legacy automation compatibility
-            payload: dict[str, Any] = {}
-            if message:
-                payload["text"] = message
-            for key in ("mode", "icon", "animation", "sound", "color", "bg_color",
-                        "duration", "entrance", "layout", "split_width", "outlined"):
-                if key in data:
-                    payload[key] = data[key]
-        else:
-            payload = _build_payload_v2(message, data)
-
-        if not _has_content(payload):
-            _LOGGER.warning("Pimoroni Unicorn notify: provide at least 'message', 'icon' or 'effect'")
-            return
-        await async_publish(hass, f"{device_id}/notify", json.dumps(payload))
-
-    return async_handle
 
 
 def make_generic_notify_handler(hass: HomeAssistant):

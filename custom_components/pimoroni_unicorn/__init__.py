@@ -13,7 +13,6 @@ from typing import Any
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.mqtt import async_publish, async_subscribe
-from homeassistant.components.notify.const import DOMAIN as NOTIFY_DOMAIN
 from homeassistant.components.persistent_notification import (
     async_create as notify_create,
     async_dismiss as notify_dismiss,
@@ -51,10 +50,8 @@ from .const import (
 from .notify import (
     DISMISS_SCHEMA,
     GENERIC_NOTIFY_SCHEMA,
-    SERVICE_SCHEMA as NOTIFY_SERVICE_SCHEMA,
     make_dismiss_handler,
     make_generic_notify_handler,
-    make_notify_handler,
 )
 from .screens import (
     SET_PLAYLIST_SCHEMA,
@@ -121,7 +118,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     """Set up Pimoroni Unicorn from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    entry.runtime_data = {"unsub": [], "sensor_entities": set(), "diag": {}, "available": False}
+    entry.runtime_data = {"unsub": [], "sensor_unsub": [], "sensor_entities": set(),
+                          "diag": {}, "available": False}
 
     opts      = _merged_opts(entry)
     device_id = opts[CONF_DEVICE_ID]
@@ -135,7 +133,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await _async_subscribe_ota_result(hass, entry)
     await _async_subscribe_icons_result(hass, entry)
     await _async_setup_time_feed(hass, entry)
-    await _async_setup_sensor_feed(hass, entry)
+    await _async_rewire_sensor_feed(hass, entry, await layout.async_get_active(hass, entry))
     await _async_publish_orientation(hass, entry)
     await layout.async_push_active(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
@@ -145,11 +143,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
         ws_api.async_register(hass)
         hass.data[f"{DOMAIN}_ws_registered"] = True
     await _async_refresh_panel(hass)
-
-    if device_id and not hass.services.has_service(NOTIFY_DOMAIN, device_id):
-        hass.services.async_register(
-            NOTIFY_DOMAIN, device_id, make_notify_handler(hass, device_id), schema=NOTIFY_SERVICE_SCHEMA
-        )
 
     if device_id:
         await hass.async_add_executor_job(_purge_ota_staging, hass, device_id)
@@ -162,11 +155,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     await hass.config_entries.async_unload_platforms(entry, ["update", "sensor", "image"])
     for unsub in (entry.runtime_data or {}).get("unsub", []):
         unsub()
-
-    opts      = _merged_opts(entry)
-    device_id = opts[CONF_DEVICE_ID]
-    if device_id and hass.services.has_service(NOTIFY_DOMAIN, device_id):
-        hass.services.async_remove(NOTIFY_DOMAIN, device_id)
+    for unsub in (entry.runtime_data or {}).get("sensor_unsub", []):
+        unsub()
 
     others = [e for e in hass.config_entries.async_entries(DOMAIN) if e.entry_id != entry.entry_id]
     if not others and hass.data.pop(f"{DOMAIN}_panel_registered", False):
@@ -226,7 +216,7 @@ async def _async_refresh_panel(hass: HomeAssistant) -> None:
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
     _setup_publishers(hass, entry)
-    await _async_setup_sensor_feed(hass, entry)
+    await _async_rewire_sensor_feed(hass, entry, await layout.async_get_active(hass, entry))
     await _async_publish_orientation(hass, entry)
     await layout.async_push_active(hass, entry)
     await _async_refresh_panel(hass)
@@ -311,7 +301,9 @@ async def _async_subscribe_page(hass: HomeAssistant, entry: PUConfigEntry) -> No
             data = json.loads(msg.payload)
         except (json.JSONDecodeError, ValueError):
             return
-        entry.runtime_data["page"] = data if isinstance(data, dict) and data.get("widgets") else None
+        lay = data if isinstance(data, dict) and data.get("widgets") else None
+        entry.runtime_data["page"] = lay
+        hass.async_create_task(_async_rewire_sensor_feed(hass, entry, lay))
 
     unsub = await async_subscribe(hass, f"{device_id}/page", _on_page)
     entry.runtime_data["unsub"].append(unsub)
@@ -438,18 +430,41 @@ async def _async_setup_time_feed(hass: HomeAssistant, entry: PUConfigEntry) -> N
         async_track_time_interval(hass, _tick, TIME_INTERVAL))
 
 
-async def _async_setup_sensor_feed(hass: HomeAssistant, entry: PUConfigEntry) -> None:
-    """Watch entities named by sensor widgets in the active layout; publish their on/off state."""
-    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
-    store     = entry.runtime_data
-    active    = await layout.async_get_active(hass, entry) or {}
-    entities: set[str] = set()
-    for w in active.get("widgets", []):
+_SENSOR_OFF_STATES = {
+    "off", "not_home", "closed", "idle", "standby", "disconnected",
+    "unavailable", "unknown", "none", "0", "false", "",
+}
+
+
+def _sensor_on(state: Any) -> bool:
+    """Binary truthiness for a display dot, sane across entity domains (home/open/playing -> on)."""
+    return state is not None and str(state.state).strip().lower() not in _SENSOR_OFF_STATES
+
+
+def _layout_sensor_entities(lay: dict[str, Any] | None) -> set[str]:
+    """Entity ids named by the sensor widgets in a layout."""
+    out: set[str] = set()
+    for w in (lay or {}).get("widgets", []):
         if w.get("type", w.get("id")) == "sensor":
             ent = (w.get("cfg") or {}).get("entity")
             if isinstance(ent, str) and ent:
-                entities.add(ent)
+                out.add(ent)
+    return out
 
+
+async def _async_rewire_sensor_feed(
+    hass: HomeAssistant, entry: PUConfigEntry, lay: dict[str, Any] | None
+) -> None:
+    """Publish on/off state for the sensor widgets in the layout the device is showing."""
+    device_id = _merged_opts(entry)[CONF_DEVICE_ID]
+    store     = entry.runtime_data
+    entities  = _layout_sensor_entities(lay)
+    if entities == store.get("sensor_entities") and store.get("sensor_unsub"):
+        return
+
+    for unsub in store.get("sensor_unsub", []):
+        unsub()
+    store["sensor_unsub"] = []
     for removed in store.get("sensor_entities", set()) - entities:
         await async_publish(hass, f"{device_id}/display/{removed}/state", "", retain=True)
     store["sensor_entities"] = entities
@@ -457,7 +472,7 @@ async def _async_setup_sensor_feed(hass: HomeAssistant, entry: PUConfigEntry) ->
     for ent in entities:
         st = hass.states.get(ent)
         await async_publish(hass, f"{device_id}/display/{ent}/state",
-                            "ON" if st and st.state == "on" else "OFF", retain=True)
+                            "ON" if _sensor_on(st) else "OFF", retain=True)
 
         @callback
         def _on_state(event: Any, _ent: str = ent, _did: str = device_id) -> None:
@@ -465,9 +480,9 @@ async def _async_setup_sensor_feed(hass: HomeAssistant, entry: PUConfigEntry) ->
             if new_state is not None:
                 hass.async_create_task(async_publish(
                     hass, f"{_did}/display/{_ent}/state",
-                    "ON" if new_state.state == "on" else "OFF", retain=True))
+                    "ON" if _sensor_on(new_state) else "OFF", retain=True))
 
-        store["unsub"].append(async_track_state_change_event(hass, [ent], _on_state))
+        store["sensor_unsub"].append(async_track_state_change_event(hass, [ent], _on_state))
 
 
 def _merged_opts(entry: ConfigEntry) -> dict[str, Any]:
