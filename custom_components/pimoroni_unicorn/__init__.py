@@ -12,14 +12,18 @@ from typing import Any
 
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
-from homeassistant.components.mqtt import async_publish, async_subscribe
+from homeassistant.components.mqtt import (
+    async_publish,
+    async_subscribe,
+    async_wait_for_mqtt_client,
+)
 from homeassistant.components.persistent_notification import (
     async_create as notify_create,
     async_dismiss as notify_dismiss,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
@@ -117,6 +121,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     """Set up Pimoroni Unicorn from a config entry."""
+    if not await async_wait_for_mqtt_client(hass):
+        raise ConfigEntryNotReady("MQTT integration not available")
+
     hass.data.setdefault(DOMAIN, {})
     entry.runtime_data = {"unsub": [], "sensor_unsub": [], "sensor_entities": set(),
                           "diag": {}, "available": False}

@@ -23,11 +23,11 @@ rules:
   has-entity-name: done
   runtime-data: done
   test-before-configure:
-    status: todo
-    comment: Config flow does not yet test the MQTT/device connection.
-  test-before-setup:
-    status: todo
-    comment: Raise ConfigEntryNotReady when the device/broker is unavailable.
+    status: exempt
+    comment: >-
+      The flow creates an entry from device id + model with no synchronous device/broker
+      connection to validate; devices announce themselves via MQTT discovery. Nothing to test.
+  test-before-setup: done
   unique-config-entry: done
   # Silver
   config-entry-unloading: done
