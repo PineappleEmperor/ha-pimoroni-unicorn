@@ -3,7 +3,7 @@ import { property, state } from "lit/decorators.js";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
-interface CfgField { key: string; type: "select" | "rgb" | "rgblist" | "number" | "text" | "entity" | "icon"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
+interface CfgField { key: string; type: "select" | "rgb" | "rgblist" | "number" | "range" | "text" | "entity" | "icon"; options?: string[]; label?: string; min?: number; max?: number; step?: number; }
 interface WidgetCap { id: string; label: string; w: number; h: number; variants: string[]; default_cfg: Record<string, unknown>; cfg_fields: CfgField[]; sizes: Record<string, Size>; multi?: boolean; }
 interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; type?: string; name?: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
@@ -189,6 +189,9 @@ export class PimoroniUnicornPanel extends LitElement {
     select:focus, input:focus, .spec:focus { border-color: var(--pu-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--pu-primary) 30%, transparent); }
     input[type="color"] { padding: 0; width: 38px; height: 34px; cursor: pointer; }
     input[type="range"] { padding: 0; border: none; box-shadow: none; accent-color: var(--pu-primary); }
+    .colorctl { display: inline-flex; align-items: center; gap: 8px; }
+    .hexin { width: 84px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: lowercase; }
+    .rangeval { min-width: 32px; text-align: right; color: var(--secondary-text-color, #49454f); font-variant-numeric: tabular-nums; }
     input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--pu-primary); }
     button {
       font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
@@ -594,6 +597,14 @@ export class PimoroniUnicornPanel extends LitElement {
   private cfgVal(entry: WidgetEntry, key: string): unknown {
     return entry.cfg?.[key] ?? this.capForEntry(entry)?.default_cfg[key];
   }
+  private colorCtl(rgb: Rgb, on: (v: Rgb) => void) {
+    return html`<span class="colorctl">
+      <input type="color" .value=${hex(rgb)}
+        @input=${(e: Event) => on(unhex((e.target as HTMLInputElement).value))} />
+      <input type="text" class="hexin" .value=${hex(rgb)} maxlength="7" spellcheck="false" aria-label="Hex colour"
+        @change=${(e: Event) => on(unhex((e.target as HTMLInputElement).value))} />
+    </span>`;
+  }
   private setCfg(entry: WidgetEntry, key: string, value: unknown): void {
     entry.cfg = { ...(entry.cfg ?? {}), [key]: value };
     this.edited();
@@ -783,6 +794,13 @@ export class PimoroniUnicornPanel extends LitElement {
               .value=${String(this.cfgVal(entry, f.key))}
               @change=${(e: Event) => this.setCfg(entry, f.key, +(e.target as HTMLInputElement).value)} /></div>`;
         }
+        if (f.type === "range") {
+          const rv = Number(this.cfgVal(entry, f.key) ?? f.max ?? 100);
+          return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+            <input type="range" min=${f.min ?? 0} max=${f.max ?? 100} step=${f.step ?? 1} .value=${String(rv)}
+              @input=${(e: Event) => this.setCfg(entry, f.key, +(e.target as HTMLInputElement).value)} />
+            <span class="rangeval">${rv}</span></div>`;
+        }
         if (f.type === "icon") {
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
             <select @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLSelectElement).value)}>
@@ -804,8 +822,7 @@ export class PimoroniUnicornPanel extends LitElement {
               @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLInputElement).value)} /></div>`;
         }
         return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
-          <input type="color" .value=${hex(this.cfgVal(entry, f.key) as Rgb)}
-            @input=${(e: Event) => this.setCfg(entry, f.key, unhex((e.target as HTMLInputElement).value))} /></div>`;
+          ${this.colorCtl((this.cfgVal(entry, f.key) as Rgb) ?? [255, 255, 255], (v) => this.setCfg(entry, f.key, v))}</div>`;
       })}
       <div class="panelrow"><button class="danger" @click=${() => this.removeWidget(this.selected)}>Remove widget</button></div>
     `;
@@ -1273,7 +1290,7 @@ export class PimoroniUnicornPanel extends LitElement {
     const hint = FIELD_META[key]?.hint;
     const label = html`<span class="flabel">${fieldLabel(key)}</span>`;
     let control;
-    if (type === "rgb") control = html`<input type="color" .value=${hex(op[key] as Rgb)} @input=${(e: Event) => this.setOpField(i, key, unhex((e.target as HTMLInputElement).value))} />`;
+    if (type === "rgb") control = this.colorCtl((op[key] as Rgb) ?? [255, 255, 255], (v) => this.setOpField(i, key, v));
     else if (type === "num") control = html`<input type="number" style="width:64px" .value=${String(op[key] ?? 0)} @change=${(e: Event) => this.setOpField(i, key, +(e.target as HTMLInputElement).value)} />`;
     else if (type === "icon") control = html`<select @change=${(e: Event) => this.setOpField(i, key, (e.target as HTMLSelectElement).value)}>
         ${this.iconNames.map((o) => html`<option ?selected=${op[key] === o}>${o}</option>`)}</select>`;

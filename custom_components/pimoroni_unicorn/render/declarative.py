@@ -25,6 +25,14 @@ def _resolve(op, cfg):
     return out
 
 
+def _dim(rgb, b):
+    """Scale an (r, g, b) by a 0-100 brightness; 100 (or missing) is unchanged."""
+    if not rgb or b >= 100:
+        return rgb
+    f = max(0, b) / 100.0
+    return (int(rgb[0] * f), int(rgb[1] * f), int(rgb[2] * f))
+
+
 def _value_text(op, state):
     val = state.get(op.get("bind"))
     if val is None:
@@ -59,11 +67,11 @@ def _draw_value(g, op, x, y, state, pen):
             cx += fw + 1
 
 
-def _draw_bar(g, op, x, y, state, pen):
+def _draw_bar(g, op, x, y, state, pen, bright):
     w = op.get("w", 1)
     h = op.get("h", 1)
     if op.get("bg"):
-        g.set_pen(g.create_pen(*op["bg"]))
+        g.set_pen(g.create_pen(*_dim(op["bg"], bright)))
         g.rectangle(x, y, w, h)
     val = state.get(op.get("bind"), 0) or 0
     mx = op.get("max", 100) or 1
@@ -73,21 +81,27 @@ def _draw_bar(g, op, x, y, state, pen):
         g.rectangle(x, y, fill, h)
 
 
-def _draw_dot(g, op, x, y, state):
-    sensor = state.get("display_sensors", {}).get(op.get("bind"), {})
-    rgb = op.get("on_color", (0, 255, 0)) if sensor.get("state") else op.get("off_color", (20, 20, 20))
-    g.set_pen(g.create_pen(*rgb))
+def _draw_dot(g, op, x, y, state, bright):
+    on = state.get("display_sensors", {}).get(op.get("bind"), {}).get("state")
+    on_rgb = op.get("on_color", (0, 255, 0))
+    if on:
+        rgb = on_rgb
+    else:
+        ob = op.get("off_brightness")
+        rgb = _dim(on_rgb, ob) if ob is not None else op.get("off_color", (20, 20, 20))
+    g.set_pen(g.create_pen(*_dim(rgb, bright)))
     g.rectangle(x, y, op.get("w", 2), op.get("h", 2))
 
 
 def render(g, spec, x, y, w, h, cfg, state):
     """Draw a declarative widget spec at (x, y)."""
+    bright = cfg.get("brightness", 100)
     for raw in spec.get("draw", []):
         op = _resolve(raw, cfg)
         kind = op.get("op")
         ox = x + op.get("x", 0)
         oy = y + op.get("y", 0)
-        pen = g.create_pen(*(op.get("color") or cfg.get("color") or (255, 255, 255)))
+        pen = g.create_pen(*_dim(op.get("color") or cfg.get("color") or (255, 255, 255), bright))
         if kind == "rect":
             g.set_pen(pen)
             g.rectangle(ox, oy, op.get("w", 1), op.get("h", 1))
@@ -100,6 +114,6 @@ def render(g, spec, x, y, w, h, cfg, state):
         elif kind == "value":
             _draw_value(g, op, ox, oy, state, pen)
         elif kind == "bar":
-            _draw_bar(g, op, ox, oy, state, pen)
+            _draw_bar(g, op, ox, oy, state, pen, bright)
         elif kind == "dot":
-            _draw_dot(g, op, ox, oy, state)
+            _draw_dot(g, op, ox, oy, state, bright)
