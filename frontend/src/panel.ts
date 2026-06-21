@@ -297,6 +297,16 @@ export class PimoroniUnicornPanel extends LitElement {
   `;
 
   protected firstUpdated(): void { this.loadDevices(); this.loadIcons(); this.loadFonts(); }
+  protected updated(): void {
+    if (this._ro) return;
+    const wrap = this.renderRoot.querySelector(".stagewrap");
+    if (!wrap) return;
+    this._ro = new ResizeObserver((es) => {
+      const w = es[0]?.contentRect.width;
+      if (w && w > 8) this.fitPx = Math.max(120, Math.floor(w));
+    });
+    this._ro.observe(wrap);
+  }
 
   private async loadIcons() {
     try {
@@ -391,12 +401,16 @@ export class PimoroniUnicornPanel extends LitElement {
   }
   disconnectedCallback(): void {
     window.removeEventListener("keydown", this._onKey);
+    this._ro?.disconnect();
+    this._ro = undefined;
     super.disconnectedCallback();
   }
 
   private _onKey = (e: KeyboardEvent): void => {
-    const tag = (e.target as HTMLElement)?.tagName;
-    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    // composedPath()[0] pierces the shadow DOM; e.target is retargeted to the host on window.
+    const t = e.composedPath()[0] as HTMLElement | undefined;
+    const tag = t?.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || t?.isContentEditable) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && this.tab === "layout") {
       e.preventDefault();
       if (e.shiftKey) this.redo(); else this.undo();
@@ -573,7 +587,10 @@ export class PimoroniUnicornPanel extends LitElement {
   private capFor(id: string): WidgetCap | undefined { return this.caps.find((c) => c.id === id); }
   private typeOf(entry: WidgetEntry): string { return entry.type ?? entry.id; }
   private capForEntry(entry: WidgetEntry): WidgetCap | undefined { return this.capFor(this.typeOf(entry)); }
-  private get scale(): number { return this.zoom || Math.max(4, Math.floor(PREVIEW_TARGET_PX / this.dims[0])); }
+  @state() private fitPx = PREVIEW_TARGET_PX;  // measured preview-container width (auto-fit)
+  private _ro?: ResizeObserver;
+  // Auto-fit: scale the preview to fill its container; an explicit zoom overrides.
+  private get scale(): number { return this.zoom || Math.max(4, Math.floor(this.fitPx / this.dims[0])); }
   // Snap so scale*devicePixelRatio is whole: each source pixel maps to an integer number of
   // device pixels, so lines stay straight on fractional-DPR (e.g. Windows 125%) displays.
   private get pxScale(): number { const dpr = window.devicePixelRatio || 1; return Math.max(1, Math.round(this.scale * dpr)) / dpr; }
@@ -706,8 +723,27 @@ export class PimoroniUnicornPanel extends LitElement {
     this.edited();
   }
   private removeWidget(idx: number): void {
+    const w = this.layout.widgets[idx];
+    if (!w) return;
+    const name = w.name ?? this.capForEntry(w)?.label ?? w.id;
+    if (!confirm(`Delete "${name}"?`)) return;
     this.layout.widgets.splice(idx, 1);
     this.selected = -1;
+    this.edited();
+  }
+  private duplicateWidget(idx: number): void {
+    const src = this.layout.widgets[idx];
+    if (!src) return;
+    const present = new Set(this.layout.widgets.map((w) => w.id));
+    const base = src.type ?? src.id;
+    let n = 2, id = `${base}-${n}`;
+    while (present.has(id)) id = `${base}-${++n}`;
+    const copy: WidgetEntry = JSON.parse(JSON.stringify(src));
+    copy.id = id;
+    copy.x = (src.x ?? 0) + 1;
+    copy.y = (src.y ?? 0) + 1;
+    this.layout.widgets.splice(idx + 1, 0, copy);
+    this.selected = idx + 1;
     this.edited();
   }
   // Array order is z-order: later entries draw on top. Drag a layer onto another to reorder.
@@ -999,6 +1035,8 @@ export class PimoroniUnicornPanel extends LitElement {
                 <input type="checkbox" .checked=${w.enabled !== false} title="Show / hide"
                   @click=${(e: Event) => { e.stopPropagation(); w.enabled = (e.target as HTMLInputElement).checked; this.edited(); }} />
                 <span class="grow">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span>
+                <button class="wlx" title="Duplicate layer"
+                  @click=${(e: Event) => { e.stopPropagation(); this.duplicateWidget(i); }}>⧉</button>
                 <button class="wlx" title="Delete layer"
                   @click=${(e: Event) => { e.stopPropagation(); this.removeWidget(i); }}>×</button>
               </li>`;
@@ -1043,17 +1081,27 @@ export class PimoroniUnicornPanel extends LitElement {
   private async deployLayout(name: string, compatible: boolean) {
     if (!this.entryId) { this.status = "Select a device to deploy."; return; }
     if (!compatible && !confirm(`"${name}" isn't built for this device's model. Deploy anyway?`)) return;
-    const r = await this.hass.callWS({
-      type: "pimoroni_unicorn/deploy_layout", entry_id: this.entryId, name, override: !compatible });
-    this.status = r.ok ? `Deployed "${name}" (installing any missing widgets/fonts first).` : `Deploy failed.`;
+    this.status = `Deploying "${name}"…`;
+    try {
+      const r = await this.hass.callWS({
+        type: "pimoroni_unicorn/deploy_layout", entry_id: this.entryId, name, override: !compatible });
+      this.status = r.ok ? `Deployed "${name}" (installing any missing widgets/fonts first).` : `Deploy failed.`;
+    } catch (e) {
+      this.status = `Deploy failed: ${(e as { message?: string })?.message ?? e}`;
+    }
   }
 
   private async deployScreenset(id: string, compatible: boolean) {
     if (!this.entryId) { this.status = "Select a device to deploy."; return; }
     if (!compatible && !confirm(`"${id}" isn't built for this device's model. Deploy anyway?`)) return;
-    const r = await this.hass.callWS({
-      type: "pimoroni_unicorn/deploy_screenset", entry_id: this.entryId, id, override: !compatible });
-    this.status = r.ok ? `Deployed screen set "${id}".` : `Deploy failed.`;
+    this.status = `Deploying "${id}"…`;
+    try {
+      const r = await this.hass.callWS({
+        type: "pimoroni_unicorn/deploy_screenset", entry_id: this.entryId, id, override: !compatible });
+      this.status = r.ok ? `Deployed screen set "${id}".` : `Deploy failed.`;
+    } catch (e) {
+      this.status = `Deploy failed: ${(e as { message?: string })?.message ?? e}`;
+    }
   }
 
   private async exportLayout(): Promise<void> {

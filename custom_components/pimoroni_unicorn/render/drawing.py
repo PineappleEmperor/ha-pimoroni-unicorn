@@ -292,7 +292,7 @@ def draw_battery(x, y, soc, is_charging, battery_animation, brightness=100):
 
 
 def draw_energy(x, y, w, h, solar=0.0, battery_soc=0, is_charging=False,
-                mode="Net", consumption=0.0, battery_animation=False, decimals=1, brightness=100):
+                mode="Net", consumption=0.0, battery_animation=False, decimals=1, brightness=100, gap=1):
     """Battery indicator plus the left-aligned energy value, top-left at (x, y)."""
     draw_battery(x, y, battery_soc, is_charging, battery_animation, brightness)
     if mode == "Consumption":
@@ -302,7 +302,7 @@ def draw_energy(x, y, w, h, solar=0.0, battery_soc=0, is_charging=False,
     else:
         val = solar
     _g.set_pen(_g.create_pen(*dim(_energy_colour(solar, consumption, mode, battery_soc), brightness)))
-    _bitfont.draw_text(f"{val:.{decimals}f}", x + 5, y, font3x5, d=1)
+    _bitfont.draw_text(f"{val:.{decimals}f}", x + 4 + max(0, int(gap)), y, font3x5, d=1)
 
 
 def draw_sun_moon(x, y, w, h, solar=0.0, sun_below_horizon=False, brightness=100):
@@ -435,6 +435,9 @@ def draw_calendar(day_val, x, y, header_color):
     elif 9 < day_val < 20 and day_val != 11:
         draw_custom_digit(day_val // 10, x + 1, y + 4, _BLACK, _WHITE)
         draw_custom_digit(day_val % 10,  x + 4, y + 4, _BLACK, _WHITE)
+    elif day_val == 21:
+        draw_custom_digit(2, x + 2, y + 4, _BLACK, _WHITE)  # nudge the 2 right to balance "21"
+        draw_custom_digit(1, x + 5, y + 4, _BLACK, _WHITE)
     else:
         draw_custom_digit(day_val // 10, x + 1, y + 4, _BLACK, _WHITE)
         draw_custom_digit(day_val % 10,  x + 5, y + 4, _BLACK, _WHITE)
