@@ -470,16 +470,34 @@ def _sensor_on_rule(rule: tuple[str, str] | None, state: Any) -> bool:
     return raw not in _SENSOR_OFF_STATES
 
 
-def _layout_sensor_rules(lay: dict[str, Any] | None) -> dict[str, tuple[str, str]]:
-    """Per-entity custom match from sensor widgets: entity -> (on_state, off_state)."""
+def _op_field(op: dict[str, Any], cfg: dict[str, Any], key: str) -> str:
+    """Resolve an op string field ($var -> cfg, else literal); '' when absent/non-string."""
+    v = op.get(key)
+    if isinstance(v, str) and v[:1] == "$":
+        v = cfg.get(v[1:])
+    return v if isinstance(v, str) else ""
+
+
+def _layout_sensor_rules(
+    lay: dict[str, Any] | None, specs: dict | None = None
+) -> dict[str, tuple[str, str]]:
+    """Per-entity custom match: built-in sensor widgets + custom declarative dot ops -> (on, off)."""
     rules: dict[str, tuple[str, str]] = {}
     for w in (lay or {}).get("widgets", []):
         cfg = w.get("cfg") or {}
-        if w.get("type", w.get("id")) != "sensor":
-            continue
-        ent = cfg.get("entity")
-        if isinstance(ent, str) and ent and (cfg.get("on_state") or cfg.get("off_state")):
-            rules[ent] = (str(cfg.get("on_state") or ""), str(cfg.get("off_state") or ""))
+        wid = w.get("type", w.get("id"))
+        if wid == "sensor":
+            ent = cfg.get("entity")
+            if isinstance(ent, str) and ent and (cfg.get("on_state") or cfg.get("off_state")):
+                rules[ent] = (str(cfg.get("on_state") or ""), str(cfg.get("off_state") or ""))
+        elif specs and wid in specs:
+            for op in specs[wid].get("draw", []):
+                if not isinstance(op, dict) or op.get("op") != "dot":
+                    continue
+                ent = _resolve_bind(op, cfg)
+                on_s, off_s = _op_field(op, cfg, "on_state"), _op_field(op, cfg, "off_state")
+                if ent and (on_s or off_s):
+                    rules[ent] = (on_s, off_s)
     return rules
 
 
@@ -580,7 +598,7 @@ async def _async_rewire_sensor_feed(
     store     = entry.runtime_data
     custom_dir = marketplace.widgets_dir(hass.config.config_dir)
     specs = await hass.async_add_executor_job(_load_custom_specs, custom_dir)
-    rules = _layout_sensor_rules(lay)
+    rules = _layout_sensor_rules(lay, specs)
     await _rewire_channel(hass, store, device_id, _layout_sensor_entities(lay, specs),
                           "sensor_entities", "sensor_unsub", "state",
                           lambda ent, s: "ON" if _sensor_on_rule(rules.get(ent), s) else "OFF",
