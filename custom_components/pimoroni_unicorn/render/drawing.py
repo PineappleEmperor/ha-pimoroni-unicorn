@@ -334,8 +334,10 @@ def draw_sleep(x, y, w, h, t):
     """
     t = 0.0 if t < 0 else (1.0 if t > 1 else t)
     count = 1 + int(min(0.999, t) * 3)  # 1..3 Z's reveal over time
-    bx = x + 1
-    by = y + h - 5  # bottom Z (font3x5 is 5 tall)
+    bx = x + (w - 9) // 2  # centre the 9px-wide 3-Z cluster
+    by = y + (h - 13) // 2 + 8  # centre the 13px-tall cluster; baseline of bottom Z
+    if by > y + h - 5:
+        by = y + h - 5  # clamp so the bottom Z never clips off short panels
     for i in range(count):
         py = by - i * 4
         if py < y:

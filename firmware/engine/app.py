@@ -203,6 +203,18 @@ def _set_display_sensor(sensor_id, raw):
     else:
         display_sensors.setdefault(sensor_id, {})["state"] = val.upper() == "ON"
 
+
+def _set_display_num(sensor_id, raw):
+    """Apply a /display/<id>/num payload; '' clears the value, else stores a float (value/bar binds)."""
+    val = raw.strip()
+    if val == "":
+        display_sensors.get(sensor_id, {}).pop("value", None)
+    else:
+        try:
+            display_sensors.setdefault(sensor_id, {})["value"] = float(val)
+        except ValueError:
+            pass
+
 # Colour pens used directly in main.py (OTA screen + sleep clear)
 BLACK       = graphics.create_pen(0,   0,   0)
 WHITE       = graphics.create_pen(255, 255, 255)
@@ -266,7 +278,7 @@ def _draw_ota_progress(frac, phase_ms):
         frac = 0
     elif frac > 1:
         frac = 1
-    ppc = height // 2
+    ppc = (height + 1) // 2  # round up so odd-height panels fill their top row too
     if ppc < 1:
         return
     total  = width * ppc
@@ -275,33 +287,29 @@ def _draw_ota_progress(frac, phase_ms):
     graphics.clear()
     graphics.set_pen(ENERGY_CYAN)
     for p in range(filled):
-        c = p // ppc
-        k = p % ppc
-        if c % 2 == 0:
-            ya = height - 1 - 2 * k
-            yb = ya - 1
-        else:
-            ya = 2 * k
-            yb = ya + 1
-        graphics.pixel(c, ya)
-        graphics.pixel(c, yb)
+        _ota_pair(p // ppc, p % ppc)
     if filled < total:
         ph = (phase_ms % 1400) / 700
         if ph > 1:
             ph = 2 - ph
         lvl = int(96 + 110 * ph)
         graphics.set_pen(graphics.create_pen(0, lvl, lvl))
-        c = filled // ppc
-        k = filled % ppc
-        if c % 2 == 0:
-            ya = height - 1 - 2 * k
-            yb = ya - 1
-        else:
-            ya = 2 * k
-            yb = ya + 1
-        graphics.pixel(c, ya)
-        graphics.pixel(c, yb)
+        _ota_pair(filled // ppc, filled % ppc)
     unicorn.update(graphics)
+
+
+def _ota_pair(c, k):
+    """Light the 2px column-pair at snake position (column c, pair k), clipped to height."""
+    if c % 2 == 0:
+        ya = height - 1 - 2 * k
+        yb = ya - 1
+    else:
+        ya = 2 * k
+        yb = ya + 1
+    if 0 <= ya < height:
+        graphics.pixel(c, ya)
+    if 0 <= yb < height:
+        graphics.pixel(c, yb)
 
 
 # Time-driven progress sweep: ~_OTA_PER_COL_MS per column, clamped to [MIN, MAX] total so the
@@ -623,6 +631,8 @@ def on_message(topic, message):
                         pass
                 elif msg_type == "state":
                     _set_display_sensor(sensor_id, message.decode())
+                elif msg_type == "num":
+                    _set_display_num(sensor_id, message.decode())
             return
 
         if topic_str == TOPIC_NOTIFY:
@@ -1034,6 +1044,10 @@ async def main_loop():
                 "display_sensors": display_sensors,
                 "elapsed_ms": current_time,
             }
+            for _sid in display_sensors:  # expose numeric binds (value/bar widgets) as flat state
+                _v = display_sensors[_sid].get("value")
+                if _v is not None:
+                    state[_sid] = _v
             _advance_screen()
             if _fade_left > 0:
                 unicorn.set_brightness(brightness * (1.0 - _fade_left / FADE_FRAMES))
