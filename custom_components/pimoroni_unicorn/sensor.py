@@ -45,10 +45,10 @@ SENSORS: tuple[PUSensorDescription, ...] = (
     PUSensorDescription(
         key="free_mem", translation_key="free_mem",
         native_unit_of_measurement=UnitOfInformation.KILOBYTES,
-        suggested_display_precision=1, state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0, state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False,
         value_fn=lambda diag, manifest: (
-            round(diag["free_mem"] / 1024, 1) if diag.get("free_mem") is not None else None),
+            diag["free_mem"] / 1024 if diag.get("free_mem") is not None else None),
     ),
     PUSensorDescription(
         key="uptime", translation_key="uptime",
