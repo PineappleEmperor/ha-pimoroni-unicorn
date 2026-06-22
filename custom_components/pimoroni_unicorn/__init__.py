@@ -55,6 +55,7 @@ from .const import (
 from .notify import (
     DISMISS_SCHEMA,
     GENERIC_NOTIFY_SCHEMA,
+    _resolve_entry,
     make_dismiss_handler,
     make_generic_notify_handler,
 )
@@ -802,8 +803,14 @@ def _make_push_firmware_handler(
 ) -> Callable[[ServiceCall], Coroutine[Any, Any, None]]:
     async def _handle_push_firmware(call: ServiceCall) -> None:
         entries = hass.config_entries.async_entries(DOMAIN)
+        target = call.data.get("entry_id")
+        if not target and call.data.get("device_id"):
+            entry, _ = _resolve_entry(hass, call.data["device_id"])
+            target = entry.entry_id if entry else "__none__"
+        if target:
+            entries = [e for e in entries if e.entry_id == target]
         if not entries:
-            _LOGGER.error("Pimoroni Unicorn: no configured entries found")
+            _LOGGER.error("Pimoroni Unicorn: no matching configured entries found")
             return
 
         base_url = await firmware_install.async_device_base_url(hass)

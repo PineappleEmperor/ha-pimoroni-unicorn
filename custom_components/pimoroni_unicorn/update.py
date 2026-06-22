@@ -137,4 +137,5 @@ class PimoroniUnicornUpdate(UpdateEntity):
         self._attr_in_progress = True
         self.async_write_ha_state()
         await self.hass.services.async_call(
-            DOMAIN, "push_firmware", {"files": ENGINE_FILE_KEYS}, blocking=True)
+            DOMAIN, "push_firmware",
+            {"files": ENGINE_FILE_KEYS, "entry_id": self._entry.entry_id}, blocking=True)
