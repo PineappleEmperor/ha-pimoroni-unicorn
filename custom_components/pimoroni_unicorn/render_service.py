@@ -210,9 +210,12 @@ def render_layout_png(model: str, layout: dict, installed_icons: dict | None = N
     state = {**SAMPLE_STATE, "time": time.localtime(), "elapsed_ms": elapsed_ms, **(state or {})}
     ds = dict(state.get("display_sensors") or {})
     for entry in layout.get("widgets", []):
-        ent = (entry.get("cfg") or {}).get("entity")
+        cfg = entry.get("cfg") or {}
+        ent = cfg.get("entity")
         if ent:
             ds.setdefault(ent, {"state": True})  # mock 'on' so sensor widgets preview
+        if entry.get("type", entry.get("id")) == "value" and ent:
+            state.setdefault(ent, 123)  # sample number so a value widget previews without a device
     state["display_sensors"] = ds
     m.widgets.render_layout(g, layout, state)
     return _encode(g, width, height, scale)

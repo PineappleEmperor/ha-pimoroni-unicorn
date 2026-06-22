@@ -78,6 +78,21 @@ def _entry(hass, entry_id):
     return hass.config_entries.async_get_entry(entry_id)
 
 
+def _preview_state(hass, msg):
+    """Mirror the device's live values in the Designer preview when an entry is selected."""
+    entry = _entry(hass, msg["entry_id"]) if msg.get("entry_id") else None
+    if entry is None or not entry.runtime_data:
+        return {"weather": msg["weather"]} if msg.get("weather") else None
+    # Local import: __init__ imports this module at top level, so a top-level
+    # `from . import live_state` would import a half-initialised package.
+    from . import live_state  # noqa: PLC0415
+
+    state = live_state(hass, entry)
+    if msg.get("weather"):
+        state["weather"] = msg["weather"]
+    return state
+
+
 def _model_key(entry) -> str:
     raw = {**entry.data, **entry.options}.get(CONF_MODEL, "")
     model = UNICORN_MODEL_KEYS.get(raw, raw)  # stored display label -> dims key (pass through if already a key)
@@ -154,13 +169,14 @@ async def ws_layouts(hass, connection, msg):
     vol.Required("layout"): dict,
     vol.Optional("orientation", default=0): vol.In(ORIENTATION_ANGLES),
     vol.Optional("weather"): vol.Any(None, str),
+    vol.Optional("entry_id"): str,
 })
 @websocket_api.async_response
 async def ws_render(hass, connection, msg):
     """Render a layout to animated base64 PNG frames using the device's own render code."""
     installed = await lametric.async_get_registry(hass)
     orientation = msg["orientation"]
-    state = {"weather": msg["weather"]} if msg.get("weather") else None
+    state = _preview_state(hass, msg)
     frames = await hass.async_add_executor_job(
         render_service.render_layout_frames, msg["model"], msg["layout"], installed, 8, 200,
         orientation, state)
