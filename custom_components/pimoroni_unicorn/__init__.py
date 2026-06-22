@@ -454,9 +454,32 @@ _SENSOR_OFF_STATES = {
 }
 
 
-def _sensor_on(state: Any) -> bool:
-    """Binary truthiness for a display dot, sane across entity domains (home/open/playing -> on)."""
-    return state is not None and str(state.state).strip().lower() not in _SENSOR_OFF_STATES
+def _sensor_on_rule(rule: tuple[str, str] | None, state: Any) -> bool:
+    """On/off for a dot honouring a per-widget (on_state, off_state) match, else default truthiness."""
+    if state is None:
+        return False
+    raw = str(state.state).strip().lower()
+    if raw in ("unavailable", "unknown", ""):
+        return False
+    on_s, off_s = rule or ("", "")
+    if on_s:
+        return raw == on_s.strip().lower()
+    if off_s:
+        return raw != off_s.strip().lower()
+    return raw not in _SENSOR_OFF_STATES
+
+
+def _layout_sensor_rules(lay: dict[str, Any] | None) -> dict[str, tuple[str, str]]:
+    """Per-entity custom match from sensor widgets: entity -> (on_state, off_state)."""
+    rules: dict[str, tuple[str, str]] = {}
+    for w in (lay or {}).get("widgets", []):
+        cfg = w.get("cfg") or {}
+        if w.get("type", w.get("id")) != "sensor":
+            continue
+        ent = cfg.get("entity")
+        if isinstance(ent, str) and ent and (cfg.get("on_state") or cfg.get("off_state")):
+            rules[ent] = (str(cfg.get("on_state") or ""), str(cfg.get("off_state") or ""))
+    return rules
 
 
 def _num_payload(state: Any) -> str:
@@ -507,19 +530,22 @@ async def _async_rewire_sensor_feed(
     """Publish on/off + numeric state for the entity-bound widgets the device is showing."""
     device_id = _merged_opts(entry)[CONF_DEVICE_ID]
     store     = entry.runtime_data
+    rules     = _layout_sensor_rules(lay)
     await _rewire_channel(hass, store, device_id, _layout_sensor_entities(lay),
                           "sensor_entities", "sensor_unsub", "state",
-                          lambda s: "ON" if _sensor_on(s) else "OFF")
+                          lambda ent, s: "ON" if _sensor_on_rule(rules.get(ent), s) else "OFF",
+                          meta=rules)
     await _rewire_channel(hass, store, device_id, _layout_value_entities(lay),
-                          "value_entities", "value_unsub", "num", _num_payload)
+                          "value_entities", "value_unsub", "num", lambda _ent, s: _num_payload(s))
 
 
 async def _rewire_channel(
     hass: HomeAssistant, store: dict[str, Any], device_id: str, entities: set[str],
-    ent_key: str, unsub_key: str, suffix: str, payload: Any,
+    ent_key: str, unsub_key: str, suffix: str, payload: Any, meta: Any = None,
 ) -> None:
     """Track a set of entities and mirror their state to /display/<id>/<suffix>."""
-    if entities == store.get(ent_key) and store.get(unsub_key):
+    meta_key = f"{ent_key}_meta"
+    if entities == store.get(ent_key) and store.get(unsub_key) and store.get(meta_key) == meta:
         return
 
     for unsub in store.get(unsub_key, []):
@@ -528,10 +554,11 @@ async def _rewire_channel(
     for removed in store.get(ent_key, set()) - entities:
         await async_publish(hass, f"{device_id}/display/{removed}/{suffix}", "", retain=True)
     store[ent_key] = entities
+    store[meta_key] = meta
 
     for ent in entities:
         await async_publish(hass, f"{device_id}/display/{ent}/{suffix}",
-                            payload(hass.states.get(ent)), retain=True)
+                            payload(ent, hass.states.get(ent)), retain=True)
 
         @callback
         def _on_state(event: Any, _ent: str = ent) -> None:
@@ -539,7 +566,7 @@ async def _rewire_channel(
             if new_state is not None:
                 hass.async_create_task(async_publish(
                     hass, f"{device_id}/display/{_ent}/{suffix}",
-                    payload(new_state), retain=True))
+                    payload(_ent, new_state), retain=True))
 
         store[unsub_key].append(async_track_state_change_event(hass, [ent], _on_state))
 
