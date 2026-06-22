@@ -302,6 +302,8 @@ FONT_SPECS = [
      "device_file": "monospace_blocky_serif.py", "sample": "012345"},
     {"name": "tall",       "label": "Tall 3×7",     "kind": "digits", "w": 3, "h": 7,
      "device_file": "monospace_tall.py",       "sample": "012345"},
+    {"name": "tall_bold",  "label": "Tall bold 5×7","kind": "digits", "w": 5, "h": 7,
+     "device_file": "monospace_tall_bold.py",  "sample": "012345"},
     {"name": "humanist",   "label": "Humanist 4×7", "kind": "digits", "w": 4, "h": 7,
      "device_file": "monospace_humanist.py",   "sample": "012345"},
 ]
@@ -314,6 +316,7 @@ _DIGIT_FONTS = {
     "blocky":       ("monospace_blocky",       "BLOCKY",       4, 5),
     "blocky_serif": ("monospace_blocky_serif", "BLOCKY_SERIF", 4, 5),
     "tall":         ("monospace_tall",         "TALL",         3, 7),
+    "tall_bold":    ("monospace_tall_bold",    "TALL_BOLD",    5, 7),
     "humanist":     ("monospace_humanist",     "HUMANIST",     4, 7),
 }
 

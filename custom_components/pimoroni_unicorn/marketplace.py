@@ -19,6 +19,7 @@ FONT_FILES = {
     "blocky":       "monospace_blocky.py",
     "blocky_serif": "monospace_blocky_serif.py",
     "tall":         "monospace_tall.py",
+    "tall_bold":    "monospace_tall_bold.py",
     "humanist":     "monospace_humanist.py",
 }
 

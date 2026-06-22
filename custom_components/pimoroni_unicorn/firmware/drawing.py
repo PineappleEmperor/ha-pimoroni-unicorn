@@ -9,6 +9,7 @@ from monospace_digits import DIGITS
 from monospace_digits_serif import DIGITS_SERIF
 from monospace_humanist import HUMANIST
 from monospace_tall import TALL
+from monospace_tall_bold import TALL_BOLD
 
 # Clock digit faces: name -> (glyph table, glyph width). Height derives from the table.
 _CLOCK_FACES = {
@@ -18,6 +19,7 @@ _CLOCK_FACES = {
     "blocky":       (BLOCKY, 4),
     "blocky-serif": (BLOCKY_SERIF, 4),
     "tall":         (TALL, 3),
+    "tall-bold":    (TALL_BOLD, 5),
     "humanist":     (HUMANIST, 4),
 }
 
@@ -35,10 +37,10 @@ def reload_fonts():
     font5x9) live in the engine's bitfonts.py, so updating those still needs a reboot.
     """
     import sys  # noqa: PLC0415
-    global BIG_DIGITS, BLOCKY, BLOCKY_SERIF, DIGITS, DIGITS_SERIF, HUMANIST, TALL, _CLOCK_FACES
+    global BIG_DIGITS, BLOCKY, BLOCKY_SERIF, DIGITS, DIGITS_SERIF, HUMANIST, TALL, TALL_BOLD, _CLOCK_FACES
     for m in ("monospace_big_digits", "monospace_blocky", "monospace_blocky_serif",
               "monospace_digits", "monospace_digits_serif", "monospace_humanist",
-              "monospace_tall"):
+              "monospace_tall", "monospace_tall_bold"):
         sys.modules.pop(m, None)
     from monospace_big_digits import BIG_DIGITS
     from monospace_blocky import BLOCKY
@@ -47,6 +49,7 @@ def reload_fonts():
     from monospace_digits_serif import DIGITS_SERIF
     from monospace_humanist import HUMANIST
     from monospace_tall import TALL
+    from monospace_tall_bold import TALL_BOLD
     _CLOCK_FACES = {
         "big":          (BIG_DIGITS, 5),
         "digits":       (DIGITS, 3),
@@ -54,6 +57,7 @@ def reload_fonts():
         "blocky":       (BLOCKY, 4),
         "blocky-serif": (BLOCKY_SERIF, 4),
         "tall":         (TALL, 3),
+        "tall-bold":    (TALL_BOLD, 5),
         "humanist":     (HUMANIST, 4),
     }
 

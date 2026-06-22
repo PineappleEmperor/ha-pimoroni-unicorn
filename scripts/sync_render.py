@@ -54,7 +54,7 @@ CATALOG_WIDGETS = [
 CATALOG_FONTS = [
     "monospace_digits.py", "monospace_digits_serif.py", "monospace_big_digits.py",
     "monospace_blocky.py", "monospace_blocky_serif.py", "monospace_tall.py",
-    "monospace_humanist.py",
+    "monospace_tall_bold.py", "monospace_humanist.py",
 ]
 CATALOG_OVERLAYS = [
     "overlay_weather.py",
@@ -65,7 +65,7 @@ FIRMWARE_MODULES = [
     "widgets.py", "drawing.py", "layouts.py", "bitfonts.py", "icons.py",
     "weather_fx.py", "weather_icons.py", "monospace_digits.py", "monospace_digits_serif.py",
     "monospace_big_digits.py", "monospace_blocky.py", "monospace_blocky_serif.py",
-    "monospace_tall.py", "monospace_humanist.py",
+    "monospace_tall.py", "monospace_tall_bold.py", "monospace_humanist.py",
     "widget_clock.py", "widget_calendar.py", "widget_weekdays.py",
     "widget_energy.py", "widget_sun_moon.py", "widget_sensor.py", "widget_icon.py",
     "widget_text.py", "widget_date.py", "widget_temperature.py", "widget_value.py",
@@ -73,7 +73,7 @@ FIRMWARE_MODULES = [
 ]
 
 _LOCAL = ("drawing|weather_fx|weather_icons|bitfonts|layouts|widgets|icons|sounds|declarative|overlay_weather|"
-          "monospace_digits|monospace_digits_serif|monospace_big_digits|monospace_blocky|monospace_blocky_serif|monospace_tall|monospace_humanist|"
+          "monospace_digits|monospace_digits_serif|monospace_big_digits|monospace_blocky|monospace_blocky_serif|monospace_tall_bold|monospace_tall|monospace_humanist|"
           "widget_clock|widget_calendar|widget_weekdays|widget_energy|widget_sun_moon|widget_sensor|widget_icon|widget_text|widget_date|widget_temperature|widget_value|widget_weather")
 _TRANSFORMS = [
     (re.compile(rf"^import ({_LOCAL})$", re.MULTILINE), r"from . import \1"),
