@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 from pathlib import Path
+import re
 import time
 from typing import Any
 
@@ -35,7 +36,7 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
-from . import firmware_install, layout, render_service, websocket as ws_api
+from . import firmware_install, layout, marketplace, render_service, websocket as ws_api
 from .const import (
     CONF_BATTERY_CHARGING_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -492,8 +493,51 @@ def _num_payload(state: Any) -> str:
         return ""
 
 
-def _layout_sensor_entities(lay: dict[str, Any] | None) -> set[str]:
-    """On/off entity ids: sensor-widget dots + the energy widget's charging override."""
+_ENTITY_ID = re.compile(r"^[a-z_][a-z0-9_]*\.[a-z0-9_]+$")
+
+
+def _resolve_bind(op: dict[str, Any], cfg: dict[str, Any]) -> str | None:
+    """Resolve a declarative op's bind (cfg $var or literal) to an entity id, else None."""
+    bind = op.get("bind")
+    if isinstance(bind, str) and bind[:1] == "$":
+        bind = cfg.get(bind[1:])
+    return bind if isinstance(bind, str) and _ENTITY_ID.match(bind) else None
+
+
+def _spec_binds(spec: dict[str, Any], cfg: dict[str, Any]) -> tuple[set[str], set[str]]:
+    """(numeric, on/off) entity ids a declarative spec's value/bar/dot ops bind, resolved via cfg."""
+    nums: set[str] = set()
+    dots: set[str] = set()
+    for op in spec.get("draw", []):
+        if not isinstance(op, dict):
+            continue
+        ent = _resolve_bind(op, cfg)
+        if ent is None:
+            continue
+        if op.get("op") in ("value", "bar"):
+            nums.add(ent)
+        elif op.get("op") == "dot":
+            dots.add(ent)
+    return nums, dots
+
+
+def _load_custom_specs(custom_dir: Path) -> dict[str, dict[str, Any]]:
+    """Map custom declarative widget id -> spec JSON from custom_dir (blocking; run in executor)."""
+    specs: dict[str, dict[str, Any]] = {}
+    if not custom_dir.is_dir():
+        return specs
+    for p in custom_dir.glob("widget_*.json"):
+        try:
+            spec = json.loads(p.read_text())
+        except (ValueError, OSError):
+            continue
+        if isinstance(spec, dict):
+            specs[spec.get("id", p.stem[7:])] = spec
+    return specs
+
+
+def _layout_sensor_entities(lay: dict[str, Any] | None, specs: dict | None = None) -> set[str]:
+    """On/off entity ids: sensor dots, energy charging + custom declarative dot ops."""
     out: set[str] = set()
     for w in (lay or {}).get("widgets", []):
         cfg = w.get("cfg") or {}
@@ -502,11 +546,13 @@ def _layout_sensor_entities(lay: dict[str, Any] | None) -> set[str]:
             _add_entity(out, cfg.get("entity"))
         elif wid == "energy":
             _add_entity(out, cfg.get("charging_entity"))
+        elif specs and wid in specs:
+            out |= _spec_binds(specs[wid], cfg)[1]
     return out
 
 
-def _layout_value_entities(lay: dict[str, Any] | None) -> set[str]:
-    """Numeric entity ids feeding value widgets + the energy widget's solar/soc/consumption overrides."""
+def _layout_value_entities(lay: dict[str, Any] | None, specs: dict | None = None) -> set[str]:
+    """Numeric entity ids: value widgets, energy overrides + custom declarative value/bar ops."""
     out: set[str] = set()
     for w in (lay or {}).get("widgets", []):
         cfg = w.get("cfg") or {}
@@ -516,6 +562,8 @@ def _layout_value_entities(lay: dict[str, Any] | None) -> set[str]:
         elif wid == "energy":
             for k in ("solar_entity", "consumption_entity", "soc_entity"):
                 _add_entity(out, cfg.get(k))
+        elif specs and wid in specs:
+            out |= _spec_binds(specs[wid], cfg)[0]
     return out
 
 
@@ -530,12 +578,14 @@ async def _async_rewire_sensor_feed(
     """Publish on/off + numeric state for the entity-bound widgets the device is showing."""
     device_id = _merged_opts(entry)[CONF_DEVICE_ID]
     store     = entry.runtime_data
-    rules     = _layout_sensor_rules(lay)
-    await _rewire_channel(hass, store, device_id, _layout_sensor_entities(lay),
+    custom_dir = marketplace.widgets_dir(hass.config.config_dir)
+    specs = await hass.async_add_executor_job(_load_custom_specs, custom_dir)
+    rules = _layout_sensor_rules(lay)
+    await _rewire_channel(hass, store, device_id, _layout_sensor_entities(lay, specs),
                           "sensor_entities", "sensor_unsub", "state",
                           lambda ent, s: "ON" if _sensor_on_rule(rules.get(ent), s) else "OFF",
                           meta=rules)
-    await _rewire_channel(hass, store, device_id, _layout_value_entities(lay),
+    await _rewire_channel(hass, store, device_id, _layout_value_entities(lay, specs),
                           "value_entities", "value_unsub", "num", lambda _ent, s: _num_payload(s))
 
 
