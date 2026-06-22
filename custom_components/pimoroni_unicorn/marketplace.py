@@ -20,6 +20,9 @@ FONT_FILES = {
     "blocky_serif": "monospace_blocky_serif.py",
     "tall":         "monospace_tall.py",
     "tall_bold":    "monospace_tall_bold.py",
+    "large":        "monospace_large.py",
+    "huge":         "monospace_huge.py",
+    "jumbo":        "monospace_jumbo.py",
     "humanist":     "monospace_humanist.py",
 }
 

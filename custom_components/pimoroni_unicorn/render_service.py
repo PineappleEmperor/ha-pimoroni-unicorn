@@ -304,6 +304,12 @@ FONT_SPECS = [
      "device_file": "monospace_tall.py",       "sample": "012345"},
     {"name": "tall_bold",  "label": "Tall bold 5×7","kind": "digits", "w": 5, "h": 7,
      "device_file": "monospace_tall_bold.py",  "sample": "012345"},
+    {"name": "large",      "label": "Large 7×9",    "kind": "digits", "w": 7, "h": 9,
+     "device_file": "monospace_large.py",      "sample": "012345"},
+    {"name": "huge",       "label": "Huge 8×11",    "kind": "digits", "w": 8, "h": 11,
+     "device_file": "monospace_huge.py",       "sample": "0123"},
+    {"name": "jumbo",      "label": "Jumbo 9×13",   "kind": "digits", "w": 9, "h": 13,
+     "device_file": "monospace_jumbo.py",      "sample": "0123"},
     {"name": "humanist",   "label": "Humanist 4×7", "kind": "digits", "w": 4, "h": 7,
      "device_file": "monospace_humanist.py",   "sample": "012345"},
 ]
@@ -317,6 +323,9 @@ _DIGIT_FONTS = {
     "blocky_serif": ("monospace_blocky_serif", "BLOCKY_SERIF", 4, 5),
     "tall":         ("monospace_tall",         "TALL",         3, 7),
     "tall_bold":    ("monospace_tall_bold",    "TALL_BOLD",    5, 7),
+    "large":        ("monospace_large",        "LARGE",        7, 9),
+    "huge":         ("monospace_huge",         "HUGE",         8, 11),
+    "jumbo":        ("monospace_jumbo",        "JUMBO",        9, 13),
     "humanist":     ("monospace_humanist",     "HUMANIST",     4, 7),
 }
 
