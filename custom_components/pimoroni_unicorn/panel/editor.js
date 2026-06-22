@@ -181,7 +181,7 @@ var Ot=Object.defineProperty;var Nt=Object.getOwnPropertyDescriptor;var h=(l,i,t
             </select></div>`;if(s.type==="number")return o`<div class="panelrow"><label>${s.label??s.key}</label>
             <input type="number" style="width:60px" min=${s.min??1} max=${s.max??64} step=${s.step??1}
               .value=${String(this.cfgVal(t,s.key))}
-              @change=${a=>this.setCfg(t,s.key,+a.target.value)} /></div>`;if(s.type==="bool")return o`<div class="panelrow"><label>${s.label??s.key}</label>
+              @input=${a=>{let c=a.target.value;c!==""&&!Number.isNaN(+c)&&this.setCfg(t,s.key,+c)}} /></div>`;if(s.type==="bool")return o`<div class="panelrow"><label>${s.label??s.key}</label>
             <input type="checkbox" .checked=${!!this.cfgVal(t,s.key)}
               @change=${a=>this.setCfg(t,s.key,a.target.checked)} /></div>`;if(s.type==="range"){let a=Number(this.cfgVal(t,s.key)??s.max??100);return o`<div class="panelrow"><label>${s.label??s.key}</label>
             <input type="range" min=${s.min??0} max=${s.max??100} step=${s.step??1} .value=${String(a)}

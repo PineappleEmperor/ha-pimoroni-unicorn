@@ -866,7 +866,7 @@ export class PimoroniUnicornPanel extends LitElement {
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
             <input type="number" style="width:60px" min=${f.min ?? 1} max=${f.max ?? 64} step=${f.step ?? 1}
               .value=${String(this.cfgVal(entry, f.key))}
-              @change=${(e: Event) => this.setCfg(entry, f.key, +(e.target as HTMLInputElement).value)} /></div>`;
+              @input=${(e: Event) => { const v = (e.target as HTMLInputElement).value; if (v !== "" && !Number.isNaN(+v)) this.setCfg(entry, f.key, +v); }} /></div>`;
         }
         if (f.type === "bool") {
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
