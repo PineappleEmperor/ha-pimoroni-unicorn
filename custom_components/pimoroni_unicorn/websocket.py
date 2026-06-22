@@ -493,7 +493,7 @@ async def ws_deploy_layout(hass, connection, msg):
 @websocket_api.websocket_command({
     vol.Required("type"): WS_DEPLOY_SCREENSET,
     vol.Required("entry_id"): str,
-    vol.Required("id"): str,
+    vol.Required("name"): str,
     vol.Optional("override", default=False): bool,
 })
 @websocket_api.async_response
@@ -504,12 +504,12 @@ async def ws_deploy_screenset(hass, connection, msg):
         connection.send_error(msg["id"], "not_found", "Unknown device")
         return
     screensets = await layout.async_get_screensets(hass)
-    ss = screensets.get(msg["id"])
+    ss = screensets.get(msg["name"])
     if ss is None:
         connection.send_error(msg["id"], "not_found", "Unknown screenset")
         return
     all_layouts = await layout.async_get_registry(hass)
-    unit = marketplace.screenset_unit(msg["id"], ss, all_layouts)
+    unit = marketplace.screenset_unit(msg["name"], ss, all_layouts)
     if not msg["override"] and not marketplace.compatible(unit["compat"], _model_key(entry)):
         connection.send_error(msg["id"], "incompatible",
                               f"Screenset targets {unit['compat']}, device is {_model_key(entry)}")
@@ -532,24 +532,24 @@ async def ws_publish_layout(hass, connection, msg):
 
 @websocket_api.websocket_command({
     vol.Required("type"): WS_SAVE_SCREENSET,
-    vol.Required("id"): str,
+    vol.Required("name"): str,
     vol.Required("screenset"): dict,
 })
 @websocket_api.async_response
 async def ws_save_screenset(hass, connection, msg):
     """Store a screenset (referenced apps + rotation + triggers)."""
-    await layout.async_save_screenset(hass, msg["id"], msg["screenset"])
+    await layout.async_save_screenset(hass, msg["name"], msg["screenset"])
     connection.send_result(msg["id"], {"ok": True})
 
 
 @websocket_api.websocket_command({
     vol.Required("type"): WS_DELETE_SCREENSET,
-    vol.Required("id"): str,
+    vol.Required("name"): str,
 })
 @websocket_api.async_response
 async def ws_delete_screenset(hass, connection, msg):
     """Remove a stored screenset."""
-    await layout.async_remove_screenset(hass, msg["id"])
+    await layout.async_remove_screenset(hass, msg["name"])
     connection.send_result(msg["id"], {"ok": True})
 
 

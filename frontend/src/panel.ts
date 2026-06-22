@@ -812,6 +812,13 @@ export class PimoroniUnicornPanel extends LitElement {
     await this.loadCatalog();
     this.status = `Deleted page "${label}".`;
   }
+  // Delete a playlist (screenset) from the marketplace Playlists list.
+  private async deletePlaylist(id: string, label: string): Promise<void> {
+    if (!confirm(`Delete playlist "${label}"? This can't be undone.`)) return;
+    await this.hass.callWS({ type: "pimoroni_unicorn/delete_screenset", name: id });
+    await this.loadCatalog();
+    this.status = `Deleted playlist "${label}".`;
+  }
 
   private renderWidgetEditor() {
     const entry = this.layout.widgets[this.selected];
@@ -1105,7 +1112,7 @@ export class PimoroniUnicornPanel extends LitElement {
     this.status = `Deploying "${id}"…`;
     try {
       const r = await this.hass.callWS({
-        type: "pimoroni_unicorn/deploy_screenset", entry_id: this.entryId, id, override: !compatible });
+        type: "pimoroni_unicorn/deploy_screenset", entry_id: this.entryId, name: id, override: !compatible });
       this.status = r.ok ? `Deployed screen set "${id}".` : `Deploy failed.`;
     } catch (e) {
       this.status = `Deploy failed: ${(e as { message?: string })?.message ?? e}`;
@@ -1140,7 +1147,7 @@ export class PimoroniUnicornPanel extends LitElement {
     const id = prompt("Name this screen set:");
     if (!id) return;
     await this.hass.callWS({
-      type: "pimoroni_unicorn/save_screenset", id,
+      type: "pimoroni_unicorn/save_screenset", name: id,
       screenset: { label: id, layouts: this.screenLayouts, dwell: this.screenDwell,
                    transition: this.screenTransition, triggers: [] } });
     this.status = `Saved screen set "${id}".`;
@@ -1200,7 +1207,8 @@ export class PimoroniUnicornPanel extends LitElement {
       <div class="badges">${onDevice ? html`<span class="badge ok">on device</span>` : ""}${u.compatible ? html`<span class="badge ok">compatible</span>` : html`<span class="badge warn">other model</span>`}</div>
       <div class="cell-action"><button ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to deploy"}
         @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>${onDevice ? "Re-deploy" : "Deploy"}</button>
-        ${kind === "layout" ? html`<button class="danger" title="Delete this page from the library" @click=${() => this.deletePage(u.id, u.label)}>Delete</button>` : ""}</div>
+        <button class="danger" title=${kind === "layout" ? "Delete this page from the library" : "Delete this playlist"}
+          @click=${() => kind === "layout" ? this.deletePage(u.id, u.label) : this.deletePlaylist(u.id, u.label)}>Delete</button></div>
     </div>`;
   }
 
