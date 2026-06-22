@@ -827,6 +827,11 @@ export class PimoroniUnicornPanel extends LitElement {
     if (!cap) return "";
     return html`
       <h3>${entry.name ?? cap.label}</h3>
+      ${cap.id === "weather" ? html`<div class="panelrow"><label>Preview condition</label>
+        <select @change=${(e: Event) => { this.previewWeather = (e.target as HTMLSelectElement).value; this.renderPreview(); }}>
+          <option value="" ?selected=${this.previewWeather === ""}>live</option>
+          ${WEATHER_TEST.map(([v, l]) => html`<option value=${v} ?selected=${this.previewWeather === v}>${l}</option>`)}
+        </select></div>` : ""}
       <div class="panelrow"><label>Name</label>
         <input type="text" style="width:160px" placeholder=${cap.label} .value=${entry.name ?? ""}
           @change=${(e: Event) => this.setName(entry, (e.target as HTMLInputElement).value)} /></div>
