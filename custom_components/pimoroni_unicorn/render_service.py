@@ -210,9 +210,12 @@ def render_layout_png(model: str, layout: dict, installed_icons: dict | None = N
     state = {**SAMPLE_STATE, "time": time.localtime(), "elapsed_ms": elapsed_ms, **(state or {})}
     ds = dict(state.get("display_sensors") or {})
     for entry in layout.get("widgets", []):
-        ent = (entry.get("cfg") or {}).get("entity")
+        cfg = entry.get("cfg") or {}
+        ent = cfg.get("entity")
         if ent:
             ds.setdefault(ent, {"state": True})  # mock 'on' so sensor widgets preview
+        if entry.get("type", entry.get("id")) == "value" and ent:
+            state.setdefault(ent, 123)  # sample number so a value widget previews without a device
     state["display_sensors"] = ds
     m.widgets.render_layout(g, layout, state)
     return _encode(g, width, height, scale)
@@ -299,6 +302,8 @@ FONT_SPECS = [
      "device_file": "monospace_blocky_serif.py", "sample": "012345"},
     {"name": "tall",       "label": "Tall 3×7",     "kind": "digits", "w": 3, "h": 7,
      "device_file": "monospace_tall.py",       "sample": "012345"},
+    {"name": "tall_bold",  "label": "Tall bold 5×7","kind": "digits", "w": 5, "h": 7,
+     "device_file": "monospace_tall_bold.py",  "sample": "012345"},
     {"name": "humanist",   "label": "Humanist 4×7", "kind": "digits", "w": 4, "h": 7,
      "device_file": "monospace_humanist.py",   "sample": "012345"},
 ]
@@ -311,6 +316,7 @@ _DIGIT_FONTS = {
     "blocky":       ("monospace_blocky",       "BLOCKY",       4, 5),
     "blocky_serif": ("monospace_blocky_serif", "BLOCKY_SERIF", 4, 5),
     "tall":         ("monospace_tall",         "TALL",         3, 7),
+    "tall_bold":    ("monospace_tall_bold",    "TALL_BOLD",    5, 7),
     "humanist":     ("monospace_humanist",     "HUMANIST",     4, 7),
 }
 

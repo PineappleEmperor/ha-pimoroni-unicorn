@@ -10,6 +10,7 @@ from .monospace_digits import DIGITS
 from .monospace_digits_serif import DIGITS_SERIF
 from .monospace_humanist import HUMANIST
 from .monospace_tall import TALL
+from .monospace_tall_bold import TALL_BOLD
 
 # Clock digit faces: name -> (glyph table, glyph width). Height derives from the table.
 _CLOCK_FACES = {
@@ -19,6 +20,7 @@ _CLOCK_FACES = {
     "blocky":       (BLOCKY, 4),
     "blocky-serif": (BLOCKY_SERIF, 4),
     "tall":         (TALL, 3),
+    "tall-bold":    (TALL_BOLD, 5),
     "humanist":     (HUMANIST, 4),
 }
 
@@ -36,10 +38,10 @@ def reload_fonts():
     font5x9) live in the engine's bitfonts.py, so updating those still needs a reboot.
     """
     import sys  # noqa: PLC0415
-    global BIG_DIGITS, BLOCKY, BLOCKY_SERIF, DIGITS, DIGITS_SERIF, HUMANIST, TALL, _CLOCK_FACES
+    global BIG_DIGITS, BLOCKY, BLOCKY_SERIF, DIGITS, DIGITS_SERIF, HUMANIST, TALL, TALL_BOLD, _CLOCK_FACES
     for m in ("monospace_big_digits", "monospace_blocky", "monospace_blocky_serif",
               "monospace_digits", "monospace_digits_serif", "monospace_humanist",
-              "monospace_tall"):
+              "monospace_tall", "monospace_tall_bold"):
         sys.modules.pop(m, None)
     from monospace_big_digits import BIG_DIGITS
     from monospace_blocky import BLOCKY
@@ -48,6 +50,7 @@ def reload_fonts():
     from monospace_digits_serif import DIGITS_SERIF
     from monospace_humanist import HUMANIST
     from monospace_tall import TALL
+    from monospace_tall_bold import TALL_BOLD
     _CLOCK_FACES = {
         "big":          (BIG_DIGITS, 5),
         "digits":       (DIGITS, 3),
@@ -55,6 +58,7 @@ def reload_fonts():
         "blocky":       (BLOCKY, 4),
         "blocky-serif": (BLOCKY_SERIF, 4),
         "tall":         (TALL, 3),
+        "tall-bold":    (TALL_BOLD, 5),
         "humanist":     (HUMANIST, 4),
     }
 
@@ -334,8 +338,10 @@ def draw_sleep(x, y, w, h, t):
     """
     t = 0.0 if t < 0 else (1.0 if t > 1 else t)
     count = 1 + int(min(0.999, t) * 3)  # 1..3 Z's reveal over time
-    bx = x + 1
-    by = y + h - 5  # bottom Z (font3x5 is 5 tall)
+    bx = x + (w - 9) // 2  # centre the 9px-wide 3-Z cluster
+    by = y + (h - 13) // 2 + 8  # centre the 13px-tall cluster; baseline of bottom Z
+    if by > y + h - 5:
+        by = y + h - 5  # clamp so the bottom Z never clips off short panels
     for i in range(count):
         py = by - i * 4
         if py < y:

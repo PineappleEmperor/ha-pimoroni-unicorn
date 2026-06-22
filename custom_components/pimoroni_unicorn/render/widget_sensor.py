@@ -10,10 +10,13 @@ _SPEC = {"draw": [{
 
 WIDGET = {
     "id": "sensor", "label": "Sensor", "w": 2, "h": 2, "variants": [], "multi": True,
-    "default_cfg": {"entity": "", "invert": False, "on_color": [0, 255, 0], "off_mode": "dim",
+    "default_cfg": {"entity": "", "invert": False, "on_state": "", "off_state": "",
+                    "on_color": [0, 255, 0], "off_mode": "dim",
                     "off_brightness": 15, "off_color": [40, 40, 40], "w": 2, "h": 2},
     "cfg_fields": [
         {"key": "entity", "type": "entity", "label": "Entity"},
+        {"key": "on_state", "type": "text", "label": "On when state = (blank: auto)"},
+        {"key": "off_state", "type": "text", "label": "Off when state = (blank: auto)"},
         {"key": "invert", "type": "bool", "label": "Invert on/off"},
         {"key": "on_color", "type": "rgb", "label": "Colour"},
         {"key": "off_mode", "type": "select", "options": ["dim", "colour"], "label": "Off state"},

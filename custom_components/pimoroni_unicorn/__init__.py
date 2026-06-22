@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 from pathlib import Path
+import re
 import time
 from typing import Any
 
@@ -35,7 +36,7 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
-from . import firmware_install, layout, render_service, websocket as ws_api
+from . import firmware_install, layout, marketplace, render_service, websocket as ws_api
 from .const import (
     CONF_BATTERY_CHARGING_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -126,6 +127,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})
     entry.runtime_data = {"unsub": [], "sensor_unsub": [], "sensor_entities": set(),
+                          "value_unsub": [], "value_entities": set(),
                           "diag": {}, "available": False}
 
     opts      = _merged_opts(entry)
@@ -163,6 +165,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     for unsub in (entry.runtime_data or {}).get("unsub", []):
         unsub()
     for unsub in (entry.runtime_data or {}).get("sensor_unsub", []):
+        unsub()
+    for unsub in (entry.runtime_data or {}).get("value_unsub", []):
         unsub()
 
     others = [e for e in hass.config_entries.async_entries(DOMAIN) if e.entry_id != entry.entry_id]
@@ -451,53 +455,188 @@ _SENSOR_OFF_STATES = {
 }
 
 
-def _sensor_on(state: Any) -> bool:
-    """Binary truthiness for a display dot, sane across entity domains (home/open/playing -> on)."""
-    return state is not None and str(state.state).strip().lower() not in _SENSOR_OFF_STATES
+def _sensor_on_rule(rule: tuple[str, str] | None, state: Any) -> bool:
+    """On/off for a dot honouring a per-widget (on_state, off_state) match, else default truthiness."""
+    if state is None:
+        return False
+    raw = str(state.state).strip().lower()
+    if raw in ("unavailable", "unknown", ""):
+        return False
+    on_s, off_s = rule or ("", "")
+    if on_s:
+        return raw == on_s.strip().lower()
+    if off_s:
+        return raw != off_s.strip().lower()
+    return raw not in _SENSOR_OFF_STATES
 
 
-def _layout_sensor_entities(lay: dict[str, Any] | None) -> set[str]:
-    """Entity ids named by the sensor widgets in a layout."""
+def _op_field(op: dict[str, Any], cfg: dict[str, Any], key: str) -> str:
+    """Resolve an op string field ($var -> cfg, else literal); '' when absent/non-string."""
+    v = op.get(key)
+    if isinstance(v, str) and v[:1] == "$":
+        v = cfg.get(v[1:])
+    return v if isinstance(v, str) else ""
+
+
+def _layout_sensor_rules(
+    lay: dict[str, Any] | None, specs: dict | None = None
+) -> dict[str, tuple[str, str]]:
+    """Per-entity custom match: built-in sensor widgets + custom declarative dot ops -> (on, off)."""
+    rules: dict[str, tuple[str, str]] = {}
+    for w in (lay or {}).get("widgets", []):
+        cfg = w.get("cfg") or {}
+        wid = w.get("type", w.get("id"))
+        if wid == "sensor":
+            ent = cfg.get("entity")
+            if isinstance(ent, str) and ent and (cfg.get("on_state") or cfg.get("off_state")):
+                rules[ent] = (str(cfg.get("on_state") or ""), str(cfg.get("off_state") or ""))
+        elif specs and wid in specs:
+            for op in specs[wid].get("draw", []):
+                if not isinstance(op, dict) or op.get("op") != "dot":
+                    continue
+                ent = _resolve_bind(op, cfg)
+                on_s, off_s = _op_field(op, cfg, "on_state"), _op_field(op, cfg, "off_state")
+                if ent and (on_s or off_s):
+                    rules[ent] = (on_s, off_s)
+    return rules
+
+
+def _num_payload(state: Any) -> str:
+    """Numeric /display/<id>/num payload; '' clears it when the entity has no usable number."""
+    if state is None or str(state.state).strip().lower() in ("unknown", "unavailable", ""):
+        return ""
+    try:
+        return str(float(state.state))
+    except (ValueError, TypeError):
+        return ""
+
+
+_ENTITY_ID = re.compile(r"^[a-z_][a-z0-9_]*\.[a-z0-9_]+$")
+
+
+def _resolve_bind(op: dict[str, Any], cfg: dict[str, Any]) -> str | None:
+    """Resolve a declarative op's bind (cfg $var or literal) to an entity id, else None."""
+    bind = op.get("bind")
+    if isinstance(bind, str) and bind[:1] == "$":
+        bind = cfg.get(bind[1:])
+    return bind if isinstance(bind, str) and _ENTITY_ID.match(bind) else None
+
+
+def _spec_binds(spec: dict[str, Any], cfg: dict[str, Any]) -> tuple[set[str], set[str]]:
+    """(numeric, on/off) entity ids a declarative spec's value/bar/dot ops bind, resolved via cfg."""
+    nums: set[str] = set()
+    dots: set[str] = set()
+    for op in spec.get("draw", []):
+        if not isinstance(op, dict):
+            continue
+        ent = _resolve_bind(op, cfg)
+        if ent is None:
+            continue
+        if op.get("op") in ("value", "bar"):
+            nums.add(ent)
+        elif op.get("op") == "dot":
+            dots.add(ent)
+    return nums, dots
+
+
+def _load_custom_specs(custom_dir: Path) -> dict[str, dict[str, Any]]:
+    """Map custom declarative widget id -> spec JSON from custom_dir (blocking; run in executor)."""
+    specs: dict[str, dict[str, Any]] = {}
+    if not custom_dir.is_dir():
+        return specs
+    for p in custom_dir.glob("widget_*.json"):
+        try:
+            spec = json.loads(p.read_text())
+        except (ValueError, OSError):
+            continue
+        if isinstance(spec, dict):
+            specs[spec.get("id", p.stem[7:])] = spec
+    return specs
+
+
+def _layout_sensor_entities(lay: dict[str, Any] | None, specs: dict | None = None) -> set[str]:
+    """On/off entity ids: sensor dots, energy charging + custom declarative dot ops."""
     out: set[str] = set()
     for w in (lay or {}).get("widgets", []):
-        if w.get("type", w.get("id")) == "sensor":
-            ent = (w.get("cfg") or {}).get("entity")
-            if isinstance(ent, str) and ent:
-                out.add(ent)
+        cfg = w.get("cfg") or {}
+        wid = w.get("type", w.get("id"))
+        if wid == "sensor":
+            _add_entity(out, cfg.get("entity"))
+        elif wid == "energy":
+            _add_entity(out, cfg.get("charging_entity"))
+        elif specs and wid in specs:
+            out |= _spec_binds(specs[wid], cfg)[1]
     return out
+
+
+def _layout_value_entities(lay: dict[str, Any] | None, specs: dict | None = None) -> set[str]:
+    """Numeric entity ids: value widgets, energy overrides + custom declarative value/bar ops."""
+    out: set[str] = set()
+    for w in (lay or {}).get("widgets", []):
+        cfg = w.get("cfg") or {}
+        wid = w.get("type", w.get("id"))
+        if wid == "value":
+            _add_entity(out, cfg.get("entity"))
+        elif wid == "energy":
+            for k in ("solar_entity", "consumption_entity", "soc_entity"):
+                _add_entity(out, cfg.get(k))
+        elif specs and wid in specs:
+            out |= _spec_binds(specs[wid], cfg)[0]
+    return out
+
+
+def _add_entity(out: set[str], ent: Any) -> None:
+    if isinstance(ent, str) and ent:
+        out.add(ent)
 
 
 async def _async_rewire_sensor_feed(
     hass: HomeAssistant, entry: PUConfigEntry, lay: dict[str, Any] | None
 ) -> None:
-    """Publish on/off state for the sensor widgets in the layout the device is showing."""
+    """Publish on/off + numeric state for the entity-bound widgets the device is showing."""
     device_id = _merged_opts(entry)[CONF_DEVICE_ID]
     store     = entry.runtime_data
-    entities  = _layout_sensor_entities(lay)
-    if entities == store.get("sensor_entities") and store.get("sensor_unsub"):
+    custom_dir = marketplace.widgets_dir(hass.config.config_dir)
+    specs = await hass.async_add_executor_job(_load_custom_specs, custom_dir)
+    rules = _layout_sensor_rules(lay, specs)
+    await _rewire_channel(hass, store, device_id, _layout_sensor_entities(lay, specs),
+                          "sensor_entities", "sensor_unsub", "state",
+                          lambda ent, s: "ON" if _sensor_on_rule(rules.get(ent), s) else "OFF",
+                          meta=rules)
+    await _rewire_channel(hass, store, device_id, _layout_value_entities(lay, specs),
+                          "value_entities", "value_unsub", "num", lambda _ent, s: _num_payload(s))
+
+
+async def _rewire_channel(
+    hass: HomeAssistant, store: dict[str, Any], device_id: str, entities: set[str],
+    ent_key: str, unsub_key: str, suffix: str, payload: Any, meta: Any = None,
+) -> None:
+    """Track a set of entities and mirror their state to /display/<id>/<suffix>."""
+    meta_key = f"{ent_key}_meta"
+    if entities == store.get(ent_key) and store.get(unsub_key) and store.get(meta_key) == meta:
         return
 
-    for unsub in store.get("sensor_unsub", []):
+    for unsub in store.get(unsub_key, []):
         unsub()
-    store["sensor_unsub"] = []
-    for removed in store.get("sensor_entities", set()) - entities:
-        await async_publish(hass, f"{device_id}/display/{removed}/state", "", retain=True)
-    store["sensor_entities"] = entities
+    store[unsub_key] = []
+    for removed in store.get(ent_key, set()) - entities:
+        await async_publish(hass, f"{device_id}/display/{removed}/{suffix}", "", retain=True)
+    store[ent_key] = entities
+    store[meta_key] = meta
 
     for ent in entities:
-        st = hass.states.get(ent)
-        await async_publish(hass, f"{device_id}/display/{ent}/state",
-                            "ON" if _sensor_on(st) else "OFF", retain=True)
+        await async_publish(hass, f"{device_id}/display/{ent}/{suffix}",
+                            payload(ent, hass.states.get(ent)), retain=True)
 
         @callback
-        def _on_state(event: Any, _ent: str = ent, _did: str = device_id) -> None:
+        def _on_state(event: Any, _ent: str = ent) -> None:
             new_state = event.data.get("new_state")
             if new_state is not None:
                 hass.async_create_task(async_publish(
-                    hass, f"{_did}/display/{_ent}/state",
-                    "ON" if _sensor_on(new_state) else "OFF", retain=True))
+                    hass, f"{device_id}/display/{_ent}/{suffix}",
+                    payload(_ent, new_state), retain=True))
 
-        store["sensor_unsub"].append(async_track_state_change_event(hass, [ent], _on_state))
+        store[unsub_key].append(async_track_state_change_event(hass, [ent], _on_state))
 
 
 def _merged_opts(entry: ConfigEntry) -> dict[str, Any]:
@@ -564,7 +703,12 @@ def live_state(hass: HomeAssistant, entry: PUConfigEntry) -> dict[str, Any]:
         ent: {"state": bool((s := hass.states.get(ent)) and s.state == "on")}
         for ent in (entry.runtime_data or {}).get("sensor_entities", set())
     }
+    values = {
+        ent: _float_state(hass, ent)
+        for ent in (entry.runtime_data or {}).get("value_entities", set())
+    }
     return {
+        **values,
         "time": dt_util.now().timetuple(),
         "solar": _float_state(hass, (opts.get(CONF_SOLAR_ENTITY) or "").strip()),
         "consumption": _float_state(hass, (opts.get(CONF_CONSUMPTION_ENTITY) or "").strip()),

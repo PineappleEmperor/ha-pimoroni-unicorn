@@ -69,6 +69,7 @@ OTA_SOURCE_FILES = {
     "widget_sensor":       ("widget_sensor.py",        "/widgets/widget_sensor.py"),
     "widget_icon":         ("widget_icon.py",          "/widgets/widget_icon.py"),
     "widget_text":         ("widget_text.py",          "/widgets/widget_text.py"),
+    "widget_value":        ("widget_value.py",         "/widgets/widget_value.py"),
     "widget_date":         ("widget_date.py",          "/widgets/widget_date.py"),
     "widget_temperature":  ("widget_temperature.py",   "/widgets/widget_temperature.py"),
     "widget_weather":      ("widget_weather.py",       "/widgets/widget_weather.py"),
@@ -78,6 +79,7 @@ OTA_SOURCE_FILES = {
     "monospace_blocky":    ("monospace_blocky.py",     "/assets/fonts/monospace_blocky.py"),
     "monospace_blocky_serif":("monospace_blocky_serif.py", "/assets/fonts/monospace_blocky_serif.py"),
     "monospace_tall":      ("monospace_tall.py",       "/assets/fonts/monospace_tall.py"),
+    "monospace_tall_bold": ("monospace_tall_bold.py",  "/assets/fonts/monospace_tall_bold.py"),
     "monospace_humanist":  ("monospace_humanist.py",   "/assets/fonts/monospace_humanist.py"),
 }
 
@@ -88,7 +90,7 @@ ENGINE_FILE_KEYS = list(OTA_SOURCE_FILES)
 # Bundled engine version (the update entity diffs the device's reported
 # engine_version against this). Keep in sync with firmware/engine/version.py.
 # Versioned independently of the integration manifest version.
-ENGINE_VERSION = "1.2.9"
+ENGINE_VERSION = "1.3.2"
 
 # Engine builds below this need a one-time USB reflash (the foldered file layout
 # landed in 1.1.0); OTA cannot migrate a flat device, so the update entity refuses

@@ -525,7 +525,7 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private async renderPreview(): Promise<void> {
     try {
-      const res = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: this.layout, orientation: this.orientation, weather: this.previewWeather || undefined });
+      const res = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: this.layout, orientation: this.orientation, weather: this.previewWeather || undefined, entry_id: this.entryId || undefined });
       this.wboxes = res.boxes ?? [];
       this.playFrames("layout", res.frames ?? (res.png ? [res.png] : []), (f) => { this.png = f; });
       if (this.status.startsWith("Render failed")) this.status = "";
@@ -804,6 +804,21 @@ export class PimoroniUnicornPanel extends LitElement {
     this.status = `Deleted "${this.layoutName}".`;
     this.loadLayout(this.defaultLayout);
   }
+  // Delete a page straight from the marketplace Pages list (no need to load it first).
+  private async deletePage(id: string, label: string): Promise<void> {
+    if (!confirm(`Delete page "${label}"? This can't be undone.`)) return;
+    await this.hass.callWS({ type: "pimoroni_unicorn/delete_layout", name: id });
+    await this.refreshStored();
+    await this.loadCatalog();
+    this.status = `Deleted page "${label}".`;
+  }
+  // Delete a playlist (screenset) from the marketplace Playlists list.
+  private async deletePlaylist(id: string, label: string): Promise<void> {
+    if (!confirm(`Delete playlist "${label}"? This can't be undone.`)) return;
+    await this.hass.callWS({ type: "pimoroni_unicorn/delete_screenset", name: id });
+    await this.loadCatalog();
+    this.status = `Deleted playlist "${label}".`;
+  }
 
   private renderWidgetEditor() {
     const entry = this.layout.widgets[this.selected];
@@ -851,7 +866,7 @@ export class PimoroniUnicornPanel extends LitElement {
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
             <input type="number" style="width:60px" min=${f.min ?? 1} max=${f.max ?? 64} step=${f.step ?? 1}
               .value=${String(this.cfgVal(entry, f.key))}
-              @change=${(e: Event) => this.setCfg(entry, f.key, +(e.target as HTMLInputElement).value)} /></div>`;
+              @input=${(e: Event) => { const v = (e.target as HTMLInputElement).value; if (v !== "" && !Number.isNaN(+v)) this.setCfg(entry, f.key, +v); }} /></div>`;
         }
         if (f.type === "bool") {
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
@@ -1097,7 +1112,7 @@ export class PimoroniUnicornPanel extends LitElement {
     this.status = `Deploying "${id}"…`;
     try {
       const r = await this.hass.callWS({
-        type: "pimoroni_unicorn/deploy_screenset", entry_id: this.entryId, id, override: !compatible });
+        type: "pimoroni_unicorn/deploy_screenset", entry_id: this.entryId, name: id, override: !compatible });
       this.status = r.ok ? `Deployed screen set "${id}".` : `Deploy failed.`;
     } catch (e) {
       this.status = `Deploy failed: ${(e as { message?: string })?.message ?? e}`;
@@ -1132,7 +1147,7 @@ export class PimoroniUnicornPanel extends LitElement {
     const id = prompt("Name this screen set:");
     if (!id) return;
     await this.hass.callWS({
-      type: "pimoroni_unicorn/save_screenset", id,
+      type: "pimoroni_unicorn/save_screenset", name: id,
       screenset: { label: id, layouts: this.screenLayouts, dwell: this.screenDwell,
                    transition: this.screenTransition, triggers: [] } });
     this.status = `Saved screen set "${id}".`;
@@ -1191,7 +1206,9 @@ export class PimoroniUnicornPanel extends LitElement {
       <div class="hint">${u.requires?.length ? html`<span title=${u.requires.join(", ")}>${u.requires.length} dep(s)</span>` : "—"}</div>
       <div class="badges">${onDevice ? html`<span class="badge ok">on device</span>` : ""}${u.compatible ? html`<span class="badge ok">compatible</span>` : html`<span class="badge warn">other model</span>`}</div>
       <div class="cell-action"><button ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to deploy"}
-        @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>${onDevice ? "Re-deploy" : "Deploy"}</button></div>
+        @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>${onDevice ? "Re-deploy" : "Deploy"}</button>
+        <button class="danger" title=${kind === "layout" ? "Delete this page from the library" : "Delete this playlist"}
+          @click=${() => kind === "layout" ? this.deletePage(u.id, u.label) : this.deletePlaylist(u.id, u.label)}>Delete</button></div>
     </div>`;
   }
 

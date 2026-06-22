@@ -78,6 +78,21 @@ def _entry(hass, entry_id):
     return hass.config_entries.async_get_entry(entry_id)
 
 
+def _preview_state(hass, msg):
+    """Mirror the device's live values in the Designer preview when an entry is selected."""
+    entry = _entry(hass, msg["entry_id"]) if msg.get("entry_id") else None
+    if entry is None or not entry.runtime_data:
+        return {"weather": msg["weather"]} if msg.get("weather") else None
+    # Local import: __init__ imports this module at top level, so a top-level
+    # `from . import live_state` would import a half-initialised package.
+    from . import live_state  # noqa: PLC0415
+
+    state = live_state(hass, entry)
+    if msg.get("weather"):
+        state["weather"] = msg["weather"]
+    return state
+
+
 def _model_key(entry) -> str:
     raw = {**entry.data, **entry.options}.get(CONF_MODEL, "")
     model = UNICORN_MODEL_KEYS.get(raw, raw)  # stored display label -> dims key (pass through if already a key)
@@ -154,13 +169,14 @@ async def ws_layouts(hass, connection, msg):
     vol.Required("layout"): dict,
     vol.Optional("orientation", default=0): vol.In(ORIENTATION_ANGLES),
     vol.Optional("weather"): vol.Any(None, str),
+    vol.Optional("entry_id"): str,
 })
 @websocket_api.async_response
 async def ws_render(hass, connection, msg):
     """Render a layout to animated base64 PNG frames using the device's own render code."""
     installed = await lametric.async_get_registry(hass)
     orientation = msg["orientation"]
-    state = {"weather": msg["weather"]} if msg.get("weather") else None
+    state = _preview_state(hass, msg)
     frames = await hass.async_add_executor_job(
         render_service.render_layout_frames, msg["model"], msg["layout"], installed, 8, 200,
         orientation, state)
@@ -477,7 +493,7 @@ async def ws_deploy_layout(hass, connection, msg):
 @websocket_api.websocket_command({
     vol.Required("type"): WS_DEPLOY_SCREENSET,
     vol.Required("entry_id"): str,
-    vol.Required("id"): str,
+    vol.Required("name"): str,
     vol.Optional("override", default=False): bool,
 })
 @websocket_api.async_response
@@ -488,12 +504,12 @@ async def ws_deploy_screenset(hass, connection, msg):
         connection.send_error(msg["id"], "not_found", "Unknown device")
         return
     screensets = await layout.async_get_screensets(hass)
-    ss = screensets.get(msg["id"])
+    ss = screensets.get(msg["name"])
     if ss is None:
         connection.send_error(msg["id"], "not_found", "Unknown screenset")
         return
     all_layouts = await layout.async_get_registry(hass)
-    unit = marketplace.screenset_unit(msg["id"], ss, all_layouts)
+    unit = marketplace.screenset_unit(msg["name"], ss, all_layouts)
     if not msg["override"] and not marketplace.compatible(unit["compat"], _model_key(entry)):
         connection.send_error(msg["id"], "incompatible",
                               f"Screenset targets {unit['compat']}, device is {_model_key(entry)}")
@@ -516,24 +532,24 @@ async def ws_publish_layout(hass, connection, msg):
 
 @websocket_api.websocket_command({
     vol.Required("type"): WS_SAVE_SCREENSET,
-    vol.Required("id"): str,
+    vol.Required("name"): str,
     vol.Required("screenset"): dict,
 })
 @websocket_api.async_response
 async def ws_save_screenset(hass, connection, msg):
     """Store a screenset (referenced apps + rotation + triggers)."""
-    await layout.async_save_screenset(hass, msg["id"], msg["screenset"])
+    await layout.async_save_screenset(hass, msg["name"], msg["screenset"])
     connection.send_result(msg["id"], {"ok": True})
 
 
 @websocket_api.websocket_command({
     vol.Required("type"): WS_DELETE_SCREENSET,
-    vol.Required("id"): str,
+    vol.Required("name"): str,
 })
 @websocket_api.async_response
 async def ws_delete_screenset(hass, connection, msg):
     """Remove a stored screenset."""
-    await layout.async_remove_screenset(hass, msg["id"])
+    await layout.async_remove_screenset(hass, msg["name"])
     connection.send_result(msg["id"], {"ok": True})
 
 
