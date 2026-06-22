@@ -804,6 +804,14 @@ export class PimoroniUnicornPanel extends LitElement {
     this.status = `Deleted "${this.layoutName}".`;
     this.loadLayout(this.defaultLayout);
   }
+  // Delete a page straight from the marketplace Pages list (no need to load it first).
+  private async deletePage(id: string, label: string): Promise<void> {
+    if (!confirm(`Delete page "${label}"? This can't be undone.`)) return;
+    await this.hass.callWS({ type: "pimoroni_unicorn/delete_layout", name: id });
+    await this.refreshStored();
+    await this.loadCatalog();
+    this.status = `Deleted page "${label}".`;
+  }
 
   private renderWidgetEditor() {
     const entry = this.layout.widgets[this.selected];
@@ -1191,7 +1199,8 @@ export class PimoroniUnicornPanel extends LitElement {
       <div class="hint">${u.requires?.length ? html`<span title=${u.requires.join(", ")}>${u.requires.length} dep(s)</span>` : "—"}</div>
       <div class="badges">${onDevice ? html`<span class="badge ok">on device</span>` : ""}${u.compatible ? html`<span class="badge ok">compatible</span>` : html`<span class="badge warn">other model</span>`}</div>
       <div class="cell-action"><button ?disabled=${!this.entryId} title=${this.entryId ? "" : "Select a device to deploy"}
-        @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>${onDevice ? "Re-deploy" : "Deploy"}</button></div>
+        @click=${() => kind === "layout" ? this.deployLayout(u.id, u.compatible) : this.deployScreenset(u.id, u.compatible)}>${onDevice ? "Re-deploy" : "Deploy"}</button>
+        ${kind === "layout" ? html`<button class="danger" title="Delete this page from the library" @click=${() => this.deletePage(u.id, u.label)}>Delete</button>` : ""}</div>
     </div>`;
   }
 
