@@ -120,6 +120,10 @@ dismiss_notification:
 
 push_firmware:
   fields:
+    device_id:
+      selector:
+        device:
+          integration: pimoroni_unicorn
     files:
       default:
         - main

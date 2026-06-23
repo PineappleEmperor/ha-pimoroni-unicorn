@@ -290,6 +290,10 @@
       "name": "Push firmware to device",
       "description": "Stage firmware files and send an OTA update command over MQTT. The device validates, writes, and reboots automatically.",
       "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "Which device to update. Leave empty to push to every configured device."
+        },
         "files": {
           "name": "Files to push",
           "description": "Which firmware files to push (defaults to main). Bare names get .py appended and land in the device root."

@@ -20,6 +20,9 @@ FONT_FILES = {
     "blocky_serif": "monospace_blocky_serif.py",
     "tall":         "monospace_tall.py",
     "tall_bold":    "monospace_tall_bold.py",
+    "large":        "monospace_large.py",
+    "huge":         "monospace_huge.py",
+    "jumbo":        "monospace_jumbo.py",
     "humanist":     "monospace_humanist.py",
 }
 
@@ -229,8 +232,8 @@ MODEL_DIMS = {"galactic": (53, 11), "cosmic": (32, 32), "stellar": (16, 16)}
 
 
 def compatible(compat, model) -> bool:
-    """A unit with no compat tags is universal; otherwise model must be listed."""
-    return (not compat) or (model in compat)
+    """Universal if no compat tags or no device to gate against (mock); else model must be listed."""
+    return (not compat) or (model is None) or (model in compat)
 
 
 def _layout_widget_types(layout: dict) -> list[str]:

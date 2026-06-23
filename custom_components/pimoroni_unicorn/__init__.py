@@ -55,6 +55,7 @@ from .const import (
 from .notify import (
     DISMISS_SCHEMA,
     GENERIC_NOTIFY_SCHEMA,
+    _resolve_entry,
     make_dismiss_handler,
     make_generic_notify_handler,
 )
@@ -117,6 +118,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.services.async_register(
         DOMAIN, SERVICE_SET_PLAYLIST, make_set_playlist_handler(hass), schema=SET_PLAYLIST_SCHEMA
     )
+    await hass.http.async_register_static_paths([
+        StaticPathConfig(PANEL_MODULE_URL, str(Path(__file__).parent / "panel" / "editor.js"), False),
+    ])
+    ws_api.async_register(hass)
     return True
 
 
@@ -148,9 +153,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     await hass.config_entries.async_forward_entry_setups(entry, ["update", "sensor", "image"])
 
-    if not hass.data.get(f"{DOMAIN}_ws_registered"):
-        ws_api.async_register(hass)
-        hass.data[f"{DOMAIN}_ws_registered"] = True
     await _async_refresh_panel(hass)
 
     if device_id:
@@ -204,11 +206,7 @@ async def _async_refresh_panel(hass: HomeAssistant) -> None:
     want = _panel_wanted(hass)
     registered = hass.data.get(f"{DOMAIN}_panel_registered", False)
     if want and not registered:
-        if not hass.data.get(f"{DOMAIN}_panel_static"):
-            await hass.http.async_register_static_paths([
-                StaticPathConfig(PANEL_MODULE_URL, str(Path(__file__).parent / "panel" / "editor.js"), False),
-            ])
-            hass.data[f"{DOMAIN}_panel_static"] = True
+        hass.data[f"{DOMAIN}_panel_registered"] = True  # claim before await to close the parallel-setup race
         integration = await async_get_integration(hass, DOMAIN)
         await panel_custom.async_register_panel(
             hass,
@@ -219,7 +217,6 @@ async def _async_refresh_panel(hass: HomeAssistant) -> None:
             sidebar_icon="mdi:dots-grid",
             require_admin=True,
         )
-        hass.data[f"{DOMAIN}_panel_registered"] = True
     elif registered and not want:
         frontend.async_remove_panel(hass, PANEL_URL_PATH)
         hass.data[f"{DOMAIN}_panel_registered"] = False
@@ -802,8 +799,14 @@ def _make_push_firmware_handler(
 ) -> Callable[[ServiceCall], Coroutine[Any, Any, None]]:
     async def _handle_push_firmware(call: ServiceCall) -> None:
         entries = hass.config_entries.async_entries(DOMAIN)
+        target = call.data.get("entry_id")
+        if not target and call.data.get("device_id"):
+            entry, _ = _resolve_entry(hass, call.data["device_id"])
+            target = entry.entry_id if entry else "__none__"
+        if target:
+            entries = [e for e in entries if e.entry_id == target]
         if not entries:
-            _LOGGER.error("Pimoroni Unicorn: no configured entries found")
+            _LOGGER.error("Pimoroni Unicorn: no matching configured entries found")
             return
 
         base_url = await firmware_install.async_device_base_url(hass)

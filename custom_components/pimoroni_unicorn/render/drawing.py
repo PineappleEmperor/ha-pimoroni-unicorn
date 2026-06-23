@@ -11,6 +11,9 @@ from .monospace_digits_serif import DIGITS_SERIF
 from .monospace_humanist import HUMANIST
 from .monospace_tall import TALL
 from .monospace_tall_bold import TALL_BOLD
+from .monospace_large import LARGE
+from .monospace_huge import HUGE
+from .monospace_jumbo import JUMBO
 
 # Clock digit faces: name -> (glyph table, glyph width). Height derives from the table.
 _CLOCK_FACES = {
@@ -21,6 +24,9 @@ _CLOCK_FACES = {
     "blocky-serif": (BLOCKY_SERIF, 4),
     "tall":         (TALL, 3),
     "tall-bold":    (TALL_BOLD, 5),
+    "large":        (LARGE, 7),
+    "huge":         (HUGE, 8),
+    "jumbo":        (JUMBO, 9),
     "humanist":     (HUMANIST, 4),
 }
 
@@ -38,10 +44,12 @@ def reload_fonts():
     font5x9) live in the engine's bitfonts.py, so updating those still needs a reboot.
     """
     import sys  # noqa: PLC0415
-    global BIG_DIGITS, BLOCKY, BLOCKY_SERIF, DIGITS, DIGITS_SERIF, HUMANIST, TALL, TALL_BOLD, _CLOCK_FACES
+    global BIG_DIGITS, BLOCKY, BLOCKY_SERIF, DIGITS, DIGITS_SERIF, HUMANIST, TALL, TALL_BOLD
+    global LARGE, HUGE, JUMBO, _CLOCK_FACES
     for m in ("monospace_big_digits", "monospace_blocky", "monospace_blocky_serif",
               "monospace_digits", "monospace_digits_serif", "monospace_humanist",
-              "monospace_tall", "monospace_tall_bold"):
+              "monospace_tall", "monospace_tall_bold",
+              "monospace_large", "monospace_huge", "monospace_jumbo"):
         sys.modules.pop(m, None)
     from monospace_big_digits import BIG_DIGITS
     from monospace_blocky import BLOCKY
@@ -51,6 +59,9 @@ def reload_fonts():
     from monospace_humanist import HUMANIST
     from monospace_tall import TALL
     from monospace_tall_bold import TALL_BOLD
+    from monospace_large import LARGE
+    from monospace_huge import HUGE
+    from monospace_jumbo import JUMBO
     _CLOCK_FACES = {
         "big":          (BIG_DIGITS, 5),
         "digits":       (DIGITS, 3),
@@ -59,6 +70,9 @@ def reload_fonts():
         "blocky-serif": (BLOCKY_SERIF, 4),
         "tall":         (TALL, 3),
         "tall-bold":    (TALL_BOLD, 5),
+        "large":        (LARGE, 7),
+        "huge":         (HUGE, 8),
+        "jumbo":        (JUMBO, 9),
         "humanist":     (HUMANIST, 4),
     }
 
