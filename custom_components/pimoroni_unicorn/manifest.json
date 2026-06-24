@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/PineappleEmperor/ha-pimoroni-unicorn/issues",
   "mqtt": ["pimoroni_unicorn/discovery/#"],
   "requirements": ["Pillow>=10.0.0"],
-  "version": "2.0.0rc19"
+  "version": "2.0.0rc20"
 }
