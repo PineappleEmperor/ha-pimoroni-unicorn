@@ -132,6 +132,8 @@ class PimoroniUnicornUpdate(UpdateEntity):
             raise HomeAssistantError(
                 "This engine update changes the on-device file layout and cannot be applied "
                 "over the air. Reflash the firmware/ tree via USB (Thonny) once; OTA works after.")
+        if self._installing and time.monotonic() - self._install_started < 180:
+            raise HomeAssistantError("An update is already in progress for this device.")
         self._installing = True
         self._install_started = time.monotonic()
         self._attr_in_progress = True
