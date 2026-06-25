@@ -584,7 +584,7 @@ split-on-trailing-comma = false
 "homeassistant/__main__.py" = ["T201"]
 "homeassistant/scripts/*" = ["T201"]
 "script/*" = ["T20"]
-"scripts/*" = ["T201", "D103", "PTH123"]
+"scripts/*" = ["T201", "D103", "PTH123", "INP001"]
 # render_service defers imports until MicroPython mocks are installed; module-level cache is intentional
 "custom_components/pimoroni_unicorn/render_service.py" = ["PLC0415", "PLW0603"]
 "scripts/check_widget_boxes.py" = ["D103", "E731", "E402", "PTH"]
@@ -596,7 +596,7 @@ split-on-trailing-comma = false
 
 # Temporary
 "homeassistant/**" = ["PTH"]
-"tests/**" = ["PTH"]
+"tests/**" = ["PTH", "INP001"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 25
