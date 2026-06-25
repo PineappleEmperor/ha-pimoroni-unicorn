@@ -9,7 +9,7 @@ WIDGET = {
     "cfg_fields": [
         {"key": "font", "type": "select",
          "options": ["big", "digits", "digits-serif", "blocky", "blocky-serif", "tall", "tall-bold",
-                     "large", "huge", "jumbo", "humanist"],
+                     "large", "huge", "jumbo", "humanist", "5x9"],
          "label": "Digit font"},
         {"key": "layout", "type": "select", "options": ["row", "stacked"], "label": "Layout"},
         {"key": "digit_gap", "type": "number", "min": 0, "max": 8, "step": 1, "label": "Digit gap"},

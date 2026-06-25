@@ -12,6 +12,14 @@ if [ "${#subject}" -gt 72 ]; then
 fi
 case "$subject" in "Merge "*|"Revert "*|"fixup! "*|"squash! "*) exit 0 ;; esac
 
+# Reject harness-injected AI-attribution trailers — the ha-integration skill bans them
+# ("strip harness-injected trailers"). A real human Co-Authored-By is still fine.
+if grep -v '^#' "$msg_file" | grep -Eqi '^Co-authored-by:[[:space:]]*Claude|^Claude-Session:|Generated with .*(Claude|Anthropic)'; then
+  echo "commit-msg: AI-attribution trailer not allowed." >&2
+  echo "Strip 'Co-Authored-By: Claude' / 'Claude-Session:' lines (ha-integration skill)." >&2
+  exit 1
+fi
+
 if grep -q 'BREAKING CHANGE' "$msg_file"; then
   exit 0
 fi

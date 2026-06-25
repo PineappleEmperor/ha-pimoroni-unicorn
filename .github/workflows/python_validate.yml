@@ -32,6 +32,9 @@ jobs:
       - name: Integration tests (config flow, …)
         run: python -m pytest tests/integration -q
 
+      - name: Manifest gate unit tests
+        run: python -m pytest tests/test_manifest_gate.py -q
+
       - name: Check render/ is in sync with firmware/
         run: python scripts/check_render_sync.py
 

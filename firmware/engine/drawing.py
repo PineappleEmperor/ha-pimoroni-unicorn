@@ -14,6 +14,23 @@ from monospace_large import LARGE
 from monospace_huge import HUGE
 from monospace_jumbo import JUMBO
 
+
+def _text_digit_face(font):
+    """Build a clock digit table (row-major 0/1 lists) + width from a full font's 0-9 glyphs."""
+    g0 = font["0"]
+    w, h = g0["w"], g0["h"]
+    table = []
+    for d in "0123456789":
+        data = font[d]["data"]
+        table.append([(data >> ((h - 1 - r) * w + (w - 1 - c))) & 1
+                      for r in range(h) for c in range(w)])
+    return table, w
+
+
+# Full-ASCII engine text fonts also offered as clock faces. font3x5 duplicates "digits",
+# so only the 5x9 face is exposed; add more here as text fonts are added to bitfonts.
+_FONT5X9_FACE = _text_digit_face(font5x9)
+
 # Clock digit faces: name -> (glyph table, glyph width). Height derives from the table.
 _CLOCK_FACES = {
     "big":          (BIG_DIGITS, 5),
@@ -27,6 +44,7 @@ _CLOCK_FACES = {
     "huge":         (HUGE, 8),
     "jumbo":        (JUMBO, 9),
     "humanist":     (HUMANIST, 4),
+    "5x9":          _FONT5X9_FACE,
 }
 
 
@@ -73,6 +91,7 @@ def reload_fonts():
         "huge":         (HUGE, 8),
         "jumbo":        (JUMBO, 9),
         "humanist":     (HUMANIST, 4),
+        "5x9":          _FONT5X9_FACE,
     }
 
 # Selectable text fonts: name -> (glyph table, force-uppercase). font3x5 is
