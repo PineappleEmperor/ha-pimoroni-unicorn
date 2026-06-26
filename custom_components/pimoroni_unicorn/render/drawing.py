@@ -17,14 +17,23 @@ from .monospace_jumbo import JUMBO
 
 
 def _text_digit_face(font):
-    """Build a clock digit table (row-major 0/1 lists) + width from a full font's 0-9 glyphs."""
+    """Build a tight clock digit table (row-major 0/1 lists) + width from a full font's 0-9 glyphs.
+
+    Crops rows blank across all ten digits so a text font's cell padding (font5x9 pads
+    two empty rows above its 7-tall digits) doesn't float the clock below its box top.
+    """
     g0 = font["0"]
     w, h = g0["w"], g0["h"]
-    table = []
-    for d in "0123456789":
-        data = font[d]["data"]
-        table.append([(data >> ((h - 1 - r) * w + (w - 1 - c))) & 1
-                      for r in range(h) for c in range(w)])
+    rows = [[[(font[d]["data"] >> ((h - 1 - r) * w + (w - 1 - c))) & 1
+              for c in range(w)] for r in range(h)] for d in "0123456789"]
+    blank = lambda r: all(rows[d][r][c] == 0 for d in range(10) for c in range(w))
+    top = 0
+    while top < h - 1 and blank(top):
+        top += 1
+    bot = h
+    while bot > top + 1 and blank(bot - 1):
+        bot -= 1
+    table = [[rows[d][r][c] for r in range(top, bot) for c in range(w)] for d in range(10)]
     return table, w
 
 
@@ -427,6 +436,27 @@ def text_width(s, d=1, font="font3x5", spacing=0):
         if glyph:
             total += glyph["w"] + d + spacing
     return total - d - spacing if total else 0
+
+
+def text_top_pad(s, font="font3x5"):
+    """Blank rows shared above every glyph in s for the named text font (0 if none).
+
+    Lets a caps/digits widget crop a text font's top cell padding (font5x9 pads two
+    empty rows above its digits/capitals) without clipping any glyph's ink.
+    """
+    table, upper = _text_font(font)
+    seq = str(s).upper() if upper else str(s)
+    pad = None
+    for ch in seq:
+        glyph = table.get(ch)
+        if glyph is None:
+            continue
+        w, h, data = glyph["w"], glyph["h"], glyph["data"]
+        top = 0
+        while top < h and not any(data & (1 << ((h - 1 - top) * w + (w - 1 - c))) for c in range(w)):
+            top += 1
+        pad = top if pad is None else min(pad, top)
+    return pad or 0
 
 
 def draw_text(s, x, y, color=None):
