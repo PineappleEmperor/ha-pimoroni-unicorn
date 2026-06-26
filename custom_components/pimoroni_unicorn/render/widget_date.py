@@ -49,13 +49,15 @@ def _format(cfg, t):
 
 
 def box(cfg):
-    """Worst-case width for the chosen format and font."""
+    """Worst-case width for the chosen format and font, cropping the font's top padding."""
     font = cfg.get("font", "font3x5")
-    h = 9 if font == "font5x9" else 5
-    return (max(1, drawing.text_width(_SAMPLE.get(cfg.get("format", "weekday"), "WWW"),
-                                      font=font, spacing=cfg.get("spacing", 0))), h)
+    sample = _SAMPLE.get(cfg.get("format", "weekday"), "WWW")
+    h = (9 if font == "font5x9" else 5) - drawing.text_top_pad(sample, font)
+    return (max(1, drawing.text_width(sample, font=font, spacing=cfg.get("spacing", 0))), h)
 
 
 def render(g, x, y, w, h, cfg, state):
-    """Draw the formatted date/time text from the current clock."""
-    drawing.draw_text_fx(_format(cfg, state["time"]), x, y, cfg, state.get("elapsed_ms", 0))
+    """Draw the formatted date/time text from the current clock, cropping top padding."""
+    font = cfg.get("font", "font3x5")
+    s = _format(cfg, state["time"])
+    drawing.draw_text_fx(s, x, y - drawing.text_top_pad(s, font), cfg, state.get("elapsed_ms", 0))
