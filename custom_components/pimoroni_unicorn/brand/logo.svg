@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 256">
-  <rect width="512" height="256" rx="48" fill="#6d28d9"/>
-  <text x="256" y="120" font-family="system-ui,-apple-system,sans-serif" font-size="48" font-weight="300" fill="white" text-anchor="middle">Pimoroni</text>
-  <text x="256" y="184" font-family="system-ui,-apple-system,sans-serif" font-size="64" font-weight="800" fill="white" text-anchor="middle">Unicorn</text>
-</svg>
