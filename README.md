@@ -15,6 +15,7 @@ Includes MicroPython firmware for the Pico W and a HA config flow for device set
 
 The notification system is heavily inspired by [AWTRIX](https://github.com/Blueforcer/awtrix3) — its payload model (text, icon, effect, colour, duration, stacking) shaped this integration's `notify` schema. Credit and thanks to the AWTRIX project.
 
+> [!NOTE]
 > **AI assistance:** I'm a programmer; this project is built with AI (Claude, via Claude Code) for implementation, code review, and QA — under human direction. We challenge each other's choices: I review and push back on the AI's output, and it questions my decisions and flags trade-offs. Architecture and final review are mine; every change is human-reviewed before it merges.
 
 ## Supported hardware
