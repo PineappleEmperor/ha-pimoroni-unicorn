@@ -89,8 +89,8 @@ def _resolve_entry(hass: HomeAssistant, ha_device_id: str):
     if device is None:
         return None, ""
     entry = next(
-        (hass.config_entries.async_get_entry(eid) for eid in device.config_entries
-         if hass.config_entries.async_get_entry(eid) is not None),
+        (e for eid in device.config_entries
+         if (e := hass.config_entries.async_get_entry(eid)) is not None and e.domain == DOMAIN),
         None,
     )
     if entry is None:
