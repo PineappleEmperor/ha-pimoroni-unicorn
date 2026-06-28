@@ -69,12 +69,21 @@ def _draw_bar(g, op, x, y, state, pen, bright):
     if op.get("bg"):
         g.set_pen(g.create_pen(*_dim(op["bg"], bright)))
         g.rectangle(x, y, w, h)
-    val = state.get(op.get("bind"), 0) or 0
-    mx = op.get("max", 100) or 1
-    fill = int(max(0.0, min(1.0, val / mx)) * w)
-    if fill > 0:
-        g.set_pen(pen)
-        g.rectangle(x, y, fill, h)
+    val = state.get(op.get("bind"))
+    if val is None:
+        return
+    lo = op.get("min", 0) or 0
+    span = (op.get("max", 100) - lo) or 1
+    frac = max(0.0, min(1.0, (val - lo) / span))
+    g.set_pen(pen)
+    if op.get("orient") == "vertical":
+        fill = int(frac * h)
+        if fill > 0:
+            g.rectangle(x, y + h - fill, w, fill)
+    else:
+        fill = int(frac * w)
+        if fill > 0:
+            g.rectangle(x, y, fill, h)
 
 
 def _draw_dot(g, op, x, y, state, bright):

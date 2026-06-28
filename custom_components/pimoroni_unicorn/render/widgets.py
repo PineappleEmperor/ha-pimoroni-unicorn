@@ -5,6 +5,7 @@ import json
 
 from . import declarative
 from . import overlay_weather
+from . import widget_bar
 from . import widget_calendar
 from . import widget_clock
 from . import widget_date
@@ -20,7 +21,7 @@ from . import widget_weekdays
 
 _UNITS = [widget_clock, widget_calendar, widget_weekdays, widget_energy, widget_sun_moon,
           widget_sensor, widget_icon, widget_text, widget_date, widget_temperature,
-          widget_value, widget_weather]
+          widget_value, widget_weather, widget_bar]
 _OVERLAY_UNITS = [overlay_weather]
 
 
