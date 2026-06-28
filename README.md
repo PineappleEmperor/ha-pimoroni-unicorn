@@ -15,9 +15,6 @@ Includes MicroPython firmware for the Pico W and a HA config flow for device set
 
 The notification system is heavily inspired by [AWTRIX](https://github.com/Blueforcer/awtrix3) — its payload model (text, icon, effect, colour, duration, stacking) shaped this integration's `notify` schema. Credit and thanks to the AWTRIX project.
 
-> [!NOTE]
-> **AI assistance:** I'm a programmer; this project is built with AI (Claude, via Claude Code) for implementation, code review, and QA — under human direction. We challenge each other's choices: I review and push back on the AI's output, and it questions my decisions and flags trade-offs. Architecture and final review are mine; every change is human-reviewed before it merges.
-
 ## Supported hardware
 
 | Model | Resolution |
@@ -223,6 +220,9 @@ All rendering runs in CPython with no hardware: `render_service.py` executes the
 Author layouts in the **Designer** tab — pick a device, or **Mock (preview only)** to design for any model without hardware. Arrange widgets on the pixel-accurate preview, then **Export JSON** to share a layout, or **Save & Push** it to a device. Shared JSON is applied under **Configure → Import layout** (stored by name, selectable per device, pushed over MQTT) or published directly to the `<device_id>/layout` topic.
 
 Because device and preview must render identically, firmware draw code uses only shim-faithful primitives (`pixel`, `rectangle`, bitmask fonts — no `circle`/`triangle`/non-bitmap fonts). Note: the shim has no `bitmap6` font, so the `tiny` clock variant renders approximately (font8 substituted); `big`/`small` are exact.
+
+> [!NOTE]
+> **AI assistance:** I'm a programmer; this project is built with AI (Claude, via Claude Code) for implementation, code review, and QA — under human direction. We challenge each other's choices: I review and push back on the AI's output, and it questions my decisions and flags trade-offs. Architecture and final review are mine; every change is human-reviewed before it merges.
 
 <!-- Badges -->
 
