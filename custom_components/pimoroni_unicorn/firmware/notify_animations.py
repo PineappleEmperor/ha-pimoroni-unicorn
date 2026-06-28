@@ -319,7 +319,8 @@ def _draw_v2_notification(notif, elapsed_ms):
         elif pos == "right":
             ix, tx, tw = _width - panel_w, 0, max(0, _width - panel_w)
         else:  # left
-            ix, tx, tw = 0, panel_w, max(0, _width - panel_w)
+            margin = 2 if _width >= 32 else 0  # inset on wider panels (galactic/cosmic); stellar has no room
+            ix, tx, tw = margin, margin + panel_w, max(0, _width - margin - panel_w)
         if anim_fn is None and pos != "center":
             _g.set_pen(_g.create_pen(*bg_color))
             _g.rectangle(ix, 0, panel_w, _height)
