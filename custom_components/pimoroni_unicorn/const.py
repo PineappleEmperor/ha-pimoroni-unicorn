@@ -73,6 +73,7 @@ OTA_SOURCE_FILES = {
     "widget_date":         ("widget_date.py",          "/widgets/widget_date.py"),
     "widget_temperature":  ("widget_temperature.py",   "/widgets/widget_temperature.py"),
     "widget_weather":      ("widget_weather.py",       "/widgets/widget_weather.py"),
+    "widget_bar":          ("widget_bar.py",           "/widgets/widget_bar.py"),
     "monospace_digits":    ("monospace_digits.py",     "/assets/fonts/monospace_digits.py"),
     "monospace_digits_serif":("monospace_digits_serif.py", "/assets/fonts/monospace_digits_serif.py"),
     "monospace_big_digits":("monospace_big_digits.py", "/assets/fonts/monospace_big_digits.py"),
@@ -93,7 +94,7 @@ ENGINE_FILE_KEYS = list(OTA_SOURCE_FILES)
 # Bundled engine version (the update entity diffs the device's reported
 # engine_version against this). Keep in sync with firmware/engine/version.py.
 # Versioned independently of the integration manifest version.
-ENGINE_VERSION = "1.3.5"
+ENGINE_VERSION = "1.4.0"
 
 # Engine builds below this need a one-time USB reflash (the foldered file layout
 # landed in 1.1.0); OTA cannot migrate a flat device, so the update entity refuses
