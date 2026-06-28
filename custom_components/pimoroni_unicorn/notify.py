@@ -30,6 +30,8 @@ GENERIC_NOTIFY_SCHEMA = vol.Schema({
     vol.Required("device_id"):                 cv.string,
     vol.Optional(ATTR_MESSAGE, default=""):    cv.string,
     vol.Optional("icon"):                      vol.Any(cv.string, list),
+    vol.Optional("icon_scale"):                vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=1, max=4))),
+    vol.Optional("icon_position"):             vol.Any(None, vol.In(["left", "center", "right"])),
     vol.Optional("effect"):                    vol.In(NOTIFY_EFFECTS),
     vol.Optional("effect_speed"):              _SPEED,
     vol.Optional("sound"):                     vol.In(NOTIFY_SOUNDS),
