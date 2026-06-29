@@ -643,7 +643,7 @@ def on_message(topic, message):
                 has_effect = data.get("effect", "") in NOTIFY_ANIMATIONS
                 has_icon   = data.get("icon") is not None
                 if has_text or has_anim or has_effect or has_icon:
-                    if data.get("stack") is False:
+                    if data.get("stack") is not True:
                         _notify_queue.clear()
                         _notify_active = None
                         if HAS_AUDIO:
