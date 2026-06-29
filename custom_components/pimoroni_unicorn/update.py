@@ -102,6 +102,9 @@ class PimoroniUnicornUpdate(UpdateEntity):
                 (installed == ENGINE_VERSION and not drift)
                 or time.monotonic() - self._install_started > 180):
             self._installing = False
+        if self._installing:
+            self._attr_installed_version = ENGINE_VERSION
+            self._attr_latest_version = ENGINE_VERSION
         self._attr_in_progress = self._installing
         self._attr_available = available or self._installing
 
