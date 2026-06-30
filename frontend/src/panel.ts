@@ -328,15 +328,19 @@ export class PimoroniUnicornPanel extends LitElement {
   }
   private async pushIconToDevice(name: string) {
     if (!this.entryId) return;
-    await this.hass.callWS({ type: "pimoroni_unicorn/icon_push", entry_id: this.entryId, name });
-    this.status = `Installing "${name}" on this device…`;
-    this.reloadIconsSoon();
+    try {
+      await this.hass.callWS({ type: "pimoroni_unicorn/icon_push", entry_id: this.entryId, name });
+      this.status = `Installing "${name}" on this device…`;
+      this.reloadIconsSoon();
+    } catch (e) { this.status = `Install failed: ${(e as { message?: string })?.message ?? e}`; }
   }
   private async removeIconFromDevice(name: string) {
     if (!this.entryId) return;
-    await this.hass.callWS({ type: "pimoroni_unicorn/icon_device_remove", entry_id: this.entryId, name });
-    this.status = `Removed "${name}" from this device.`;
-    this.reloadIconsSoon();
+    try {
+      await this.hass.callWS({ type: "pimoroni_unicorn/icon_device_remove", entry_id: this.entryId, name });
+      this.status = `Removed "${name}" from this device.`;
+      this.reloadIconsSoon();
+    } catch (e) { this.status = `Remove failed: ${(e as { message?: string })?.message ?? e}`; }
   }
 
   // Install targets default to every device; user can narrow the selection.
@@ -403,6 +407,13 @@ export class PimoroniUnicornPanel extends LitElement {
     window.removeEventListener("keydown", this._onKey);
     this._ro?.disconnect();
     this._ro = undefined;
+    Object.values(this._frameTimers).forEach((t) => clearInterval(t));
+    this._frameTimers = {};
+    clearInterval(this.screenTimer);
+    clearTimeout(this.renderTimer);
+    clearTimeout(this.pushTimer);
+    clearTimeout(this.fontTimer);
+    clearTimeout(this.specTimer);
     super.disconnectedCallback();
   }
 
@@ -431,7 +442,7 @@ export class PimoroniUnicornPanel extends LitElement {
       ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
     };
     const delta = d[e.key];
-    if (!delta) return;
+    if (!delta || this.tab !== "layout") return;
     e.preventDefault();
     this._nudge(delta[0], delta[1]);
   };
@@ -475,7 +486,7 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private async selectDevice(entryId: string): Promise<void> {
     const dev = this.devices.find((d) => d.entry_id === entryId);
-    if (!dev || !this.guardDiscard()) return;
+    if (!dev || !this.guardDiscard()) { this.requestUpdate(); return; }
     this.entryId = entryId;
     await this.loadCaps({ entry_id: entryId });
     this.loadIcons();
@@ -485,7 +496,7 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private async selectMock(model: string): Promise<void> {
-    if (!this.guardDiscard()) return;
+    if (!this.guardDiscard()) { this.requestUpdate(); return; }
     this.entryId = "";
     await this.loadCaps({ model });
     this.loadIcons();
@@ -969,7 +980,7 @@ export class PimoroniUnicornPanel extends LitElement {
       <div class="bar">
         <div class="group">
           <label>Page
-            <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; if (this.guardDiscard()) this.loadLayout(v === "__new__" ? this.defaultLayout : this.stored[v]); }}>
+            <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; if (this.guardDiscard()) this.loadLayout(v === "__new__" ? this.defaultLayout : this.stored[v]); else this.requestUpdate(); }}>
               ${Object.keys(this.stored).map((n) => html`<option ?selected=${n === this.layoutName}>${n}</option>`)}
               <option value="__new__">+ new page</option>
             </select>
@@ -1166,20 +1177,26 @@ export class PimoroniUnicornPanel extends LitElement {
   }
   private async installFont(name: string) {
     if (!this.entryId) return;
-    await this.hass.callWS({ type: "pimoroni_unicorn/font_install", entry_id: this.entryId, font: name });
-    this.status = `Installing font ${name}…`;
-    for (const ms of [2000, 5000]) setTimeout(() => this.loadFonts(), ms);  // hot-loads, no reboot
+    try {
+      await this.hass.callWS({ type: "pimoroni_unicorn/font_install", entry_id: this.entryId, font: name });
+      this.status = `Installing font ${name}…`;
+      for (const ms of [2000, 5000]) setTimeout(() => this.loadFonts(), ms);  // hot-loads, no reboot
+    } catch (e) { this.status = `Font install failed: ${(e as { message?: string })?.message ?? e}`; }
   }
   private async installWidget(id: string) {
-    await this.hass.callWS({ type: "pimoroni_unicorn/fw_install", entry_id: this.entryId, widget_id: id });
-    this.status = `Installing ${id}…`;
-    this.reloadCatalogSoon();
+    try {
+      await this.hass.callWS({ type: "pimoroni_unicorn/fw_install", entry_id: this.entryId, widget_id: id });
+      this.status = `Installing ${id}…`;
+      this.reloadCatalogSoon();
+    } catch (e) { this.status = `Install failed: ${(e as { message?: string })?.message ?? e}`; }
   }
 
   private async removeWidgetUnit(id: string) {
-    await this.hass.callWS({ type: "pimoroni_unicorn/fw_remove", entry_id: this.entryId, widget_id: id });
-    this.status = `Removing ${id}…`;
-    this.reloadCatalogSoon();
+    try {
+      await this.hass.callWS({ type: "pimoroni_unicorn/fw_remove", entry_id: this.entryId, widget_id: id });
+      this.status = `Removing ${id}…`;
+      this.reloadCatalogSoon();
+    } catch (e) { this.status = `Remove failed: ${(e as { message?: string })?.message ?? e}`; }
   }
 
   private _thumb(src?: string) {
@@ -1500,14 +1517,14 @@ export class PimoroniUnicornPanel extends LitElement {
   private async buildScreenPreview() {
     clearInterval(this.screenTimer);
     const pngs: Record<string, string> = {};
-    for (const name of this.screenLayouts) {
+    await Promise.all(this.screenLayouts.map(async (name) => {
       const lay = this.stored[name];
-      if (!lay) continue;
+      if (!lay) return;
       try {
         const r = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: lay });
         pngs[name] = r.png;
       } catch { /* skip unrenderable */ }
-    }
+    }));
     this.screenPngs = pngs;
     this.screenIdx = 0;
     this.screenOpacity = 1;
