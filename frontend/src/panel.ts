@@ -196,7 +196,7 @@ export class PimoroniUnicornPanel extends LitElement {
     input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--pu-primary); }
     button {
       font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
-      padding: 9px 20px; border-radius: 20px; border: none;
+      padding: 11px 20px; border-radius: 20px; border: none;
       background: var(--pu-primary); color: var(--pu-on-primary);
       transition: filter .15s, box-shadow .15s; box-shadow: 0 1px 2px rgba(0,0,0,.15);
     }
@@ -205,7 +205,7 @@ export class PimoroniUnicornPanel extends LitElement {
     button[disabled] { opacity: .38; cursor: not-allowed; box-shadow: none; }
     button.secondary { background: color-mix(in srgb, var(--pu-primary) 14%, var(--pu-surface)); color: var(--pu-primary); box-shadow: none; }
     button.danger { background: var(--error-color, #ba1a1a); color: #fff; }
-    button.zbtn { padding: 6px 11px; min-width: 30px; line-height: 1; border-radius: 10px; }
+    button.zbtn { padding: 6px; min-width: 40px; min-height: 40px; line-height: 1; border-radius: 10px; }
     .stagewrap { max-width: 100%; max-height: 62vh; overflow: auto; overscroll-behavior: contain; padding-top: 18px; cursor: grab; }
     .stagewrap.panning { cursor: grabbing; }
     .stage { position: relative; display: inline-block; background: #000; line-height: 0; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); overflow: hidden; }
@@ -227,7 +227,7 @@ export class PimoroniUnicornPanel extends LitElement {
     .wlist li.dragover { outline: 2px solid var(--pu-primary); outline-offset: -2px; }
     .wlist li .drag { cursor: grab; color: var(--secondary-text-color, #79747e); user-select: none; line-height: 1; }
     .wlist li .drag:active { cursor: grabbing; }
-    .wlist li .wlx { border: none; background: none; color: var(--secondary-text-color, #79747e); font-size: 20px; line-height: 1; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; padding: 0; display: grid; place-items: center; flex: none; }
+    .wlist li .wlx { border: none; background: none; color: var(--secondary-text-color, #79747e); font-size: 20px; line-height: 1; width: 40px; height: 40px; border-radius: 8px; cursor: pointer; padding: 0; display: grid; place-items: center; flex: none; }
     .wlist li .wlx:hover { background: color-mix(in srgb, var(--error-color, #ba1a1a) 16%, transparent); color: var(--error-color, #ba1a1a); }
     .panelrow { display: flex; gap: 10px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
     .panelrow > label:first-child { min-width: 64px; }
@@ -250,11 +250,12 @@ export class PimoroniUnicornPanel extends LitElement {
     .chev.open { transform: rotate(90deg); }
     .stitle { font-size: 22px; line-height: 28px; font-weight: 400; letter-spacing: 0; }
     .mtable { max-width: 780px; margin-bottom: 8px; }
-    .mhead, .mrow { display: grid; grid-template-columns: 108px minmax(120px,1fr) minmax(80px,0.9fr) 120px 110px; gap: 12px; align-items: center; }
+    .mhead, .mrow { display: grid; grid-template-columns: 108px minmax(120px,1fr) minmax(80px,0.9fr) 120px 150px; gap: 12px; align-items: center; }
     .mhead { font-size: 12px; font-weight: 600; color: var(--secondary-text-color, #79747e); padding: 0 14px 6px; }
     .mrow { border: 1px solid var(--pu-outline); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
     .cell-name { font-weight: 500; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .cell-action { display: flex; justify-content: flex-end; }
+    .cell-action { display: flex; justify-content: flex-end; gap: 8px; }
+    .cell-action button { white-space: nowrap; }
     .thumb { width: 100px; height: 64px; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
     .iconprev { width: 128px; height: 128px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
     .iconthumb { width: 64px; height: 64px; flex: none; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
@@ -292,8 +293,8 @@ export class PimoroniUnicornPanel extends LitElement {
     .fprev { height: 40px; image-rendering: pixelated; background: #000; border-radius: 6px; padding: 0 8px; object-fit: contain; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
     .swatches { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
     .swatch { position: relative; display: inline-flex; }
-    .swatch .x { position: absolute; top: -6px; right: -6px; width: 14px; height: 14px; line-height: 12px; padding: 0; border-radius: 50%; border: none; background: var(--pu-outline); color: #fff; font-size: 11px; cursor: pointer; }
-    .swatches .add { width: 22px; height: 22px; padding: 0; border-radius: 6px; border: 1px dashed var(--pu-outline); background: transparent; color: inherit; font-size: 15px; cursor: pointer; }
+    .swatch .x { position: absolute; top: -7px; right: -7px; width: 18px; height: 18px; line-height: 16px; padding: 0; border-radius: 50%; border: none; background: var(--pu-outline); color: #fff; font-size: 12px; cursor: pointer; }
+    .swatches .add { width: 32px; height: 32px; padding: 0; border-radius: 6px; border: 1px dashed var(--pu-outline); background: transparent; color: inherit; font-size: 16px; cursor: pointer; }
   `;
 
   protected firstUpdated(): void { this.loadDevices(); this.loadIcons(); this.loadFonts(); }
@@ -328,15 +329,19 @@ export class PimoroniUnicornPanel extends LitElement {
   }
   private async pushIconToDevice(name: string) {
     if (!this.entryId) return;
-    await this.hass.callWS({ type: "pimoroni_unicorn/icon_push", entry_id: this.entryId, name });
-    this.status = `Installing "${name}" on this device…`;
-    this.reloadIconsSoon();
+    try {
+      await this.hass.callWS({ type: "pimoroni_unicorn/icon_push", entry_id: this.entryId, name });
+      this.status = `Installing "${name}" on this device…`;
+      this.reloadIconsSoon();
+    } catch (e) { this.status = `Install failed: ${(e as { message?: string })?.message ?? e}`; }
   }
   private async removeIconFromDevice(name: string) {
     if (!this.entryId) return;
-    await this.hass.callWS({ type: "pimoroni_unicorn/icon_device_remove", entry_id: this.entryId, name });
-    this.status = `Removed "${name}" from this device.`;
-    this.reloadIconsSoon();
+    try {
+      await this.hass.callWS({ type: "pimoroni_unicorn/icon_device_remove", entry_id: this.entryId, name });
+      this.status = `Removed "${name}" from this device.`;
+      this.reloadIconsSoon();
+    } catch (e) { this.status = `Remove failed: ${(e as { message?: string })?.message ?? e}`; }
   }
 
   // Install targets default to every device; user can narrow the selection.
@@ -403,6 +408,13 @@ export class PimoroniUnicornPanel extends LitElement {
     window.removeEventListener("keydown", this._onKey);
     this._ro?.disconnect();
     this._ro = undefined;
+    Object.values(this._frameTimers).forEach((t) => clearInterval(t));
+    this._frameTimers = {};
+    clearInterval(this.screenTimer);
+    clearTimeout(this.renderTimer);
+    clearTimeout(this.pushTimer);
+    clearTimeout(this.fontTimer);
+    clearTimeout(this.specTimer);
     super.disconnectedCallback();
   }
 
@@ -431,7 +443,7 @@ export class PimoroniUnicornPanel extends LitElement {
       ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
     };
     const delta = d[e.key];
-    if (!delta) return;
+    if (!delta || this.tab !== "layout") return;
     e.preventDefault();
     this._nudge(delta[0], delta[1]);
   };
@@ -475,7 +487,7 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private async selectDevice(entryId: string): Promise<void> {
     const dev = this.devices.find((d) => d.entry_id === entryId);
-    if (!dev || !this.guardDiscard()) return;
+    if (!dev || !this.guardDiscard()) { this.requestUpdate(); return; }
     this.entryId = entryId;
     await this.loadCaps({ entry_id: entryId });
     this.loadIcons();
@@ -485,7 +497,7 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private async selectMock(model: string): Promise<void> {
-    if (!this.guardDiscard()) return;
+    if (!this.guardDiscard()) { this.requestUpdate(); return; }
     this.entryId = "";
     await this.loadCaps({ model });
     this.loadIcons();
@@ -969,7 +981,7 @@ export class PimoroniUnicornPanel extends LitElement {
       <div class="bar">
         <div class="group">
           <label>Page
-            <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; if (this.guardDiscard()) this.loadLayout(v === "__new__" ? this.defaultLayout : this.stored[v]); }}>
+            <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; if (this.guardDiscard()) this.loadLayout(v === "__new__" ? this.defaultLayout : this.stored[v]); else this.requestUpdate(); }}>
               ${Object.keys(this.stored).map((n) => html`<option ?selected=${n === this.layoutName}>${n}</option>`)}
               <option value="__new__">+ new page</option>
             </select>
@@ -1166,25 +1178,31 @@ export class PimoroniUnicornPanel extends LitElement {
   }
   private async installFont(name: string) {
     if (!this.entryId) return;
-    await this.hass.callWS({ type: "pimoroni_unicorn/font_install", entry_id: this.entryId, font: name });
-    this.status = `Installing font ${name}…`;
-    for (const ms of [2000, 5000]) setTimeout(() => this.loadFonts(), ms);  // hot-loads, no reboot
+    try {
+      await this.hass.callWS({ type: "pimoroni_unicorn/font_install", entry_id: this.entryId, font: name });
+      this.status = `Installing font ${name}…`;
+      for (const ms of [2000, 5000]) setTimeout(() => this.loadFonts(), ms);  // hot-loads, no reboot
+    } catch (e) { this.status = `Font install failed: ${(e as { message?: string })?.message ?? e}`; }
   }
   private async installWidget(id: string) {
-    await this.hass.callWS({ type: "pimoroni_unicorn/fw_install", entry_id: this.entryId, widget_id: id });
-    this.status = `Installing ${id}…`;
-    this.reloadCatalogSoon();
+    try {
+      await this.hass.callWS({ type: "pimoroni_unicorn/fw_install", entry_id: this.entryId, widget_id: id });
+      this.status = `Installing ${id}…`;
+      this.reloadCatalogSoon();
+    } catch (e) { this.status = `Install failed: ${(e as { message?: string })?.message ?? e}`; }
   }
 
   private async removeWidgetUnit(id: string) {
-    await this.hass.callWS({ type: "pimoroni_unicorn/fw_remove", entry_id: this.entryId, widget_id: id });
-    this.status = `Removing ${id}…`;
-    this.reloadCatalogSoon();
+    try {
+      await this.hass.callWS({ type: "pimoroni_unicorn/fw_remove", entry_id: this.entryId, widget_id: id });
+      this.status = `Removing ${id}…`;
+      this.reloadCatalogSoon();
+    } catch (e) { this.status = `Remove failed: ${(e as { message?: string })?.message ?? e}`; }
   }
 
   private _thumb(src?: string) {
     return src
-      ? html`<img class="thumb" src="data:image/png;base64,${src}" />`
+      ? html`<img class="thumb" alt="" src="data:image/png;base64,${src}" />`
       : html`<div class="thumb"></div>`;
   }
   private _mhead() {
@@ -1258,7 +1276,7 @@ export class PimoroniUnicornPanel extends LitElement {
       ${this._section("icons", "Icons", this.installedIcons.length, html`
         <p class="hint">Built-in icons ship with the engine. Add LaMetric gallery icons by code, then choose which devices to install them on.</p>
         <div class="panelrow">
-          ${this.iconCode ? html`<img class="iconprev"
+          ${this.iconCode ? html`<img class="iconprev" alt=""
             src="https://developer.lametric.com/content/apps/icon_thumbs/${this.iconCode}" />`
             : html`<div class="iconprev"></div>`}
           <div class="grow">
@@ -1290,7 +1308,7 @@ export class PimoroniUnicornPanel extends LitElement {
               const onDevice = this.deviceIcons.includes(n);
               return html`<div class="panelrow">
               ${this.iconThumbs[n]
-                ? html`<img class="iconthumb" src="data:image/png;base64,${this.iconThumbs[n]}" />`
+                ? html`<img class="iconthumb" alt="" src="data:image/png;base64,${this.iconThumbs[n]}" />`
                 : html`<div class="iconthumb"></div>`}
               <span class="grow">${n}</span>
               ${this.entryId
@@ -1317,7 +1335,7 @@ export class PimoroniUnicornPanel extends LitElement {
           <div class="fmeta"><span class="cell-name">${f.label}</span>
             <span class="hint">${f.kind === "digits" ? "digits" : "A–Z 0–9"} · ${f.w}×${f.h}</span></div>
           ${this.fontPngs[f.name]
-            ? html`<img class="fprev" src="data:image/png;base64,${this.fontPngs[f.name]}" />`
+            ? html`<img class="fprev" alt="" src="data:image/png;base64,${this.fontPngs[f.name]}" />`
             : html`<div class="fprev"></div>`}
           ${f.builtin
             ? html`<span class="badge ok">built-in</span>`
@@ -1500,14 +1518,14 @@ export class PimoroniUnicornPanel extends LitElement {
   private async buildScreenPreview() {
     clearInterval(this.screenTimer);
     const pngs: Record<string, string> = {};
-    for (const name of this.screenLayouts) {
+    await Promise.all(this.screenLayouts.map(async (name) => {
       const lay = this.stored[name];
-      if (!lay) continue;
+      if (!lay) return;
       try {
         const r = await this.hass.callWS({ type: "pimoroni_unicorn/render", model: this.model, layout: lay });
         pngs[name] = r.png;
       } catch { /* skip unrenderable */ }
-    }
+    }));
     this.screenPngs = pngs;
     this.screenIdx = 0;
     this.screenOpacity = 1;
