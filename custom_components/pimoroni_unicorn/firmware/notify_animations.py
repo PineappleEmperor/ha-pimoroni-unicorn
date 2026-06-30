@@ -39,7 +39,8 @@ def init(graphics, width, height):
         "effects":    list(NOTIFY_ANIMATIONS.keys()),
         "sounds":     list(NOTIFY_SOUNDS.keys()),
         "icons":      list(_icons.STATIC_ICONS.keys()),
-        "entrances":  ["none", "slide_left", "slide_right", "center_out", "fade"],
+        "entrances":  ["none", "swipe_left", "swipe_right", "slide_left", "slide_right",
+                       "center_out", "fade"],
     })
 
 
@@ -167,18 +168,34 @@ def _draw_icon_panel(icon, elapsed_ms, panel_w, color, bg_color):
         _icons.draw_icon(icon, 0, icon_y)
 
 
+_BAYER4 = (
+    (0, 8, 2, 10),
+    (12, 4, 14, 6),
+    (3, 11, 1, 9),
+    (15, 7, 13, 5),
+)
+
+
+def _slide_dx(entrance, elapsed_ms):
+    """Horizontal content offset for a moving-slide entrance (0 once settled / not sliding)."""
+    if entrance not in ("slide_left", "slide_right") or elapsed_ms >= _ENTRANCE_DURATION_MS:
+        return 0
+    travel = int(_width * (1.0 - elapsed_ms / _ENTRANCE_DURATION_MS))
+    return -travel if entrance == "slide_left" else travel
+
+
 def _apply_entrance(elapsed_ms, entrance):
-    """Overdraw black to create entrance transition effects."""
+    """Overdraw black for the reveal/fade entrances (slides are offset in the draw, not here)."""
     if not entrance or entrance == "none" or elapsed_ms >= _ENTRANCE_DURATION_MS:
         return
     progress = elapsed_ms / _ENTRANCE_DURATION_MS
     _g.set_pen(_BLACK)
 
-    if entrance == "slide_left":
+    if entrance == "swipe_left":
         reveal = int(_width * progress)
         if reveal < _width:
             _g.rectangle(reveal, 0, _width - reveal, _height)
-    elif entrance == "slide_right":
+    elif entrance == "swipe_right":
         hide = int(_width * (1.0 - progress))
         if hide > 0:
             _g.rectangle(0, 0, hide, _height)
@@ -192,10 +209,11 @@ def _apply_entrance(elapsed_ms, entrance):
         if right < _width:
             _g.rectangle(right, 0, _width - right, _height)
     elif entrance == "fade":
-        threshold = int(progress * 8)
+        threshold = progress * 16
         for py in range(_height):
+            brow = _BAYER4[py & 3]
             for px in range(_width):
-                if (px + py) % 8 >= threshold:
+                if brow[px & 3] >= threshold:
                     _g.pixel(px, py)
 
 
@@ -296,6 +314,7 @@ def _draw_v2_notification(notif, elapsed_ms):
     effect   = notif.get("effect", "")
     outlined = notif.get("outlined", False)
     entrance = notif.get("entrance", "none")
+    dx       = _slide_dx(entrance, elapsed_ms)
 
     anim_fn = NOTIFY_ANIMATIONS.get(effect)
     if effect and anim_fn is None:
@@ -315,21 +334,21 @@ def _draw_v2_notification(notif, elapsed_ms):
         iy = max(0, (_height - isz) // 2)
         pos = notif.get("icon_position", "left")
         if pos == "center":
-            ix, tx, tw = max(0, (_width - isz) // 2), 0, _width  # icon centred, text spans full width
+            ix, tx, tw = max(0, (_width - isz) // 2), 0, _width
         elif pos == "right":
             ix, tx, tw = _width - panel_w, 0, max(0, _width - panel_w)
-        else:  # left
-            margin = 2 if _width >= 32 else 0  # inset on wider panels (galactic/cosmic); stellar has no room
+        else:
+            margin = 2 if _width >= 32 else 0
             ix, tx, tw = margin, margin + panel_w, max(0, _width - margin - panel_w)
         if anim_fn is None and pos != "center":
             _g.set_pen(_g.create_pen(*bg_color))
-            _g.rectangle(ix, 0, panel_w, _height)
-        _icons.draw_icon(icon, ix, iy, elapsed_ms, iscale)
+            _g.rectangle(ix + dx, 0, panel_w, _height)
+        _icons.draw_icon(icon, ix + dx, iy, elapsed_ms, iscale)
     else:
         tx, tw = 0, _width
 
     if text:
-        _draw_notify_text(text, tx, 0, tw, _height, color, elapsed_ms, outlined, _notify_ms_per_px(notif))
+        _draw_notify_text(text, tx + dx, 0, tw, _height, color, elapsed_ms, outlined, _notify_ms_per_px(notif))
 
     _apply_entrance(elapsed_ms, entrance)
 

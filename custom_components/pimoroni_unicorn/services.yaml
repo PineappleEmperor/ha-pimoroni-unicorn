@@ -22,32 +22,32 @@ send_notification:
       selector:
         select:
           options:
-            - left
-            - center
-            - right
+            - {value: left, label: Left}
+            - {value: center, label: Center}
+            - {value: right, label: Right}
     effect:
       selector:
         select:
           options:
-            - rainbow
-            - fire
-            - matrix
-            - scanner
-            - comet
-            - snow
-            - confetti
-            - flash
-            - pulse
-            - bounce
-            - supercomputer
-            - retroprompt
+            - {value: rainbow, label: Rainbow}
+            - {value: fire, label: Fire}
+            - {value: matrix, label: Matrix}
+            - {value: scanner, label: Scanner}
+            - {value: comet, label: Comet}
+            - {value: snow, label: Snow}
+            - {value: confetti, label: Confetti}
+            - {value: flash, label: Flash}
+            - {value: pulse, label: Pulse}
+            - {value: bounce, label: Bounce}
+            - {value: supercomputer, label: Supercomputer}
+            - {value: retroprompt, label: Retro prompt}
     sound:
       selector:
         select:
           options:
-            - beep
-            - chime
-            - alert
+            - {value: beep, label: Beep}
+            - {value: chime, label: Chime}
+            - {value: alert, label: Alert}
     duration:
       selector:
         number:
@@ -71,11 +71,13 @@ send_notification:
           selector:
             select:
               options:
-                - none
-                - slide_left
-                - slide_right
-                - center_out
-                - fade
+                - {value: "none", label: "None"}
+                - {value: swipe_left, label: Swipe from left}
+                - {value: swipe_right, label: Swipe from right}
+                - {value: slide_left, label: Slide in from left}
+                - {value: slide_right, label: Slide in from right}
+                - {value: center_out, label: Center out}
+                - {value: fade, label: Fade in}
         scroll_speed:
           selector:
             number:
