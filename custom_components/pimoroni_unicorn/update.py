@@ -1,7 +1,7 @@
 """Update platform: device engine version vs the bundled firmware."""
+import asyncio
 import hashlib
 from pathlib import Path
-import time
 
 from homeassistant.components.update import UpdateEntity, UpdateEntityFeature
 from homeassistant.core import HomeAssistant, callback
@@ -17,6 +17,7 @@ from .const import (
     ENGINE_FILE_KEYS,
     ENGINE_REFLASH_BELOW,
     ENGINE_VERSION,
+    OTA_CONFIRM_TIMEOUT,
     OTA_SOURCE_FILES,
     PUConfigEntry,
 )
@@ -72,7 +73,7 @@ class PimoroniUnicornUpdate(UpdateEntity):
         self._device_id = device_id
         self._reflash = False
         self._installing = False
-        self._install_started = 0.0
+        self._install_done = asyncio.Event()
         self._attr_unique_id = f"{device_id}_firmware"
         self._attr_device_info = device_info(device_id, model)
 
@@ -97,11 +98,10 @@ class PimoroniUnicornUpdate(UpdateEntity):
             if self._reflash else None)
 
         # During an OTA the device reboots (briefly offline). Keep the entity available and show
-        # in-progress instead of flicking to "unavailable", until the new version lands (or timeout).
-        if self._installing and (
-                (installed == ENGINE_VERSION and not drift)
-                or time.monotonic() - self._install_started > 180):
+        # in-progress until the device re-reports the new version; async_install awaits this.
+        if self._installing and installed == ENGINE_VERSION and not drift:
             self._installing = False
+            self._install_done.set()
         if self._installing:
             self._attr_installed_version = ENGINE_VERSION
             self._attr_latest_version = ENGINE_VERSION
@@ -130,17 +130,28 @@ class PimoroniUnicornUpdate(UpdateEntity):
         self.async_write_ha_state()
 
     async def async_install(self, version: str | None, backup: bool, **kwargs) -> None:
-        """OTA-push the full engine file set, unless the change requires a USB reflash."""
+        """OTA-push the engine, then block until the device re-reports the new version."""
         if self._reflash:
             raise HomeAssistantError(
                 "This engine update changes the on-device file layout and cannot be applied "
                 "over the air. Reflash the firmware/ tree via USB (Thonny) once; OTA works after.")
-        if self._installing and time.monotonic() - self._install_started < 180:
+        if self._installing:
             raise HomeAssistantError("An update is already in progress for this device.")
         self._installing = True
-        self._install_started = time.monotonic()
+        self._install_done.clear()
         self._attr_in_progress = True
         self.async_write_ha_state()
-        await self.hass.services.async_call(
-            DOMAIN, "push_firmware",
-            {"files": ENGINE_FILE_KEYS, "entry_id": self._entry.entry_id}, blocking=True)
+        try:
+            await self.hass.services.async_call(
+                DOMAIN, "push_firmware",
+                {"files": ENGINE_FILE_KEYS, "entry_id": self._entry.entry_id}, blocking=True)
+            async with asyncio.timeout(OTA_CONFIRM_TIMEOUT):
+                await self._install_done.wait()
+        except TimeoutError as err:
+            raise HomeAssistantError(
+                "The device did not confirm the engine update in time. It may still be applying; "
+                "check the device and retry if the reported version hasn't advanced.") from err
+        finally:
+            self._installing = False
+            self._attr_in_progress = False
+            self.async_write_ha_state()
