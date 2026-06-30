@@ -101,6 +101,10 @@ ENGINE_VERSION = "1.5.0"
 # to OTA across this boundary and tells the user to reflash.
 ENGINE_REFLASH_BELOW = "1.1.0"
 
+# Seconds the update entity waits for the device to fetch, flash and re-report the new
+# engine_version after an OTA push, before giving up. Covers download + reboot.
+OTA_CONFIRM_TIMEOUT = 180
+
 NOTIFY_ANIMATIONS = [
     "rainbow",
     "fire",
