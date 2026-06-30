@@ -10,11 +10,13 @@ _FORMATS = ["weekday", "day", "month", "month_full", "monthday", "year"]
 # Widest sample per format, for the editor hit-box (font is fixed-width per glyph).
 _SAMPLE = {"weekday": "WWW", "day": "30", "month": "WWW", "month_full": "SEPTEMBER",
            "monthday": "WWW 30", "year": "2026"}
+_WD_RAINBOW = [(255, 0, 0), (255, 120, 0), (255, 220, 0), (0, 220, 0),
+               (0, 180, 255), (60, 60, 255), (200, 0, 220)]
 
 WIDGET = {
     "id": "date", "label": "Date text", "w": 11, "h": 5, "variants": [],
-    "default_cfg": {"format": "weekday", "color": [255, 255, 255],
-                    "font": "font3x5", "color_mode": "solid", "speed": 3, "spacing": 0,
+    "default_cfg": {"format": "weekday", "color": [255, 255, 255], "colors": _WD_RAINBOW,
+                    "font": "font3x5", "color_mode": "solid", "spacing": 0,
                     "brightness": 100},
     "cfg_fields": [
         {"key": "format", "type": "select", "options": _FORMATS, "label": "Format"},
@@ -23,7 +25,6 @@ WIDGET = {
         {"key": "color_mode", "type": "select",
          "options": ["solid", "rainbow", "per_char"], "label": "Colour mode"},
         {"key": "colors", "type": "rgblist", "label": "Per-char colours"},
-        {"key": "speed", "type": "number", "min": 0, "max": 10, "step": 1, "label": "Rainbow speed"},
         {"key": "spacing", "type": "number", "min": -2, "max": 6, "step": 1, "label": "Letter spacing"},
         {"key": "brightness", "type": "range", "min": 10, "max": 100, "step": 5, "label": "Brightness"},
     ],
@@ -59,4 +60,8 @@ def render(g, x, y, w, h, cfg, state):
     """Draw the formatted date/time text from the current clock, cropping top padding."""
     font = cfg.get("font", "font3x5")
     s = _format(cfg, state["time"])
+    if cfg.get("color_mode") == "rainbow":
+        cfg = dict(cfg)
+        cfg["color"] = _WD_RAINBOW[state["time"][6] % 7]
+        cfg["color_mode"] = "solid"
     drawing.draw_text_fx(s, x, y - drawing.text_top_pad(s, font), cfg, state.get("elapsed_ms", 0))
