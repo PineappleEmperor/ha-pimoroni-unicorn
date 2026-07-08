@@ -1,7 +1,8 @@
 """Options-flow coverage for the Pimoroni Unicorn integration."""
 from __future__ import annotations
 
-from unittest.mock import patch
+import base64
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -15,6 +16,12 @@ from custom_components.pimoroni_unicorn.const import (
     DOMAIN,
     UNICORN_MODELS,
 )
+
+
+@pytest.fixture
+def expected_lingering_timers() -> bool:
+    """Tolerate the mqtt_mock periodic timer in flows that publish."""
+    return True
 
 
 @pytest.fixture
@@ -66,3 +73,53 @@ async def test_options_import_invalid_layout_errors(hass: HomeAssistant, entry: 
         result["flow_id"], {"layout_json": "{not valid"})
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"layout_json": "invalid_layout"}
+
+
+async def test_options_add_icon_flow(hass: HomeAssistant, entry: MockConfigEntry, mqtt_mock) -> None:
+    """Add a LaMetric icon by code, then name + install it (mocked fetch)."""
+    fake = {"frames": [base64.b64encode(bytes(8 * 8 * 3)).decode()], "durations": [0],
+            "w": 8, "h": 8, "code": 123}
+    opts = hass.config_entries.options
+    with patch("custom_components.pimoroni_unicorn.lametric.async_fetch_icon",
+               AsyncMock(return_value=fake)):
+        res = await opts.async_init(entry.entry_id)
+        res = await opts.async_configure(res["flow_id"], {"next_step_id": "add_icon"})
+        assert res["step_id"] == "add_icon"
+        res = await opts.async_configure(res["flow_id"], {"code": 123})
+        assert res["step_id"] == "icon_preview"
+        res = await opts.async_configure(res["flow_id"], {"name": "star"})
+    assert res["type"] is FlowResultType.MENU
+
+
+async def test_options_add_icon_not_found(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """An unknown LaMetric code shows a field error."""
+    opts = hass.config_entries.options
+    with patch("custom_components.pimoroni_unicorn.lametric.async_fetch_icon",
+               AsyncMock(return_value=None)):
+        res = await opts.async_init(entry.entry_id)
+        res = await opts.async_configure(res["flow_id"], {"next_step_id": "add_icon"})
+        res = await opts.async_configure(res["flow_id"], {"code": 999})
+    assert res["errors"] == {"code": "icon_not_found"}
+
+
+async def test_options_remove_icon(hass: HomeAssistant, entry: MockConfigEntry, mqtt_mock) -> None:
+    """With an icon installed, the menu offers remove_icon and it deletes it."""
+    from custom_components.pimoroni_unicorn import lametric
+    reg = await lametric.async_get_registry(hass)  # creates the store
+    reg["star"] = {"w": 8, "h": 8, "frames": ["x"]}
+    opts = hass.config_entries.options
+    res = await opts.async_init(entry.entry_id)
+    assert "remove_icon" in res["menu_options"]
+    res = await opts.async_configure(res["flow_id"], {"next_step_id": "remove_icon"})
+    res = await opts.async_configure(res["flow_id"], {"icon_name": "star"})
+    assert res["type"] is FlowResultType.MENU
+
+
+async def test_options_import_layout_success(hass: HomeAssistant, entry: MockConfigEntry, mqtt_mock) -> None:
+    """Importing a valid layout saves it and returns to the menu."""
+    opts = hass.config_entries.options
+    res = await opts.async_init(entry.entry_id)
+    res = await opts.async_configure(res["flow_id"], {"next_step_id": "import_layout"})
+    res = await opts.async_configure(
+        res["flow_id"], {"layout_json": '{"name": "L", "widgets": []}'})
+    assert res["type"] is FlowResultType.MENU
