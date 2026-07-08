@@ -21,7 +21,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install ruff pyright homeassistant
-          pip install pytest pytest-homeassistant-custom-component home-assistant-frontend
+          pip install pytest pytest-cov pytest-homeassistant-custom-component home-assistant-frontend
 
       - name: Run ruff
         run: ruff check custom_components/
@@ -29,8 +29,14 @@ jobs:
       - name: Run pyright
         run: pyright custom_components/
 
-      - name: Integration tests (config flow, …)
-        run: python -m pytest tests/integration -q
+      # Coverage gate ratchets: the fail-under floor tracks measured coverage and only
+      # ever goes up. Excludes tests/firmware (device stubs) + gate-script tests.
+      - name: Integration tests + coverage gate
+        run: >-
+          python -m pytest
+          tests/integration tests/test_render_service.py tests/test_first_frame_png.py
+          tests/test_lametric.py tests/test_marketplace.py
+          --cov=custom_components/pimoroni_unicorn --cov-fail-under=58 -q
 
       - name: Manifest gate unit tests
         run: python -m pytest tests/test_manifest_gate.py -q
