@@ -9,7 +9,7 @@ interface WidgetCap { id: string; label: string; w: number; h: number; variants:
 interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; type?: string; name?: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
 interface Layout { name?: string; model?: string; grid?: number; widgets: WidgetEntry[]; overlays?: string[]; }
-interface Device { entry_id: string; device_id: string; model: string; name: string; active_layout?: string; }
+interface Device { entry_id: string; device_id: string; registry_id?: string; model: string; name: string; active_layout?: string; }
 interface CatalogWidget { id: string; label: string; kind: string; requires: string[]; device_file: string; hash: string; status: string; thumb?: string; }
 interface ContentUnit { id: string; label: string; kind: string; compat: string[]; requires: string[]; screens: number; compatible: boolean; thumb?: string; }
 interface FontSpec { name: string; label: string; kind: "alpha" | "digits"; w: number; h: number; builtin?: boolean; sample: string; installed?: boolean; device_file?: string; }
@@ -213,6 +213,9 @@ export class PimoroniUnicornPanel extends LitElement {
       background: var(--pu-surface); box-shadow: 0 1px 3px rgba(0,0,0,.12);
     }
     .brand { font-size: 16px; font-weight: 600; letter-spacing: .2px; margin-right: 4px; }
+    .devlink { font-size: 14px; color: var(--pu-primary, var(--primary-color)); text-decoration: none;
+               padding: 6px 8px; border-radius: 8px; min-height: 40px; display: inline-flex; align-items: center; }
+    .devlink:hover { background: rgba(127,127,127,.12); }
     .grow { flex: 1; }
     .chip {
       font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 14px;
@@ -1064,6 +1067,11 @@ export class PimoroniUnicornPanel extends LitElement {
     else if (tab === "screens") this.buildScreenPreview();
   }
 
+  private _devicePageHref(): string {
+    const rid = this.devices.find((d) => d.entry_id === this.entryId)?.registry_id;
+    return rid ? `/config/devices/device/${rid}` : "";
+  }
+
   private _appBar() {
     const dev = this.devices.find((d) => d.entry_id === this.entryId);
     return html`
@@ -1075,6 +1083,9 @@ export class PimoroniUnicornPanel extends LitElement {
             ${this.devices.map((d) => html`<option value=${d.entry_id} ?selected=${d.entry_id === this.entryId}>${d.name}</option>`)}
           </select>
         </label>
+        ${this._devicePageHref()
+          ? html`<a class="devlink" href=${this._devicePageHref()} title="Open this device's Home Assistant page (settings, diagnostics, entities)">⚙ Device page</a>`
+          : ""}
         ${!this.entryId
           ? html`<label>Model
               <select @change=${(e: Event) => this.selectMock((e.target as HTMLSelectElement).value)}>

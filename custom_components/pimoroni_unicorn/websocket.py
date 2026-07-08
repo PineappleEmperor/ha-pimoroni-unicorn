@@ -9,6 +9,7 @@ import yaml
 
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 
 from . import firmware_install, lametric, layout, marketplace, render_service
 from .const import (
@@ -137,12 +138,15 @@ def _safe_render(fn, *args):
 @callback
 def ws_devices(hass, connection, msg):
     """List configured Pimoroni Unicorn devices."""
+    dev_reg = dr.async_get(hass)
     devices = []
     for entry in hass.config_entries.async_entries(DOMAIN):
         opts = {**entry.data, **entry.options}
+        regs = dr.async_entries_for_config_entry(dev_reg, entry.entry_id)
         devices.append({
             "entry_id":  entry.entry_id,
             "device_id": opts.get(CONF_DEVICE_ID, ""),
+            "registry_id": regs[0].id if regs else "",
             "model":     _model_key(entry),
             "name":      entry.title,
             "active_layout": opts.get(layout.CONF_ACTIVE_LAYOUT),
