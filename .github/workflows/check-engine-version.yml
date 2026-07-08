@@ -1,0 +1,37 @@
+name: Check Engine Version
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches-ignore:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  check_engine:
+    name: ENGINE_VERSION bumped when engine files change
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve base ref
+        id: base
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          REF="${BASE_REF:-main}"
+          git fetch origin "$REF" --depth=1 -q || true
+          echo "ref=origin/$REF" >> "$GITHUB_OUTPUT"
+
+      # Pure decision logic lives in scripts/check_engine_bump.py, unit-tested in
+      # tests/test_engine_bump_gate.py, so this gate can't silently regress.
+      - name: Engine version gate
+        env:
+          BASE: ${{ steps.base.outputs.ref }}
+        run: python3 scripts/check_engine_bump.py --base-ref "$BASE"
