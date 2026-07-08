@@ -120,6 +120,11 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private iconCode = "";
   @state() private iconName = "";
   @state() private iconTargets: string[] = [];
+  @state() private iconUrl = "";
+  @state() private iconImgName = "";
+  @state() private iconFileData = "";     // base64 of a chosen image/GIF (no data: prefix)
+  @state() private iconFilePreview = "";  // data URL for the local preview thumbnail
+  @state() private iconImportNote = "";
   @state() private fonts: FontSpec[] = [];
   @state() private fontText = "";
   @state() private fontPngs: Record<string, string> = {};
@@ -413,6 +418,50 @@ export class PimoroniUnicornPanel extends LitElement {
     await this.hass.callWS({ type: "pimoroni_unicorn/icon_remove", name });
     this.status = `Removed icon "${name}".`;
     this.reloadIconsSoon();
+  }
+
+  // Read a chosen image/GIF into base64; suggest a name from the filename.
+  private onIconFile(e: Event) {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result ?? "");
+      this.iconFilePreview = url;
+      this.iconFileData = url.includes(",") ? url.slice(url.indexOf(",") + 1) : "";
+      this.iconUrl = "";  // a chosen file takes precedence over a URL
+      if (!this.iconImgName.trim()) {
+        this.iconImgName = file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 32);
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  private async importIconImage() {
+    const name = this.iconImgName.trim();
+    const hasFile = !!this.iconFileData;
+    const url = this.iconUrl.trim();
+    if (!name || (!hasFile && !url)) return;
+    const entry_ids = this.iconTargetIds();
+    try {
+      const r = (hasFile
+        ? await this.hass.callWS({ type: "pimoroni_unicorn/icon_upload", name, data: this.iconFileData, entry_ids })
+        : await this.hass.callWS({ type: "pimoroni_unicorn/icon_url", name, url, entry_ids })
+      ) as { ok?: boolean; sent?: string[]; w?: number; h?: number; n_kept?: number; n_total?: number };
+      const sent = r.sent ?? [];
+      const size = r.w && r.h ? ` ${r.w}×${r.h}` : "";
+      const trimmed = r.n_total && r.n_kept && r.n_kept < r.n_total
+        ? ` (kept ${r.n_kept} of ${r.n_total} frames to fit the device)`
+        : (r.n_kept && r.n_kept > 1 ? ` (${r.n_kept} frames)` : "");
+      this.iconImportNote = `Imported "${name}"${size}${trimmed}.`;
+      this.status = sent.length
+        ? `Imported "${name}"${size} → ${sent.join(", ")}.`
+        : `Saved "${name}"${size} (no devices to push to).`;
+      this.iconImgName = ""; this.iconUrl = ""; this.iconFileData = ""; this.iconFilePreview = "";
+      this.reloadIconsSoon();
+    } catch (e) {
+      this.status = `Import failed: ${(e as { message?: string })?.message ?? e}`;
+    }
   }
 
   private async loadFonts() {
@@ -1410,6 +1459,32 @@ export class PimoroniUnicornPanel extends LitElement {
               <button ?disabled=${!this.iconCode || !this.iconName.trim() || (this.devices.length > 0 && this.iconTargetIds().length === 0)}
                 @click=${this.installIcon}>Add</button>
             </div>
+          </div>
+        </div>
+        <p class="hint">Or import your own image or animation — PNG, GIF or APNG. It’s auto-fit to your display (aspect kept, never upscaled) and animations play frame-by-frame, up to a full-screen animation. Large or long clips are trimmed to fit device memory. Uses the “Install on” selection above.</p>
+        <div class="panelrow">
+          ${this.iconFilePreview
+            ? html`<img class="iconprev" alt="" src=${this.iconFilePreview} />`
+            : html`<div class="iconprev empty"></div>`}
+          <div class="grow">
+            <div class="panelrow">
+              <label>Image file</label>
+              <input type="file" accept="image/png,image/gif,image/apng,image/webp"
+                @change=${this.onIconFile} />
+            </div>
+            <div class="panelrow">
+              <label>or URL</label>
+              <input style="width:220px" placeholder="https://…/animation.gif" .value=${this.iconUrl}
+                @input=${(e: Event) => { this.iconUrl = (e.target as HTMLInputElement).value; this.iconFileData = ""; this.iconFilePreview = ""; }} />
+            </div>
+            <div class="panelrow">
+              <label>Name</label>
+              <input style="width:120px" .value=${this.iconImgName}
+                @input=${(e: Event) => { this.iconImgName = (e.target as HTMLInputElement).value; }} />
+              <button ?disabled=${!this.iconImgName.trim() || (!this.iconFileData && !this.iconUrl.trim()) || (this.devices.length > 0 && this.iconTargetIds().length === 0)}
+                @click=${this.importIconImage}>Import</button>
+            </div>
+            ${this.iconImportNote ? html`<p class="hint">${this.iconImportNote}</p>` : ""}
           </div>
         </div>
         ${this.entryId

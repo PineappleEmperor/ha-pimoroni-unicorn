@@ -1,4 +1,4 @@
-"""8×8 pixel icons for Pimoroni Unicorn notification display."""
+"""Pixel icons for Pimoroni Unicorn display (built-ins 8×8; imported icons up to full-screen)."""
 
 import json
 
@@ -48,6 +48,8 @@ def install(name, data):
         "code":      data.get("code"),
         "frames":    data["frames"],
         "durations": data.get("durations", []),
+        "w":         int(data.get("w", ICON_SIZE)),
+        "h":         int(data.get("h", ICON_SIZE)),
     }
     with open(_ICON_DIR + "/" + name + ".json", "w") as f:
         json.dump(payload, f)
@@ -96,6 +98,8 @@ def _load_user_icon(name):
         icon = (
             [ubinascii.a2b_base64(fr) for fr in data["frames"]],
             [int(d) for d in data.get("durations", [])],
+            int(data.get("w", ICON_SIZE)),
+            int(data.get("h", ICON_SIZE)),
         )
     except Exception:
         return None
@@ -106,20 +110,28 @@ def _load_user_icon(name):
 
 
 def _resolve(icon):
-    """Return (frames, durations) for a name, code, or raw [r,g,b] list."""
+    """Return (frames, durations, w, h) for a name, code, or raw [r,g,b] list."""
     if not isinstance(icon, str):
-        return [bytes([v for rgb in icon for v in rgb])], [0]
+        return [bytes([v for rgb in icon for v in rgb])], [0], ICON_SIZE, ICON_SIZE
     data = STATIC_ICONS.get(icon)
     if data is not None:
         if isinstance(data, bytes):
-            return [data], [0]
-        return data
+            return [data], [0], ICON_SIZE, ICON_SIZE
+        return data[0], data[1], ICON_SIZE, ICON_SIZE
     user = _load_user_icon(icon)
     if user is None:
         alias = _code_alias.get(icon)
         if alias:
             user = _load_user_icon(alias)
     return user
+
+
+def icon_size(name):
+    """(w, h) of a named icon; default 8×8 when unknown or built-in."""
+    resolved = _resolve(name)
+    if resolved is None:
+        return (ICON_SIZE, ICON_SIZE)
+    return (resolved[2], resolved[3])
 
 
 def _frame_at(frames, durations, elapsed_ms):
@@ -140,21 +152,25 @@ def _frame_at(frames, durations, elapsed_ms):
 
 
 def draw_icon(icon, x, y, elapsed_ms=0, scale=1):
-    """Draw an 8×8 icon at (x, y), optionally scaled up (each pixel -> scale×scale block)."""
+    """Draw an icon at (x, y) at its native w×h, optionally scaled (pixel -> scale×scale block)."""
     resolved = _resolve(icon)
     if resolved is None:
         return False
-    data = _frame_at(resolved[0], resolved[1], elapsed_ms)
+    frames, durations, w, h = resolved
+    data = _frame_at(frames, durations, elapsed_ms)
     scale = int(scale) if scale and scale > 1 else 1
+    n = w * h
+    if len(data) < n * 3:
+        n = len(data) // 3
 
-    for i in range(ICON_SIZE * ICON_SIZE):
+    for i in range(n):
         r = data[i * 3]
         g = data[i * 3 + 1]
         b = data[i * 3 + 2]
         if r or g or b:
             _g.set_pen(_g.create_pen(r, g, b))
-            px = x + (i % ICON_SIZE) * scale
-            py = y + (i // ICON_SIZE) * scale
+            px = x + (i % w) * scale
+            py = y + (i // w) * scale
             if scale == 1:
                 _g.pixel(px, py)
             else:

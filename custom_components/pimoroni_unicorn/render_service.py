@@ -111,20 +111,24 @@ def builtin_icon_names() -> list[str]:
     return sorted(_modules().icons.STATIC_ICONS.keys())
 
 
-def render_icon_thumb(icon: dict, size: int = 8) -> str | None:
-    """First frame of a stored icon (raw size×size RGB) as a base64 PNG."""
-    frames = (icon or {}).get("frames") or []
+def render_icon_thumb(icon: dict) -> str | None:
+    """First frame of a stored icon at its native w×h as a base64 PNG."""
+    icon = icon or {}
+    frames = icon.get("frames") or []
     if not frames:
         return None
+    w = int(icon.get("w", 8))
+    h = int(icon.get("h", 8))
     try:
         raw = base64.b64decode(frames[0])
     except (ValueError, binascii.Error):
         return None
-    if len(raw) < size * size * 3:
+    need = w * h * 3
+    if len(raw) < need:
         return None
     from PIL import Image
 
-    img = Image.frombytes("RGB", (size, size), raw[: size * size * 3])
+    img = Image.frombytes("RGB", (w, h), raw[:need])
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode()
@@ -188,7 +192,8 @@ def _prime_icons(m, installed: dict | None) -> None:
             continue
         # Prime the engine icon module's caches directly — preview-only, no on-device
         # filesystem to install into; the icons module has no public prime API.
-        m.icons._user_cache[name] = (decoded, [int(d) for d in (data.get("durations") or [])])  # noqa: SLF001
+        m.icons._user_cache[name] = (decoded, [int(d) for d in (data.get("durations") or [])],  # noqa: SLF001
+                                     int(data.get("w", 8)), int(data.get("h", 8)))
         if data.get("code") is not None:
             m.icons._code_alias[str(data["code"])] = name  # noqa: SLF001
 
