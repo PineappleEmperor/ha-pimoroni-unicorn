@@ -164,3 +164,14 @@ async def test_render_with_device_entry(hass, mqtt_mock, hass_ws_client) -> None
     r = await _call(c, type="pimoroni_unicorn/render", model="galactic",
                     layout={"widgets": []}, entry_id=entry.entry_id)
     assert r["success"]
+
+
+async def test_fonts_install_state_with_manifest(hass, mqtt_mock, hass_ws_client) -> None:
+    """A device manifest containing a font marks it installed in the fonts list."""
+    entry = await _setup(hass)
+    entry.runtime_data["fw_manifest"] = {
+        "engine_version": "1.7.0", "files": {"monospace_digits.py": "h"}}
+    c = await hass_ws_client(hass)
+    fonts = await _call(c, type="pimoroni_unicorn/fonts", entry_id=entry.entry_id)
+    assert fonts["success"]
+    assert any(f.get("installed") for f in fonts["result"]["fonts"])

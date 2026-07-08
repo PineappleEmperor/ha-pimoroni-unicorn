@@ -166,3 +166,32 @@ async def test_live_state_uses_diag_weather(hass: HomeAssistant, mqtt_mock) -> N
     entry.runtime_data["diag"] = {"weather": "rain", "weather_temp": 12.5}
     state = pu.live_state(hass, entry)
     assert state["weather"] == "rain"
+
+
+async def test_publishers_malformed_extra_and_bad_number(hass: HomeAssistant, mqtt_mock) -> None:
+    """A malformed extra-sensor line is skipped; a non-numeric solar value reads as 0."""
+    from custom_components.pimoroni_unicorn.const import CONF_EXTRA_SENSORS, CONF_SOLAR_ENTITY
+    hass.states.async_set("sensor.solar", "not-a-number")
+    hass.states.async_set("sensor.good", "5")
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="dev6",
+                            data={CONF_DEVICE_ID: "dev6", CONF_MODEL: "Galactic Unicorn"},
+                            options={CONF_SOLAR_ENTITY: "sensor.solar",
+                                     CONF_EXTRA_SENSORS: "oneword\nsensor.good extra"})
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.states.async_set("sun.sun", "above_horizon")  # fire the solar publisher
+    await hass.async_block_till_done()
+
+
+async def test_unload_removes_panel_on_last_entry(hass: HomeAssistant, mqtt_mock) -> None:
+    """Unloading the last panel-enabled entry removes the sidebar panel."""
+    from custom_components.pimoroni_unicorn.const import CONF_SHOW_PANEL
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="dev7",
+                            data={CONF_DEVICE_ID: "dev7", CONF_MODEL: "Galactic Unicorn"},
+                            options={CONF_SHOW_PANEL: True})
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

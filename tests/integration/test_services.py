@@ -159,3 +159,12 @@ async def test_push_firmware_unknown_device_noop(hass, mqtt_mock) -> None:
     await hass.services.async_call(
         DOMAIN, "push_firmware", {"device_id": "ghost"}, blocking=True)
     await hass.async_block_till_done()
+
+
+async def test_push_firmware_missing_source_raises(hass, mqtt_mock) -> None:
+    from homeassistant.exceptions import HomeAssistantError
+    entry = await _setup(hass)
+    with patch(URL, AsyncMock(return_value="http://127.0.0.1:8123")), \
+         pytest.raises(HomeAssistantError):
+        await hass.services.async_call(DOMAIN, "push_firmware", {
+            "entry_id": entry.entry_id, "files": ["no_such_module"]}, blocking=True)
