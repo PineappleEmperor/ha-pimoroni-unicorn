@@ -36,7 +36,14 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
-from . import firmware_install, layout, marketplace, render_service, websocket as ws_api
+from . import (
+    firmware_install,
+    layout,
+    marketplace,
+    problems,
+    render_service,
+    websocket as ws_api,
+)
 from .const import (
     CONF_BATTERY_CHARGING_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -158,12 +165,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     if device_id:
         await hass.async_add_executor_job(_purge_ota_staging, hass, device_id)
 
+    hass.async_create_task(problems.async_sync_issues(hass, entry))
+
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
     """Unload a config entry."""
     await hass.config_entries.async_unload_platforms(entry, ["update", "sensor", "image"])
+    problems.async_clear_issues(hass, entry)
     for unsub in (entry.runtime_data or {}).get("unsub", []):
         unsub()
     for unsub in (entry.runtime_data or {}).get("sensor_unsub", []):
@@ -312,6 +322,7 @@ async def _async_subscribe_page(hass: HomeAssistant, entry: PUConfigEntry) -> No
         lay = data if isinstance(data, dict) and data.get("widgets") else None
         entry.runtime_data["page"] = lay
         hass.async_create_task(_async_rewire_sensor_feed(hass, entry, lay))
+        hass.async_create_task(problems.async_sync_issues(hass, entry))
 
     unsub = await async_subscribe(hass, f"{device_id}/page", _on_page)
     entry.runtime_data["unsub"].append(unsub)

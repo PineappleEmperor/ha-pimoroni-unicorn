@@ -323,6 +323,18 @@
     "reflash_required": {
       "title": "Pimoroni Unicorn needs a USB reflash",
       "description": "The engine on {device} predates the foldered file layout (1.1.0) and can't update over the air. Reflash the firmware/ tree once via USB (Thonny); OTA works afterwards."
+    },
+    "icon_oversize": {
+      "title": "Icon too big for the display",
+      "description": "The icon “{icon}” ({size}) is larger than this device's screen ({screen}), so it will be clipped. Re-import it at the device size or use a smaller icon."
+    },
+    "icon_truncated": {
+      "title": "Animation trimmed to fit",
+      "description": "The icon “{icon}” animation was trimmed to {kept} of {total} frames to fit the device's memory budget. Reduce its size or frame count to keep the whole animation."
+    },
+    "widget_overflow": {
+      "title": "Widget runs off the screen",
+      "description": "The “{widget}” widget on the current page extends past the {screen} display and will be clipped. Move or resize it."
     }
   }
 }

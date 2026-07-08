@@ -149,7 +149,7 @@ async def async_get_registry(hass: HomeAssistant) -> dict[str, Any]:
     return domain_data["_icon_registry"]
 
 
-_STORABLE = ("code", "frames", "durations", "w", "h")
+_STORABLE = ("code", "frames", "durations", "w", "h", "n_total")
 
 
 async def async_install_icon(hass: HomeAssistant, name: str, icon: dict[str, Any],
