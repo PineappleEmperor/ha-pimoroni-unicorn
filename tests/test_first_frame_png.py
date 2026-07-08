@@ -1,35 +1,15 @@
 """Unit test for render_service.first_frame_png (pure, no HA harness)."""
 import base64
-import importlib.util
 import io
-import sys
-import types
-from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="module")
 def rs():
-    """Load render_service with the firmware shims it imports at module top."""
-    sys.path.insert(0, str(ROOT))
-    for name in ("homeassistant", "homeassistant.components"):
-        sys.modules.setdefault(name, types.ModuleType(name))
-    pkg = types.ModuleType("custom_components")
-    pkg.__path__ = [str(ROOT / "custom_components")]
-    sys.modules["custom_components"] = pkg
-    sub = types.ModuleType("custom_components.pimoroni_unicorn")
-    sub.__path__ = [str(ROOT / "custom_components" / "pimoroni_unicorn")]
-    sys.modules["custom_components.pimoroni_unicorn"] = sub
-    spec = importlib.util.spec_from_file_location(
-        "custom_components.pimoroni_unicorn.render_service",
-        ROOT / "custom_components" / "pimoroni_unicorn" / "render_service.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    """The real render_service (Home Assistant is installed in the test env)."""
+    from custom_components.pimoroni_unicorn import render_service
+    return render_service
 
 
 def _icon(w, h):

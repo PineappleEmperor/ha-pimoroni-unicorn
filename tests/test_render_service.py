@@ -1,34 +1,14 @@
 """Exercise the byte-faithful render service across its public surface (no device, no hass)."""
 import base64
-import importlib.util
-import sys
-import types
-from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="module")
 def rs():
-    """Load render_service with the firmware shims it imports at module top."""
-    sys.path.insert(0, str(ROOT))
-    for name in ("homeassistant", "homeassistant.components"):
-        sys.modules.setdefault(name, types.ModuleType(name))
-    pkg = types.ModuleType("custom_components")
-    pkg.__path__ = [str(ROOT / "custom_components")]
-    sys.modules["custom_components"] = pkg
-    sub = types.ModuleType("custom_components.pimoroni_unicorn")
-    sub.__path__ = [str(ROOT / "custom_components" / "pimoroni_unicorn")]
-    sys.modules["custom_components.pimoroni_unicorn"] = sub
-    spec = importlib.util.spec_from_file_location(
-        "custom_components.pimoroni_unicorn.render_service",
-        ROOT / "custom_components" / "pimoroni_unicorn" / "render_service.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    """The real render_service (Home Assistant is installed in the test env)."""
+    from custom_components.pimoroni_unicorn import render_service
+    return render_service
 
 
 def _png_size(b64: str):
@@ -127,3 +107,32 @@ def test_render_icon_thumb_animated_gif(rs):
     img = Image.open(io.BytesIO(base64.b64decode(out)))
     assert img.format == "GIF"
     assert getattr(img, "n_frames", 1) == 3
+
+
+def test_render_unit_thumb_overlay(rs):
+    out = rs.render_unit_thumb("cosmic", "weather")
+    assert out is None or isinstance(out, str)
+
+
+def test_render_widget_frames(rs):
+    spec = {"id": "t", "w": 8, "h": 5, "draw": [{"op": "rect", "x": 0, "y": 0, "w": 2, "h": 2}]}
+    frames = rs.render_widget_frames("galactic", spec, n=2, step_ms=100)
+    assert len(frames) == 2
+
+
+def test_layout_capabilities_custom_dir(rs, tmp_path):
+    (tmp_path / "widget_custom.json").write_text('{"id": "mycustom", "label": "C", "draw": []}')
+    caps = rs.layout_capabilities(str(tmp_path))
+    assert any(w["id"] == "mycustom" for w in caps["widgets"])
+
+
+def test_render_layout_png_with_installed_icons(rs):
+    good = {"frames": [base64.b64encode(bytes(8 * 8 * 3)).decode()], "w": 8, "h": 8}
+    bad = {"frames": ["@@@@"], "w": 8, "h": 8}
+    png = rs.render_layout_png("cosmic", rs.default_layout("cosmic"),
+                               installed_icons={"g": good, "b": bad})
+    assert png
+
+
+def test_render_icon_thumb_bad_frame(rs):
+    assert rs.render_icon_thumb({"frames": ["@@@@"], "w": 8, "h": 8}) is None

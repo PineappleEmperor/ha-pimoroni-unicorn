@@ -1,35 +1,15 @@
 """Pure-function tests for the icon decode/fit/SSRF logic (no hass)."""
 import base64
-import importlib.util
 import io
-import sys
-import types
-from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="module")
 def lam():
-    """Load lametric via the real (installed) Home Assistant — no clobbering shims."""
-    sys.path.insert(0, str(ROOT))
-    for name in ("homeassistant", "homeassistant.components"):
-        sys.modules.setdefault(name, types.ModuleType(name))
-    pkg = types.ModuleType("custom_components")
-    pkg.__path__ = [str(ROOT / "custom_components")]
-    sys.modules.setdefault("custom_components", pkg)
-    sub = types.ModuleType("custom_components.pimoroni_unicorn")
-    sub.__path__ = [str(ROOT / "custom_components" / "pimoroni_unicorn")]
-    sys.modules.setdefault("custom_components.pimoroni_unicorn", sub)
-    spec = importlib.util.spec_from_file_location(
-        "custom_components.pimoroni_unicorn.lametric",
-        ROOT / "custom_components" / "pimoroni_unicorn" / "lametric.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    """The real lametric module (Home Assistant is installed in the test env)."""
+    from custom_components.pimoroni_unicorn import lametric
+    return lametric
 
 
 def _png(w, h):

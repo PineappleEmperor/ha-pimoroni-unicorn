@@ -115,3 +115,20 @@ async def test_notify_service(hass, mqtt_mock) -> None:
         {"device_id": device_id, "message": "hi", "effect": "rainbow", "sound": "beep"},
         blocking=True)
     await hass.async_block_till_done()
+
+
+async def test_notify_all_fields_and_dismiss(hass, mqtt_mock) -> None:
+    """send_notification with the full v2 field set, and dismiss with all=True."""
+    import homeassistant.helpers.device_registry as dr
+    entry = await _setup(hass)
+    did = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)[0].id
+    await hass.services.async_call(DOMAIN, "send_notification", {
+        "device_id": did, "message": "hi", "icon": [255, 0, 0], "icon_scale": 2,
+        "icon_position": "left", "effect": "rainbow", "effect_speed": 5, "sound": "beep",
+        "color": [0, 255, 0], "bg_color": [0, 0, 0], "duration": 5.0, "repeat": 2,
+        "hold": True, "stack": False, "scroll_speed": 3, "entrance": "fade",
+        "outlined": True, "wakeup": True,
+    }, blocking=True)
+    await hass.services.async_call(
+        DOMAIN, "dismiss_notification", {"device_id": did, "all": True}, blocking=True)
+    await hass.async_block_till_done()
