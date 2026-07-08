@@ -35,11 +35,11 @@ rules:
     comment: No authentication to the device beyond MQTT broker creds (HA-managed).
   parallel-updates: done
   test-coverage:
-    status: todo
+    status: done
     comment: >-
-      Suite exists (config/options flows, setup+unload, update, repair problems, firmware
-      engine imports + OTA helpers). Gap: the websocket API and render_service are still
-      largely uncovered.
+      Suite covers config/options flows, setup+unload, MQTT message handlers, the websocket
+      API, render_service, lametric (incl. SSRF), marketplace, update, and repair problems.
+      A ratcheting pytest-cov gate (--cov-fail-under, ~59%) in python_validate.yml enforces it.
   integration-owner: done
   docs-installation-parameters: done
   docs-configuration-parameters: done
