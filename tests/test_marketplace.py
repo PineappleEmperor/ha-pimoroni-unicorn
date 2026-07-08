@@ -98,3 +98,21 @@ def test_device_diff_missing_and_current(mk):
     # Device has none of the units -> everything is missing/outdated.
     diff = mk.device_diff({"engine_version": "1.7.0", "files": {}})
     assert any(d["status"] in ("missing", "outdated", "not_installed") for d in diff)
+
+
+def test_validate_spec_rejects_non_dict_op(mk):
+    assert isinstance(mk.validate_spec({"id": "x", "draw": [123]}), str)
+
+
+def test_custom_widgets_skips_malformed(mk, tmp_path):
+    wdir = mk.widgets_dir(str(tmp_path))
+    wdir.mkdir(parents=True, exist_ok=True)
+    (wdir / "widget_bad.json").write_text("{not json")
+    (wdir / "widget_ok.json").write_text('{"id": "ok", "label": "OK", "draw": []}')
+    ids = {w["id"] for w in mk.custom_widgets(wdir)}
+    assert "ok" in ids and "bad" not in ids
+
+
+def test_resolve_install_with_font_deps(mk):
+    files = mk.resolve_install("clock", device_files={})
+    assert isinstance(files, list) and files

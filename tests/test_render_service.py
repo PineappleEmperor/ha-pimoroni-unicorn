@@ -136,3 +136,29 @@ def test_render_layout_png_with_installed_icons(rs):
 
 def test_render_icon_thumb_bad_frame(rs):
     assert rs.render_icon_thumb({"frames": ["@@@@"], "w": 8, "h": 8}) is None
+
+
+def test_render_unit_thumb_unknown_returns_none(rs):
+    assert rs.render_unit_thumb("cosmic", "does_not_exist") is None
+
+
+def test_render_widget_png_with_binds(rs):
+    spec = {"id": "t", "w": 20, "h": 8, "draw": [
+        {"op": "value", "bind": "sensor.n", "x": 0, "y": 0},
+        {"op": "dot", "bind": "sensor.d", "x": 0, "y": 0},
+        {"op": "bar", "bind": "sensor.b", "x": 5, "y": 0, "w": 4, "h": 3},
+    ]}
+    assert rs.render_widget_png("galactic", spec)
+
+
+def test_render_layout_png_with_value_widget(rs):
+    lay = {"widgets": [{"type": "value", "x": 0, "y": 0, "cfg": {"entity": "sensor.x"}}]}
+    assert rs.render_layout_png("cosmic", lay)
+
+
+def test_layout_capabilities_skips_bad_and_dupe(rs, tmp_path):
+    (tmp_path / "widget_bad.json").write_text("{not json")
+    (tmp_path / "widget_clock.json").write_text('{"id": "clock", "draw": []}')  # dup of builtin
+    caps = rs.layout_capabilities(str(tmp_path))
+    ids = [w["id"] for w in caps["widgets"]]
+    assert ids.count("clock") == 1  # builtin kept, dupe skipped
