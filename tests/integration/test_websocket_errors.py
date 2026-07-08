@@ -98,3 +98,19 @@ async def test_more_unknown_entry_and_decode_edges(hass, mqtt_mock, hass_ws_clie
     assert await _err(c, type="pimoroni_unicorn/fw_remove", entry_id="x", widget_id="clock") == "not_found"
     assert await _err(c, type="pimoroni_unicorn/icon_decode") == "no_source"
     assert await _err(c, type="pimoroni_unicorn/icon_decode", data="!!bad!!") == "bad_image"
+
+
+async def test_upload_and_decode_size_and_decode_failures(hass, mqtt_mock, hass_ws_client) -> None:
+    import base64 as _b64
+    from unittest.mock import AsyncMock, patch as _patch
+    await _setup(hass)
+    c = await hass_ws_client(hass)
+    big = _b64.b64encode(b"\x00" * (2 * 1024 * 1024 + 8)).decode()
+    assert await _err(c, type="pimoroni_unicorn/icon_upload", name="x", data=big) == "too_large"
+    assert await _err(c, type="pimoroni_unicorn/icon_decode", data=big) == "too_large"
+    notimg = _b64.b64encode(b"hello world, not an image" * 20).decode()
+    assert await _err(c, type="pimoroni_unicorn/icon_upload", name="x", data=notimg) == "decode_failed"
+    with _patch("custom_components.pimoroni_unicorn.lametric.async_fetch_image",
+                AsyncMock(return_value=None)):
+        assert await _err(c, type="pimoroni_unicorn/icon_decode",
+                          url="http://example.com/a.png") == "decode_failed"

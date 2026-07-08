@@ -171,3 +171,21 @@ def test_layout_boxes_unknown_widget(rs):
 
 def test_fit_scale_tiny_target(rs):
     assert rs.fit_scale("galactic", target=5) == 1
+
+
+def test_render_layout_png_primes_icon_with_code(rs):
+    icon = {"frames": [base64.b64encode(bytes(8 * 8 * 3)).decode()],
+            "durations": [100], "w": 8, "h": 8, "code": 42}
+    lay = {"widgets": [{"type": "icon", "x": 0, "y": 0, "cfg": {"icon": "coded"}}]}
+    assert rs.render_layout_png("cosmic", lay, installed_icons={"coded": icon})
+
+
+def test_render_icon_thumb_empty_and_invalid(rs):
+    assert rs.render_icon_thumb({"frames": [], "w": 8, "h": 8}) is None
+    assert rs.render_icon_thumb({"frames": ["A"], "w": 8, "h": 8}) is None
+
+
+def test_first_frame_png_invalid_and_short(rs):
+    assert rs.first_frame_png({"frames": ["A"], "w": 8, "h": 8}) is None
+    short = base64.b64encode(bytes(9)).decode()  # 3 px worth, far short of 8x8
+    assert rs.first_frame_png({"frames": [short], "w": 8, "h": 8}) is None

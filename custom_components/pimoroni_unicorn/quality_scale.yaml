@@ -37,9 +37,9 @@ rules:
   test-coverage:
     status: done
     comment: >-
-      Suite covers config/options flows, setup+unload, MQTT message handlers, the websocket
-      API, render_service, lametric (incl. SSRF), marketplace, update, and repair problems.
-      A ratcheting pytest-cov gate (--cov-fail-under, ~59%) in python_validate.yml enforces it.
+      Suite covers config/options flows, setup+unload, MQTT message handlers, services, the
+      websocket API, render_service, lametric (incl. SSRF), marketplace, update, and repair
+      problems. A pytest-cov gate (--cov-fail-under=95) in python_validate.yml enforces it.
   integration-owner: done
   docs-installation-parameters: done
   docs-configuration-parameters: done

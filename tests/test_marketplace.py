@@ -162,3 +162,26 @@ def test_resolve_install_custom_widget(mk, tmp_path):
 def test_widget_requires_custom_badjson(mk, tmp_path):
     (tmp_path / "widget_bad.json").write_text("{not json")
     assert mk._widget_requires("bad", str(tmp_path)) == []
+
+
+def test_validate_spec_non_object_and_bad_id(mk):
+    assert isinstance(mk.validate_spec([]), str)
+    assert isinstance(mk.validate_spec({"id": "has space", "draw": []}), str)
+
+
+def test_save_custom_rejects_builtin_id(mk, tmp_path):
+    with pytest.raises(ValueError):
+        mk.save_custom(str(tmp_path), {"id": "clock", "draw": []})
+
+
+def test_unit_device_file_overlay_and_unknown(mk):
+    assert mk.unit_device_file("weather") is not None
+    assert mk.unit_device_file("no_such_thing") is None
+
+
+def test_screenset_and_resolve_skip_missing_layouts(mk):
+    ss = {"S": {"label": "S", "layouts": ["ghost"], "dwell": 10, "transition": "none"}}
+    units = mk.screenset_units(ss, {})
+    assert units
+    files = mk.resolve_screenset_install(ss["S"], {})
+    assert isinstance(files, list)
