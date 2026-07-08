@@ -116,3 +116,13 @@ def test_custom_widgets_skips_malformed(mk, tmp_path):
 def test_resolve_install_with_font_deps(mk):
     files = mk.resolve_install("clock", device_files={})
     assert isinstance(files, list) and files
+
+
+def test_font_deps_and_widget_requires(mk):
+    """A widget resolves its files (and any font deps) as (device_path, content) pairs."""
+    files = mk.resolve_install("clock", device_files={})
+    names = [f[0] for f in files]
+    assert any(n.endswith(".py") for n in names)
+    lay = {"widgets": [{"id": "clock", "cfg": {}}]}
+    reqs = mk.layout_requires(lay)
+    assert isinstance(reqs, list)

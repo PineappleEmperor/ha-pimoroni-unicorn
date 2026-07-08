@@ -138,3 +138,29 @@ async def test_widget_preview(hass, mqtt_mock, hass_ws_client) -> None:
                        spec={"id": "t", "w": 10, "h": 5, "draw": [{"op": "rect", "x": 0, "y": 0, "w": 2, "h": 2}]})
     assert resp["success"]
     assert resp["result"]["png"]
+
+
+async def test_fonts_with_device_and_icon_url_and_decode_url(hass, mqtt_mock, hass_ws_client) -> None:
+    """fonts with a device shows install state; icon_url + icon_decode(url) use the fetch path."""
+    from unittest.mock import AsyncMock, patch
+    import base64 as _b64
+    entry = await _setup(hass)
+    c = await hass_ws_client(hass)
+    fonts = await _call(c, type="pimoroni_unicorn/fonts", entry_id=entry.entry_id)
+    assert fonts["success"]
+    fake = {"frames": [_b64.b64encode(bytes(8 * 8 * 3)).decode()], "durations": [0], "w": 8, "h": 8}
+    with patch("custom_components.pimoroni_unicorn.lametric.async_fetch_image",
+               AsyncMock(return_value=fake)):
+        up = await _call(c, type="pimoroni_unicorn/icon_url", name="fromurl",
+                         url="http://example.com/a.png")
+        assert up["success"]
+        dec = await _call(c, type="pimoroni_unicorn/icon_decode", url="http://example.com/a.png")
+        assert dec["success"] and dec["result"]["png"]
+
+
+async def test_render_with_device_entry(hass, mqtt_mock, hass_ws_client) -> None:
+    entry = await _setup(hass)
+    c = await hass_ws_client(hass)
+    r = await _call(c, type="pimoroni_unicorn/render", model="galactic",
+                    layout={"widgets": []}, entry_id=entry.entry_id)
+    assert r["success"]
