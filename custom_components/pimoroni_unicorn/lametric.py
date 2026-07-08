@@ -22,13 +22,11 @@ from .const import CONF_DEVICE_ID, DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 ICON_SIZE       = 8
-# Largest supported footprint across models (galactic 53×11, cosmic 32×32); imported
-# icons auto-fit within this and clip to the target screen at render time.
 MAX_ICON_W      = 53
 MAX_ICON_H      = 32
 MAX_FRAMES      = 64
-MAX_ICON_BYTES  = 24 * 1024          # decoded RGB budget per icon; protects Pico RAM
-MAX_UPLOAD_BYTES = 2 * 1024 * 1024   # reject oversized source files before decode
+MAX_ICON_BYTES  = 24 * 1024
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 ICON_THUMB_URL  = "https://developer.lametric.com/content/apps/icon_thumbs/{code}"
 STORAGE_KEY     = f"{DOMAIN}_icons"
 STORAGE_VERSION = 1

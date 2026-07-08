@@ -10,8 +10,8 @@ _g = None
 ICON_SIZE  = 8
 _ICON_DIR  = "/icons"
 _CACHE_MAX = 8
-_MAX_LOAD_FRAMES = 64        # hard frame cap when loading an icon (bounds device RAM)
-_MAX_LOAD_BYTES  = 24 * 1024  # decoded-frame RAM budget per icon (mirrors the HA import cap)
+_MAX_LOAD_FRAMES = 64
+_MAX_LOAD_BYTES  = 24 * 1024
 
 _user_cache = {}
 _code_alias = {}
@@ -105,7 +105,7 @@ def _load_user_icon(name):
             b = ubinascii.a2b_base64(fr)
             total += len(b)
             if total > _MAX_LOAD_BYTES and frames:
-                break  # keep at least one frame; cap RAM for oversize/heavy icons
+                break
             frames.append(b)
         icon = (
             frames,
