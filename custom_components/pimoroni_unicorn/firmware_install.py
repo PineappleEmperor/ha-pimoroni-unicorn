@@ -88,7 +88,9 @@ async def _stage_and_ota(hass: HomeAssistant, entry, files: list[tuple[str, str]
         staged = []
         for device_path, content in files:
             name = device_path.lstrip("/")
-            (www_dir / name).write_text(content)
+            dest = www_dir / name
+            dest.parent.mkdir(parents=True, exist_ok=True)  # nested paths: /widgets, /assets/fonts
+            dest.write_text(content)
             staged.append((name, device_path))
         return staged
 
