@@ -167,6 +167,9 @@ export class PimoroniUnicornPanel extends LitElement {
       background: var(--pu-surface); box-shadow: 0 1px 2px rgba(0,0,0,.08);
     }
     .group { display: inline-flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .grouplabel { font-size: 11px; font-weight: 600; color: var(--secondary-text-color, #79747e); }
+    .empty { background:
+      repeating-linear-gradient(45deg, var(--pu-outline) 0 1px, transparent 1px 7px), var(--pu-surface) !important; }
     .group + .group { padding-left: 16px; border-left: 1px solid var(--pu-outline); }
     .appbar {
       display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
@@ -202,6 +205,7 @@ export class PimoroniUnicornPanel extends LitElement {
     }
     button:hover:not([disabled]) { filter: brightness(1.08); box-shadow: 0 2px 5px rgba(0,0,0,.2); }
     button:active:not([disabled]) { filter: brightness(.95); }
+    :focus-visible { outline: 2px solid var(--pu-primary); outline-offset: 2px; border-radius: 4px; }
     button[disabled] { opacity: .38; cursor: not-allowed; box-shadow: none; }
     button.secondary { background: color-mix(in srgb, var(--pu-primary) 14%, var(--pu-surface)); color: var(--pu-primary); box-shadow: none; }
     button.danger { background: var(--error-color, #ba1a1a); color: #fff; }
@@ -741,8 +745,6 @@ export class PimoroniUnicornPanel extends LitElement {
   private removeWidget(idx: number): void {
     const w = this.layout.widgets[idx];
     if (!w) return;
-    const name = w.name ?? this.capForEntry(w)?.label ?? w.id;
-    if (!confirm(`Delete "${name}"?`)) return;
     this.layout.widgets.splice(idx, 1);
     this.selected = -1;
     this.edited();
@@ -771,6 +773,14 @@ export class PimoroniUnicornPanel extends LitElement {
     const [item] = ws.splice(from, 1);
     ws.splice(target, 0, item);
     this.selected = ws.indexOf(item);
+    this.edited();
+  }
+  private moveLayer(i: number, dir: -1 | 1): void {
+    const j = i + dir;
+    const ws = this.layout.widgets;
+    if (j < 0 || j >= ws.length) return;
+    [ws[i], ws[j]] = [ws[j], ws[i]];
+    this.selected = j;
     this.edited();
   }
   private toggleOverlay(id: string, on: boolean): void {
@@ -806,11 +816,18 @@ export class PimoroniUnicornPanel extends LitElement {
     this.switchTab("layout");
     this.status = `Loaded the device's current page "${dev.active_layout}".`;
   }
-  private async deploy(): Promise<void> {
+  private async deployCurrent(): Promise<void> {
     if (!this.entryId) return;
+    if (!this.layoutName.trim()) { this.status = "Name the page before deploying."; return; }
     this.layout.name = this.layoutName;
-    await this.hass.callWS({ type: "pimoroni_unicorn/push_layout", entry_id: this.entryId, layout: this.layout, set_active: true, name: this.layoutName });
-    this.status = `Pushed "${this.layoutName}" to the device.`;
+    this.status = `Deploying "${this.layoutName}"…`;
+    try {
+      await this.hass.callWS({ type: "pimoroni_unicorn/save_layout", name: this.layoutName, layout: this.layout });
+      await this.refreshStored();
+      const r = await this.hass.callWS({ type: "pimoroni_unicorn/deploy_layout", entry_id: this.entryId, name: this.layoutName, override: true });
+      this.status = r.ok ? `Deployed "${this.layoutName}" (installed any missing widgets/fonts first).` : "Deploy failed.";
+      this.dirty = false;
+    } catch (e) { this.status = `Deploy failed: ${(e as { message?: string })?.message ?? e}`; }
   }
   private async deleteLayout(): Promise<void> {
     if (!this.stored[this.layoutName]) return;
@@ -968,6 +985,7 @@ export class PimoroniUnicornPanel extends LitElement {
         <button class="tab ${this.tab === "edit" ? "on" : ""}" @click=${() => this.switchTab("edit")}>Widget editor</button>
         <button class="tab ${this.tab === "screens" ? "on" : ""}" @click=${() => this.switchTab("screens")}>Playlists</button>
       </div>
+      ${this.status ? html`<div class="status ${/fail/i.test(this.status) ? "err" : ""}" role="status" aria-live="polite">${this.status}</div>` : ""}
       ${this.tab === "market" ? this._marketplaceView()
         : this.tab === "edit" ? this._editorView()
         : this.tab === "screens" ? this._screensView()
@@ -996,13 +1014,17 @@ export class PimoroniUnicornPanel extends LitElement {
           <button class="secondary" @click=${this.undo} ?disabled=${!this.undoStack.length} title="Undo (Ctrl+Z)">↶ Undo</button>
           <button class="secondary" @click=${this.redo} ?disabled=${!this.redoStack.length} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
         </div>
-        <div class="group">
-          <button class="secondary" @click=${this.editCurrentPage} ?disabled=${!this.entryId} title=${this.entryId ? "Load the page currently active on the device to edit it" : "Select a device first"}>Edit current page</button>
+        <div class="group" role="group" aria-label="Library actions">
+          <span class="grouplabel">Library</span>
           <button @click=${this.save} title="Save this page to the library (no device needed)">Save</button>
-          <button class="secondary" @click=${this.deploy} ?disabled=${!this.entryId} title=${this.entryId ? "Push this page to the selected device now" : "Select a device to push"}>Push to device</button>
           <button class="secondary" @click=${this.exportLayout} title="Copy this page's JSON to clipboard to share or import elsewhere">Export JSON</button>
           ${this.stored[this.layoutName] ? html`<button class="secondary" @click=${() => this.publishLayout(true)} title="List this page in the marketplace">Publish</button>` : ""}
           ${this.stored[this.layoutName] ? html`<button class="danger" @click=${this.deleteLayout}>Delete</button>` : ""}
+        </div>
+        <div class="group" role="group" aria-label="Device actions">
+          <span class="grouplabel">Device</span>
+          <button class="secondary" @click=${this.editCurrentPage} ?disabled=${!this.entryId} title=${this.entryId ? "Load the page currently active on the device to edit it" : "Select a device first"}>Edit current</button>
+          <button @click=${this.deployCurrent} ?disabled=${!this.entryId} title=${this.entryId ? "Save, install any missing widgets/fonts, then push to the selected device" : "Select a device to deploy"}>Deploy</button>
         </div>
         <span class="grow"></span>
         <div class="group">
@@ -1011,10 +1033,10 @@ export class PimoroniUnicornPanel extends LitElement {
               ${[1, 2, 4].map((n) => html`<option ?selected=${(this.layout.grid ?? 2) === n}>${n}</option>`)}
             </select> px</label>
           <label>Zoom
-            <button class="zbtn" @click=${() => this.zoomBy(-2)} title="Zoom out">&minus;</button>
+            <button class="zbtn" @click=${() => this.zoomBy(-2)} title="Zoom out" aria-label="Zoom out">&minus;</button>
             <input type="range" min="4" max="48" .value=${String(this.scale)}
               @input=${(e: Event) => (this.zoom = +(e.target as HTMLInputElement).value)} />
-            <button class="zbtn" @click=${() => this.zoomBy(2)} title="Zoom in">+</button>
+            <button class="zbtn" @click=${() => this.zoomBy(2)} title="Zoom in" aria-label="Zoom in">+</button>
           </label>
           <label>Weather
             <select @change=${(e: Event) => { this.previewWeather = (e.target as HTMLSelectElement).value; this.renderPreview(); }}>
@@ -1031,7 +1053,7 @@ export class PimoroniUnicornPanel extends LitElement {
         <div class="col">
           <div class="stagewrap" @wheel=${this.onWheel} @pointerdown=${this.startPan}>
             <div class="stage" style=${`width:${this.dims[0] * s}px;height:${this.dims[1] * s}px`}>
-              ${this.png ? html`<img src="data:image/png;base64,${this.png}" width=${this.dims[0] * s} height=${this.dims[1] * s} @load=${this.onImgLoad} />` : ""}
+              ${this.png ? html`<img src="data:image/png;base64,${this.png}" alt="Live layout preview" width=${this.dims[0] * s} height=${this.dims[1] * s} @load=${this.onImgLoad} />` : ""}
               <div class="grid" style=${gridStyle}></div>
               ${this.locked ? "" : html`<div class="boxes ${this.wireframe ? "wf" : ""}">${this.layout.widgets.map((w, i) => {
                 if (!this.capForEntry(w) || w.enabled === false) return "";
@@ -1043,7 +1065,6 @@ export class PimoroniUnicornPanel extends LitElement {
               })}</div>`}
             </div>
           </div>
-          <div class="status ${this.status.startsWith("Render failed") ? "err" : ""}">${this.status}</div>
         </div>
 
         <div class="col">
@@ -1053,11 +1074,17 @@ export class PimoroniUnicornPanel extends LitElement {
               const w = this.layout.widgets[i];
               return html`
               <li class="${i === this.selected ? "sel" : ""} ${i === this.dragIdx ? "dragging" : ""} ${i === this.dragOverIdx && i !== this.dragIdx ? "dragover" : ""}"
+                  tabindex="0" role="option" aria-selected=${i === this.selected}
                   @click=${() => (this.selected = i)}
+                  @keydown=${(e: KeyboardEvent) => {
+                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); this.selected = i; }
+                    else if (e.altKey && e.key === "ArrowUp") { e.preventDefault(); e.stopPropagation(); this.moveLayer(i, 1); }
+                    else if (e.altKey && e.key === "ArrowDown") { e.preventDefault(); e.stopPropagation(); this.moveLayer(i, -1); }
+                  }}
                   @dragover=${(e: DragEvent) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "move"; this.dragOverIdx = i; }}
                   @dragleave=${() => { if (this.dragOverIdx === i) this.dragOverIdx = -1; }}
                   @drop=${(e: DragEvent) => { e.preventDefault(); this.dropWidget(i); this.dragOverIdx = -1; }}>
-                <span class="drag" title="Drag to reorder" draggable="true"
+                <span class="drag" title="Drag to reorder (or focus the row and use Alt+↑/↓)" aria-hidden="true" draggable="true"
                   @dragstart=${(e: DragEvent) => {
                     this.dragIdx = i;
                     if (e.dataTransfer) {
@@ -1069,11 +1096,12 @@ export class PimoroniUnicornPanel extends LitElement {
                   }}
                   @dragend=${() => { this.dragIdx = -1; this.dragOverIdx = -1; }}>⣿</span>
                 <input type="checkbox" .checked=${w.enabled !== false} title="Show / hide"
+                  aria-label="Show or hide ${w.name ?? this.capForEntry(w)?.label ?? w.id}"
                   @click=${(e: Event) => { e.stopPropagation(); w.enabled = (e.target as HTMLInputElement).checked; this.edited(); }} />
                 <span class="grow">${w.name ?? this.capForEntry(w)?.label ?? w.id}</span>
-                <button class="wlx" title="Duplicate layer"
+                <button class="wlx" title="Duplicate layer" aria-label="Duplicate layer"
                   @click=${(e: Event) => { e.stopPropagation(); this.duplicateWidget(i); }}>⧉</button>
-                <button class="wlx" title="Delete layer"
+                <button class="wlx" title="Delete layer" aria-label="Delete layer"
                   @click=${(e: Event) => { e.stopPropagation(); this.removeWidget(i); }}>×</button>
               </li>`;
             })}
@@ -1083,7 +1111,7 @@ export class PimoroniUnicornPanel extends LitElement {
             ${addable.map((c) => html`<button class="addtile" @click=${() => this.addWidget(c.id)} title="Add ${c.label}">
               ${this.widgetThumbs[c.id]
                 ? html`<img class="addthumb" src="data:image/png;base64,${this.widgetThumbs[c.id]}" alt="" />`
-                : html`<div class="addthumb"></div>`}
+                : html`<div class="addthumb empty"></div>`}
               <span class="addtile-label">${c.label}</span>
             </button>`)}
           </div>` : ""}
@@ -1189,6 +1217,7 @@ export class PimoroniUnicornPanel extends LitElement {
     } catch (e) { this.status = `Font install failed: ${(e as { message?: string })?.message ?? e}`; }
   }
   private async installWidget(id: string) {
+    if (!confirm(`Install "${id}" on the device? It will reboot (~20s) and briefly go dark.`)) return;
     try {
       await this.hass.callWS({ type: "pimoroni_unicorn/fw_install", entry_id: this.entryId, widget_id: id });
       this.status = `Installing ${id}…`;
@@ -1197,6 +1226,7 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   private async removeWidgetUnit(id: string) {
+    if (!confirm(`Remove "${id}" from the device? It will reboot (~20s) and briefly go dark.`)) return;
     try {
       await this.hass.callWS({ type: "pimoroni_unicorn/fw_remove", entry_id: this.entryId, widget_id: id });
       this.status = `Removing ${id}…`;
@@ -1207,15 +1237,18 @@ export class PimoroniUnicornPanel extends LitElement {
   private _thumb(src?: string) {
     return src
       ? html`<img class="thumb" alt="" src="data:image/png;base64,${src}" />`
-      : html`<div class="thumb"></div>`;
+      : html`<div class="thumb empty"></div>`;
   }
   private _mhead() {
     return html`<div class="mhead"><span>Preview</span><span>Name</span><span>Dependencies</span><span>Status</span><span></span></div>`;
   }
   private _section(key: string, title: string, count: number, body: unknown) {
     const open = this.sectionsOpen[key] !== false;
+    const toggle = () => { this.sectionsOpen = { ...this.sectionsOpen, [key]: !open }; };
     return html`<div class="section">
-      <div class="shead" @click=${() => { this.sectionsOpen = { ...this.sectionsOpen, [key]: !open }; }}>
+      <div class="shead" role="button" tabindex="0" aria-expanded=${open}
+        @click=${toggle}
+        @keydown=${(e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } }}>
         <svg class="chev ${open ? "open" : ""}" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z" /></svg>
         <span class="stitle">${title}</span>
         <span class="chip dim">${count}</span>
@@ -1284,7 +1317,7 @@ export class PimoroniUnicornPanel extends LitElement {
             src="https://developer.lametric.com/content/apps/icon_thumbs/${this.iconCode}"
             @load=${(e: Event) => ((e.target as HTMLImageElement).style.visibility = "visible")}
             @error=${(e: Event) => ((e.target as HTMLImageElement).style.visibility = "hidden")} />`
-            : html`<div class="iconprev"></div>`}
+            : html`<div class="iconprev empty"></div>`}
           <div class="grow">
             <div class="panelrow">
               <label>LaMetric code</label>
@@ -1317,7 +1350,7 @@ export class PimoroniUnicornPanel extends LitElement {
               return html`<div class="iconrow">
               ${this.iconThumbs[n]
                 ? html`<img class="iconthumb" alt="" src="data:image/png;base64,${this.iconThumbs[n]}" />`
-                : html`<div class="iconthumb"></div>`}
+                : html`<div class="iconthumb empty"></div>`}
               <span class="grow">${n}</span>
               ${this.entryId
                 ? (onDevice
@@ -1345,7 +1378,7 @@ export class PimoroniUnicornPanel extends LitElement {
             <span class="hint">${f.kind === "digits" ? "digits" : "A–Z 0–9"} · ${f.w}×${f.h}</span></div>
           ${this.fontPngs[f.name]
             ? html`<img class="fprev" alt="" src="data:image/png;base64,${this.fontPngs[f.name]}" />`
-            : html`<div class="fprev"></div>`}
+            : html`<div class="fprev empty"></div>`}
           ${f.builtin
             ? html`<span class="badge ok">built-in</span>`
             : (this.entryId
@@ -1504,7 +1537,7 @@ export class PimoroniUnicornPanel extends LitElement {
         </div>
         <div class="col">
           <div class="stage" style=${`width:${this.dims[0] * sc}px;height:${this.dims[1] * sc}px`}>
-            ${this.specPng ? html`<img src="data:image/png;base64,${this.specPng}" width=${this.dims[0] * sc} height=${this.dims[1] * sc} />` : ""}
+            ${this.specPng ? html`<img src="data:image/png;base64,${this.specPng}" alt="Widget preview" width=${this.dims[0] * sc} height=${this.dims[1] * sc} />` : ""}
           </div>
         </div>
       </div>
@@ -1586,8 +1619,8 @@ export class PimoroniUnicornPanel extends LitElement {
               ${on ? html`<span class="chip">${pos + 1}</span>` : ""}
               <span class="grow">${n}</span>
               ${on ? html`
-                <button class="zbtn secondary" ?disabled=${pos === 0} @click=${() => this.moveScreen(n, -1)} title="Move up">▲</button>
-                <button class="zbtn secondary" ?disabled=${pos === this.screenLayouts.length - 1} @click=${() => this.moveScreen(n, 1)} title="Move down">▼</button>` : ""}
+                <button class="zbtn secondary" ?disabled=${pos === 0} @click=${() => this.moveScreen(n, -1)} title="Move up" aria-label="Move ${n} up">▲</button>
+                <button class="zbtn secondary" ?disabled=${pos === this.screenLayouts.length - 1} @click=${() => this.moveScreen(n, 1)} title="Move down" aria-label="Move ${n} down">▼</button>` : ""}
             </div>`; })
             : html`<p class="hint">No saved pages yet — create one on the Designer tab.</p>`}
           <div class="panelrow"><label>Dwell (s)
@@ -1604,7 +1637,7 @@ export class PimoroniUnicornPanel extends LitElement {
         </div>
         <div class="col">
           <div class="stage" style=${`width:${this.dims[0] * sc}px;height:${this.dims[1] * sc}px`}>
-            ${png ? html`<img src="data:image/png;base64,${png}" width=${this.dims[0] * sc} height=${this.dims[1] * sc}
+            ${png ? html`<img src="data:image/png;base64,${png}" alt="Playlist preview" width=${this.dims[0] * sc} height=${this.dims[1] * sc}
               style=${`opacity:${this.screenOpacity};transition:opacity 280ms`} />` : ""}
           </div>
           <div class="hint">${this.screenLayouts.length > 1 ? `playing ${this.screenIdx + 1}/${this.screenLayouts.length}: ${cur ?? ""}` : (cur ?? "tick pages to preview")}</div>
