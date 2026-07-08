@@ -7,9 +7,7 @@ rules:
     comment: Local push over MQTT; no polling.
   brands: done
   common-modules: done
-  config-flow-test-coverage:
-    status: todo
-    comment: No tests yet.
+  config-flow-test-coverage: done
   config-flow: done
   dependency-transparency: done
   docs-actions: done
@@ -38,7 +36,10 @@ rules:
   parallel-updates: done
   test-coverage:
     status: todo
-    comment: No test suite yet.
+    comment: >-
+      Suite exists (config/options flows, setup+unload, update, repair problems, firmware
+      engine imports + OTA helpers). Gap: the websocket API and render_service are still
+      largely uncovered.
   integration-owner: done
   docs-installation-parameters: done
   docs-configuration-parameters: done
