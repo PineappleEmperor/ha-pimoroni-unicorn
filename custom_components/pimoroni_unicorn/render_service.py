@@ -141,6 +141,29 @@ def render_icon_thumb(icon: dict) -> str | None:
     return base64.b64encode(buf.getvalue()).decode()
 
 
+def first_frame_png(icon: dict) -> str | None:
+    """Frame 0 of a stored icon at its native w×h as a base64 PNG (for the editor canvas)."""
+    icon = icon or {}
+    frames = icon.get("frames") or []
+    if not frames:
+        return None
+    w = int(icon.get("w", 8))
+    h = int(icon.get("h", 8))
+    need = w * h * 3
+    try:
+        raw = base64.b64decode(frames[0])
+    except (ValueError, binascii.Error):
+        return None
+    if len(raw) < need:
+        return None
+    from PIL import Image
+
+    img = Image.frombytes("RGB", (w, h), raw[:need])
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
 def layout_boxes(layout: dict) -> list:
     """Per-widget [w, h] boxes for the layout, computed by the real widget_box."""
     widgets = _modules().widgets

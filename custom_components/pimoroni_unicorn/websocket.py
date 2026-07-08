@@ -56,6 +56,7 @@ WS_ICONS          = "pimoroni_unicorn/icons"
 WS_ICON_INSTALL   = "pimoroni_unicorn/icon_install"
 WS_ICON_UPLOAD    = "pimoroni_unicorn/icon_upload"
 WS_ICON_URL       = "pimoroni_unicorn/icon_url"
+WS_ICON_DECODE    = "pimoroni_unicorn/icon_decode"
 WS_ICON_REMOVE    = "pimoroni_unicorn/icon_remove"
 WS_ICON_PUSH      = "pimoroni_unicorn/icon_push"
 WS_ICON_DEV_REMOVE = "pimoroni_unicorn/icon_device_remove"
@@ -73,7 +74,7 @@ def async_register(hass: HomeAssistant) -> None:
                     ws_widget_preview, ws_widget_thumbs, ws_widget_save, ws_widget_import, ws_widget_delete,
                     ws_content_catalog, ws_deploy_layout, ws_deploy_screenset,
                     ws_publish_layout, ws_save_screenset, ws_delete_screenset, ws_icons,
-                    ws_icon_install, ws_icon_upload, ws_icon_url,
+                    ws_icon_install, ws_icon_upload, ws_icon_url, ws_icon_decode,
                     ws_icon_remove, ws_icon_push, ws_icon_device_remove,
                     ws_fonts, ws_font_preview, ws_font_install):
         websocket_api.async_register_command(hass, handler)
@@ -692,6 +693,41 @@ async def ws_icon_url(hass, connection, msg):
         return
     sent = await lametric.async_install_icon(hass, msg["name"], icon, msg.get("entry_ids"))
     connection.send_result(msg["id"], {"ok": True, "sent": sent, **_icon_meta(icon)})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_ICON_DECODE,
+    vol.Optional("data"): str,
+    vol.Optional("url"): str,
+    vol.Optional("max_w"): vol.Coerce(int),
+    vol.Optional("max_h"): vol.Coerce(int),
+})
+@websocket_api.async_response
+async def ws_icon_decode(hass, connection, msg):
+    """Decode a source image (upload or URL) to a PNG for the editor canvas; no install."""
+    if msg.get("data"):
+        try:
+            raw = base64.b64decode(msg["data"], validate=True)
+        except (ValueError, binascii.Error):
+            connection.send_error(msg["id"], "bad_image", "Could not decode the uploaded image")
+            return
+        if len(raw) > lametric.MAX_UPLOAD_BYTES:
+            connection.send_error(msg["id"], "too_large", "That image file is too large")
+            return
+        icon = await lametric.async_decode_upload(hass, raw, msg.get("max_w"), msg.get("max_h"))
+    elif msg.get("url"):
+        icon = await lametric.async_fetch_image(hass, msg["url"], msg.get("max_w"), msg.get("max_h"))
+    else:
+        connection.send_error(msg["id"], "no_source", "Provide data or url")
+        return
+    if not icon:
+        connection.send_error(msg["id"], "decode_failed", "Could not read that image")
+        return
+    png = render_service.first_frame_png(icon)
+    if not png:
+        connection.send_error(msg["id"], "decode_failed", "Could not read that image")
+        return
+    connection.send_result(msg["id"], {"png": png, "w": icon["w"], "h": icon["h"]})
 
 
 @websocket_api.websocket_command({
