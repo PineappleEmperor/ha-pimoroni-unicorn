@@ -111,3 +111,20 @@ async def test_mqtt_discovery_invalid_payload_aborts(hass: HomeAssistant) -> Non
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "invalid_discovery"
+
+
+async def test_mqtt_discovery_already_configured_aborts(hass: HomeAssistant) -> None:
+    """Discovering an already-configured device aborts instead of duplicating it."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from custom_components.pimoroni_unicorn.const import CONF_MODEL, UNICORN_MODELS
+    MockConfigEntry(domain=DOMAIN, unique_id="dupe",
+                    data={CONF_DEVICE_ID: "dupe", CONF_MODEL: UNICORN_MODELS[0]}).add_to_hass(hass)
+    info = MqttServiceInfo(
+        topic="pimoroni_unicorn/discovery/dupe",
+        payload=json.dumps({"device_id": "dupe", "model": "galactic"}),
+        qos=0, retain=True, subscribed_topic="pimoroni_unicorn/discovery/#", timestamp=0.0,
+    )
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_MQTT}, data=info)
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"

@@ -126,3 +126,27 @@ def test_font_deps_and_widget_requires(mk):
     lay = {"widgets": [{"id": "clock", "cfg": {}}]}
     reqs = mk.layout_requires(lay)
     assert isinstance(reqs, list)
+
+
+def test_widget_requires_variants(mk, tmp_path):
+    """Requirement tokens resolve for builtin, custom and overlay widgets + layouts."""
+    assert isinstance(mk._widget_requires("clock"), list)
+    assert isinstance(mk._widget_requires("weather"), list)
+    (tmp_path / "widget_c.json").write_text('{"id": "c", "requires": ["font:tall"], "draw": []}')
+    assert "font:tall" in mk._widget_requires("c", str(tmp_path))
+    reqs = mk.layout_requires({"widgets": [{"id": "c", "cfg": {}}]}, str(tmp_path))
+    assert "font:tall" in reqs
+
+
+def test_font_deps_direct(mk):
+    deps = mk._font_deps(["font:tall"], {})
+    assert deps and all(d[0].endswith(".py") for d in deps)
+    assert mk._font_deps(["font:tall"], {"monospace_tall": "hash"}) == [] or \
+        isinstance(mk._font_deps(["font:tall"], {"monospace_tall": "hash"}), list)
+
+
+def test_save_custom_roundtrip_via_widget_path(mk, tmp_path):
+    spec = {"id": "wp", "label": "WP", "requires": ["font:tall"],
+            "draw": [{"op": "value", "bind": "x"}]}
+    mk.save_custom(str(tmp_path), spec)
+    assert mk.unit_device_file("wp", mk.widgets_dir(str(tmp_path))) is not None

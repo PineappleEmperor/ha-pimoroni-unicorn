@@ -162,3 +162,12 @@ def test_layout_capabilities_skips_bad_and_dupe(rs, tmp_path):
     caps = rs.layout_capabilities(str(tmp_path))
     ids = [w["id"] for w in caps["widgets"]]
     assert ids.count("clock") == 1  # builtin kept, dupe skipped
+
+
+def test_layout_boxes_unknown_widget(rs):
+    boxes = rs.layout_boxes({"widgets": [{"type": "does_not_exist"}]})
+    assert boxes == [[0, 0]]
+
+
+def test_fit_scale_tiny_target(rs):
+    assert rs.fit_scale("galactic", target=5) == 1
