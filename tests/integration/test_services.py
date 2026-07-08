@@ -95,3 +95,16 @@ async def test_live_state_reads_configured_entities(hass, mqtt_mock) -> None:
     assert state["solar"] == 2.5
     assert state["soc"] == 75
     assert state["charging"] is True
+
+
+async def test_push_firmware_all_and_no_url(hass, mqtt_mock) -> None:
+    """No target pushes to every device; a missing HA URL raises."""
+    from homeassistant.exceptions import HomeAssistantError
+    e1 = await _setup(hass, dev="d1")
+    await _setup(hass, dev="d2")
+    with patch(URL, AsyncMock(return_value="http://127.0.0.1:8123")):
+        await hass.services.async_call(DOMAIN, "push_firmware", {}, blocking=True)
+        await hass.async_block_till_done()
+    with patch(URL, AsyncMock(return_value=None)), pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN, "push_firmware", {"entry_id": e1.entry_id}, blocking=True)

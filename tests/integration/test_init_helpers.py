@@ -80,3 +80,30 @@ async def test_rewire_feed_publishes_and_tracks(hass: HomeAssistant, mqtt_mock) 
     await pu._async_rewire_sensor_feed(hass, entry, {"widgets": []})
     await hass.async_block_till_done()
     assert entry.runtime_data["sensor_entities"] == set()
+
+
+async def test_setup_publishers_fire_on_state_change(hass: HomeAssistant, mqtt_mock) -> None:
+    """Solar + weather publishers run when their watched entities change."""
+    from custom_components.pimoroni_unicorn.const import (
+        CONF_EXTRA_SENSORS,
+        CONF_SOLAR_ENTITY,
+        CONF_SUN_ENTITY,
+        CONF_WEATHER_CODE_ENTITY,
+    )
+    hass.states.async_set("sun.sun", "below_horizon")
+    hass.states.async_set("weather.home", "sunny", {"temperature": 18.5})
+    hass.states.async_set("sensor.solar", "2.0")
+    hass.states.async_set("sensor.extra", "5")
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="dev2",
+                            data={CONF_DEVICE_ID: "dev2", CONF_MODEL: "Galactic Unicorn"},
+                            options={CONF_SOLAR_ENTITY: "sensor.solar",
+                                     CONF_SUN_ENTITY: "sun.sun",
+                                     CONF_WEATHER_CODE_ENTITY: "weather.home",
+                                     CONF_EXTRA_SENSORS: "sensor.extra:extra"})
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("sun.sun", "above_horizon")
+    hass.states.async_set("weather.home", "cloudy", {"temperature": 10.2})
+    await hass.async_block_till_done()
