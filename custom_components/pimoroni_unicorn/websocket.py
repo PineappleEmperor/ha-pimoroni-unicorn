@@ -104,6 +104,26 @@ def _model_key(entry) -> str:
     return model if model in render_service.MODEL_DIMS else "galactic"
 
 
+def _device_dims(hass, entry_id: str) -> tuple[int, int]:
+    """A device's on-screen (w, h) at its configured model + orientation; (0, 0) if unknown."""
+    entry = _entry(hass, entry_id)
+    if entry is None:
+        return (0, 0)
+    return render_service.oriented_dims(_model_key(entry), _orientation(entry))
+
+
+def _oversize_targets(hass, w: int, h: int, entry_ids) -> list[str]:
+    """Target device labels whose screen is smaller than a w×h icon (entry_ids None = all)."""
+    out = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry_ids is not None and entry.entry_id not in entry_ids:
+            continue
+        dw, dh = render_service.oriented_dims(_model_key(entry), _orientation(entry))
+        if w > dw or h > dh:
+            out.append(f"{entry.title or entry.entry_id} ({dw}×{dh})")
+    return out
+
+
 def _safe_render(fn, *args):
     """Render, returning None on failure — one bad unit mustn't break a catalogue."""
     try:
@@ -609,12 +629,26 @@ def _icon_meta(icon: dict) -> dict:
             "n_total": icon.get("n_total"), "n_kept": icon.get("n_kept")}
 
 
+def _oversize_blocked(hass, connection, msg, icon) -> bool:
+    """Send an oversize error and return True if the icon is too big for a target device."""
+    if msg.get("allow_oversize"):
+        return False
+    blocked = _oversize_targets(hass, int(icon["w"]), int(icon["h"]), msg.get("entry_ids"))
+    if not blocked:
+        return False
+    connection.send_error(msg["id"], "oversize",
+        f"{icon['w']}×{icon['h']} is larger than: {', '.join(blocked)}. "
+        "Reduce the size, or enable test mode to push it anyway.")
+    return True
+
+
 @websocket_api.websocket_command({
     vol.Required("type"): WS_ICON_UPLOAD,
     vol.Required("name"): str,
     vol.Required("data"): str,
     vol.Optional("max_w"): vol.Coerce(int),
     vol.Optional("max_h"): vol.Coerce(int),
+    vol.Optional("allow_oversize"): bool,
     vol.Optional("entry_ids"): [str],
 })
 @websocket_api.async_response
@@ -632,6 +666,8 @@ async def ws_icon_upload(hass, connection, msg):
     if not icon:
         connection.send_error(msg["id"], "decode_failed", "Could not read that image")
         return
+    if _oversize_blocked(hass, connection, msg, icon):
+        return
     sent = await lametric.async_install_icon(hass, msg["name"], icon, msg.get("entry_ids"))
     connection.send_result(msg["id"], {"ok": True, "sent": sent, **_icon_meta(icon)})
 
@@ -642,6 +678,7 @@ async def ws_icon_upload(hass, connection, msg):
     vol.Required("url"): str,
     vol.Optional("max_w"): vol.Coerce(int),
     vol.Optional("max_h"): vol.Coerce(int),
+    vol.Optional("allow_oversize"): bool,
     vol.Optional("entry_ids"): [str],
 })
 @websocket_api.async_response
@@ -650,6 +687,8 @@ async def ws_icon_url(hass, connection, msg):
     icon = await lametric.async_fetch_image(hass, msg["url"], msg.get("max_w"), msg.get("max_h"))
     if not icon:
         connection.send_error(msg["id"], "fetch_failed", "Could not fetch or read that image URL")
+        return
+    if _oversize_blocked(hass, connection, msg, icon):
         return
     sent = await lametric.async_install_icon(hass, msg["name"], icon, msg.get("entry_ids"))
     connection.send_result(msg["id"], {"ok": True, "sent": sent, **_icon_meta(icon)})
@@ -670,10 +709,20 @@ async def ws_icon_remove(hass, connection, msg):
     vol.Required("type"): WS_ICON_PUSH,
     vol.Required("entry_id"): str,
     vol.Required("name"): str,
+    vol.Optional("allow_oversize"): bool,
 })
 @websocket_api.async_response
 async def ws_icon_push(hass, connection, msg):
-    """Install an already-registered icon onto a single device."""
+    """Install an already-registered icon onto a single device (blocks oversize by default)."""
+    if not msg.get("allow_oversize"):
+        icon = (await lametric.async_get_registry(hass)).get(msg["name"])
+        if icon:
+            dw, dh = _device_dims(hass, msg["entry_id"])
+            if int(icon.get("w", 8)) > dw or int(icon.get("h", 8)) > dh:
+                connection.send_error(msg["id"], "oversize",
+                    f"{msg['name']} ({icon.get('w')}×{icon.get('h')}) is larger than this "
+                    f"device ({dw}×{dh}). Enable test mode to push it anyway.")
+                return
     ok = await lametric.async_push_icon_to_device(hass, msg["name"], msg["entry_id"])
     connection.send_result(msg["id"], {"ok": ok})
 

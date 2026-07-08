@@ -378,10 +378,20 @@ export class PimoroniUnicornPanel extends LitElement {
     window.setTimeout(() => this.loadIcons(), 1500);
     window.setTimeout(() => this.loadIcons(), 4000);
   }
-  private async pushIconToDevice(name: string) {
+  // An icon is oversize when it's wider or taller than the selected device's screen.
+  private iconOversize(name: string): boolean {
+    const d = this.iconDims[name];
+    return !!d && (d[0] > this.dims[0] || d[1] > this.dims[1]);
+  }
+  private async pushIconToDevice(name: string, allowOversize = false) {
     if (!this.entryId) return;
+    if (this.iconOversize(name) && !allowOversize) {
+      const d = this.iconDims[name];
+      if (!confirm(`⚠️ TEST MODE — "${name}" is ${d[0]}×${d[1]}, larger than this device (${this.dims[0]}×${this.dims[1]}).\n\nPushing an oversize icon can hang or crash the device until it is power-cycled. Only do this to test. Continue?`)) return;
+      allowOversize = true;
+    }
     try {
-      await this.hass.callWS({ type: "pimoroni_unicorn/icon_push", entry_id: this.entryId, name });
+      await this.hass.callWS({ type: "pimoroni_unicorn/icon_push", entry_id: this.entryId, name, allow_oversize: allowOversize });
       this.status = `Installing "${name}" on this device…`;
       this.reloadIconsSoon();
     } catch (e) { this.status = `Install failed: ${(e as { message?: string })?.message ?? e}`; }
@@ -1523,14 +1533,19 @@ export class PimoroniUnicornPanel extends LitElement {
                 ? html`<img class="iconthumb" alt="" src="data:image/gif;base64,${this.iconThumbs[n]}" />`
                 : html`<div class="iconthumb empty"></div>`}
               <span class="grow">${n}${this.iconDims[n]
-                ? html` <span class="hint">${this.iconDims[n][0]}×${this.iconDims[n][1]}</span>` : ""}</span>
+                ? html` <span class="hint">${this.iconDims[n][0]}×${this.iconDims[n][1]}</span>` : ""}
+                ${this.entryId && this.iconOversize(n)
+                  ? html`<span class="badge warn" title="Larger than this device (${this.dims[0]}×${this.dims[1]}) — won't fit and may hang it">too big for this device</span>` : ""}</span>
               ${this.entryId
                 ? (onDevice
                   ? html`<span class="badge ok">on this device</span>
                       <button class="secondary" title="Take this icon off the selected device (stays in the library)"
                         @click=${() => this.removeIconFromDevice(n)}>Remove from device</button>`
-                  : html`<button class="secondary" title="Push this icon to the selected device"
-                      @click=${() => this.pushIconToDevice(n)}>Install on device</button>`)
+                  : this.iconOversize(n)
+                    ? html`<button class="danger" title="This icon is larger than the device screen. Pushing it is for testing only and may hang the device."
+                        @click=${() => this.pushIconToDevice(n)}>Test on device ⚠</button>`
+                    : html`<button class="secondary" title="Push this icon to the selected device"
+                        @click=${() => this.pushIconToDevice(n)}>Install on device</button>`)
                 : ""}
               <button class="danger" title="Delete from the library and every device"
                 @click=${() => this.removeIcon(n)}>Delete everywhere</button></div>`;
