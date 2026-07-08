@@ -61,3 +61,32 @@ def test_builtin_catalogues_nonempty(mk):
 
 def test_device_path(mk):
     assert mk.device_path("icons.py").endswith("/icons.py")
+
+
+def test_device_diff(mk):
+    # Device reports an old clock hash + is missing others -> diff flags them.
+    manifest = {"engine_version": "1.7.0", "files": {"widget_clock": "deadbeef"}}
+    diff = mk.device_diff(manifest)
+    assert isinstance(diff, list) and diff
+    assert all("id" in d and "status" in d for d in diff)
+
+
+def test_layout_requires(mk):
+    lay = {"widgets": [{"id": "clock", "cfg": {}}]}
+    reqs = mk.layout_requires(lay)
+    assert isinstance(reqs, list)
+
+
+def test_resolve_install_clock(mk):
+    files = mk.resolve_install("clock")
+    assert files and files[0][0].endswith("widget_clock.py")
+
+
+def test_save_and_delete_custom(mk, tmp_path):
+    spec = {"id": "mine", "label": "Mine", "draw": [{"op": "pixel", "x": 0, "y": 0}]}
+    wid = mk.save_custom(str(tmp_path), spec)
+    assert wid == "mine"
+    got = {w["id"] for w in mk.custom_widgets(mk.widgets_dir(str(tmp_path)))}
+    assert "mine" in got
+    mk.delete_custom(str(tmp_path), "mine")
+    assert "mine" not in {w["id"] for w in mk.custom_widgets(mk.widgets_dir(str(tmp_path)))}
