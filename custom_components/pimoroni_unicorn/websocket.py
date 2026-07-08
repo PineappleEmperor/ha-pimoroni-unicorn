@@ -1,5 +1,7 @@
 """Websocket API backing the layout editor panel."""
 
+import base64
+import binascii
 import json
 
 import voluptuous as vol
@@ -52,6 +54,8 @@ WS_SAVE_SCREENSET = "pimoroni_unicorn/save_screenset"
 WS_DELETE_SCREENSET = "pimoroni_unicorn/delete_screenset"
 WS_ICONS          = "pimoroni_unicorn/icons"
 WS_ICON_INSTALL   = "pimoroni_unicorn/icon_install"
+WS_ICON_UPLOAD    = "pimoroni_unicorn/icon_upload"
+WS_ICON_URL       = "pimoroni_unicorn/icon_url"
 WS_ICON_REMOVE    = "pimoroni_unicorn/icon_remove"
 WS_ICON_PUSH      = "pimoroni_unicorn/icon_push"
 WS_ICON_DEV_REMOVE = "pimoroni_unicorn/icon_device_remove"
@@ -69,7 +73,8 @@ def async_register(hass: HomeAssistant) -> None:
                     ws_widget_preview, ws_widget_thumbs, ws_widget_save, ws_widget_import, ws_widget_delete,
                     ws_content_catalog, ws_deploy_layout, ws_deploy_screenset,
                     ws_publish_layout, ws_save_screenset, ws_delete_screenset, ws_icons,
-                    ws_icon_install, ws_icon_remove, ws_icon_push, ws_icon_device_remove,
+                    ws_icon_install, ws_icon_upload, ws_icon_url,
+                    ws_icon_remove, ws_icon_push, ws_icon_device_remove,
                     ws_fonts, ws_font_preview, ws_font_install):
         websocket_api.async_register_command(hass, handler)
 
@@ -594,6 +599,54 @@ async def ws_icon_install(hass, connection, msg):
         return
     sent = await lametric.async_install_icon(hass, msg["name"], icon, msg.get("entry_ids"))
     connection.send_result(msg["id"], {"ok": True, "sent": sent})
+
+
+def _icon_meta(icon: dict) -> dict:
+    """Size + frame-kept info for the panel to report after an import."""
+    return {"w": icon.get("w"), "h": icon.get("h"),
+            "n_total": icon.get("n_total"), "n_kept": icon.get("n_kept")}
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_ICON_UPLOAD,
+    vol.Required("name"): str,
+    vol.Required("data"): str,
+    vol.Optional("entry_ids"): [str],
+})
+@websocket_api.async_response
+async def ws_icon_upload(hass, connection, msg):
+    """Decode an uploaded image/GIF, auto-fit it to the panel, and install it."""
+    try:
+        raw = base64.b64decode(msg["data"], validate=True)
+    except (ValueError, binascii.Error):
+        connection.send_error(msg["id"], "bad_image", "Could not decode the uploaded image")
+        return
+    if len(raw) > lametric.MAX_UPLOAD_BYTES:
+        connection.send_error(msg["id"], "too_large", "That image file is too large")
+        return
+    icon = await lametric.async_decode_upload(hass, raw)
+    if not icon:
+        connection.send_error(msg["id"], "decode_failed", "Could not read that image")
+        return
+    sent = await lametric.async_install_icon(hass, msg["name"], icon, msg.get("entry_ids"))
+    connection.send_result(msg["id"], {"ok": True, "sent": sent, **_icon_meta(icon)})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_ICON_URL,
+    vol.Required("name"): str,
+    vol.Required("url"): str,
+    vol.Optional("entry_ids"): [str],
+})
+@websocket_api.async_response
+async def ws_icon_url(hass, connection, msg):
+    """Fetch an image/GIF by URL, auto-fit it to the panel, and install it."""
+    icon = await lametric.async_fetch_image(hass, msg["url"])
+    if not icon:
+        connection.send_error(msg["id"], "fetch_failed", "Could not fetch or read that image URL")
+        return
+    sent = await lametric.async_install_icon(hass, msg["name"], icon, msg.get("entry_ids"))
+    connection.send_result(msg["id"], {"ok": True, "sent": sent, **_icon_meta(icon)})
 
 
 @websocket_api.websocket_command({

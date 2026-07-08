@@ -1,5 +1,5 @@
 # AUTO-GENERATED from firmware/ by scripts/sync_render.py — do not edit.
-"""Icon widget unit: draws a named 8x8 icon from the engine icon set."""
+"""Icon widget unit: draws a named icon (built-in 8x8 or imported, up to full-screen)."""
 from . import declarative
 from . import icons
 
@@ -16,8 +16,8 @@ WIDGET = {
 
 
 def box(cfg):
-    """Icons are a fixed 8x8 footprint."""
-    return (icons.ICON_SIZE, icons.ICON_SIZE)
+    """Footprint of the configured icon at its native size (built-ins are 8x8)."""
+    return icons.icon_size(cfg.get("icon", ""))
 
 
 def render(g, x, y, w, h, cfg, state):
