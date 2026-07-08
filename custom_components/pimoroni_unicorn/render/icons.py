@@ -11,6 +11,8 @@ _g = None
 ICON_SIZE  = 8
 _ICON_DIR  = "/icons"
 _CACHE_MAX = 8
+_MAX_LOAD_FRAMES = 64
+_MAX_LOAD_BYTES  = 24 * 1024
 
 _user_cache = {}
 _code_alias = {}
@@ -96,9 +98,19 @@ def _load_user_icon(name):
     try:
         with open(_ICON_DIR + "/" + name + ".json") as f:
             data = json.load(f)
+        frames = []
+        total = 0
+        for fr in data["frames"]:
+            if len(frames) >= _MAX_LOAD_FRAMES:
+                break
+            b = ubinascii.a2b_base64(fr)
+            total += len(b)
+            if total > _MAX_LOAD_BYTES and frames:
+                break
+            frames.append(b)
         icon = (
-            [ubinascii.a2b_base64(fr) for fr in data["frames"]],
-            [int(d) for d in data.get("durations", [])],
+            frames,
+            [int(d) for d in data.get("durations", [])][:len(frames)],
             int(data.get("w", ICON_SIZE)),
             int(data.get("h", ICON_SIZE)),
         )

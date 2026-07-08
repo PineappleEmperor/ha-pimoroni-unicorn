@@ -605,6 +605,19 @@ max-complexity = 25
 convention = "google"
 property-decorators = ["propcache.api.cached_property"]
 
+[tool.coverage.run]
+# Measure only the hand-written integration; render/, catalog/ and the firmware/ bundle are
+# generated device-code copies (lint-excluded too) and would dilute the metric.
+source = ["custom_components/pimoroni_unicorn"]
+omit = [
+    "custom_components/pimoroni_unicorn/render/*",
+    "custom_components/pimoroni_unicorn/catalog/*",
+    "custom_components/pimoroni_unicorn/firmware/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

@@ -9,6 +9,7 @@ import yaml
 
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 
 from . import firmware_install, lametric, layout, marketplace, render_service
 from .const import (
@@ -56,6 +57,7 @@ WS_ICONS          = "pimoroni_unicorn/icons"
 WS_ICON_INSTALL   = "pimoroni_unicorn/icon_install"
 WS_ICON_UPLOAD    = "pimoroni_unicorn/icon_upload"
 WS_ICON_URL       = "pimoroni_unicorn/icon_url"
+WS_ICON_DECODE    = "pimoroni_unicorn/icon_decode"
 WS_ICON_REMOVE    = "pimoroni_unicorn/icon_remove"
 WS_ICON_PUSH      = "pimoroni_unicorn/icon_push"
 WS_ICON_DEV_REMOVE = "pimoroni_unicorn/icon_device_remove"
@@ -73,7 +75,7 @@ def async_register(hass: HomeAssistant) -> None:
                     ws_widget_preview, ws_widget_thumbs, ws_widget_save, ws_widget_import, ws_widget_delete,
                     ws_content_catalog, ws_deploy_layout, ws_deploy_screenset,
                     ws_publish_layout, ws_save_screenset, ws_delete_screenset, ws_icons,
-                    ws_icon_install, ws_icon_upload, ws_icon_url,
+                    ws_icon_install, ws_icon_upload, ws_icon_url, ws_icon_decode,
                     ws_icon_remove, ws_icon_push, ws_icon_device_remove,
                     ws_fonts, ws_font_preview, ws_font_install):
         websocket_api.async_register_command(hass, handler)
@@ -104,6 +106,26 @@ def _model_key(entry) -> str:
     return model if model in render_service.MODEL_DIMS else "galactic"
 
 
+def _device_dims(hass, entry_id: str) -> tuple[int, int]:
+    """A device's on-screen (w, h) at its configured model + orientation; (0, 0) if unknown."""
+    entry = _entry(hass, entry_id)
+    if entry is None:
+        return (0, 0)
+    return render_service.oriented_dims(_model_key(entry), _orientation(entry))
+
+
+def _oversize_targets(hass, w: int, h: int, entry_ids) -> list[str]:
+    """Target device labels whose screen is smaller than a w×h icon (entry_ids None = all)."""
+    out = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry_ids is not None and entry.entry_id not in entry_ids:
+            continue
+        dw, dh = render_service.oriented_dims(_model_key(entry), _orientation(entry))
+        if w > dw or h > dh:
+            out.append(f"{entry.title or entry.entry_id} ({dw}×{dh})")
+    return out
+
+
 def _safe_render(fn, *args):
     """Render, returning None on failure — one bad unit mustn't break a catalogue."""
     try:
@@ -116,12 +138,15 @@ def _safe_render(fn, *args):
 @callback
 def ws_devices(hass, connection, msg):
     """List configured Pimoroni Unicorn devices."""
+    dev_reg = dr.async_get(hass)
     devices = []
     for entry in hass.config_entries.async_entries(DOMAIN):
         opts = {**entry.data, **entry.options}
+        regs = dr.async_entries_for_config_entry(dev_reg, entry.entry_id)
         devices.append({
             "entry_id":  entry.entry_id,
             "device_id": opts.get(CONF_DEVICE_ID, ""),
+            "registry_id": regs[0].id if regs else "",
             "model":     _model_key(entry),
             "name":      entry.title,
             "active_layout": opts.get(layout.CONF_ACTIVE_LAYOUT),
@@ -572,6 +597,13 @@ async def ws_icons(hass, connection, msg):
         return {n: render_service.render_icon_thumb(registry[n]) for n in installed}
 
     thumbs = await hass.async_add_executor_job(_thumbs)
+    dims = {n: [int(registry[n].get("w", 8)), int(registry[n].get("h", 8))] for n in installed}
+    trunc = {}
+    for n in installed:
+        kept = len(registry[n].get("frames") or [])
+        total = int(registry[n].get("n_total", kept))
+        if total > kept:
+            trunc[n] = [kept, total]
     device_installed = []
     if msg.get("entry_id"):
         files = (_fw_manifest(hass, msg["entry_id"]) or {}).get("files") or {}
@@ -580,6 +612,8 @@ async def ws_icons(hass, connection, msg):
         "builtin": render_service.builtin_icon_names(),
         "installed": installed,
         "thumbs": thumbs,
+        "dims": dims,
+        "trunc": trunc,
         "device_installed": device_installed,
     })
 
@@ -607,15 +641,31 @@ def _icon_meta(icon: dict) -> dict:
             "n_total": icon.get("n_total"), "n_kept": icon.get("n_kept")}
 
 
+def _oversize_blocked(hass, connection, msg, icon) -> bool:
+    """Send an oversize error and return True if the icon is too big for a target device."""
+    if msg.get("allow_oversize"):
+        return False
+    blocked = _oversize_targets(hass, int(icon["w"]), int(icon["h"]), msg.get("entry_ids"))
+    if not blocked:
+        return False
+    connection.send_error(msg["id"], "oversize",
+        f"{icon['w']}×{icon['h']} is larger than: {', '.join(blocked)}. "
+        "Reduce the size, or enable test mode to push it anyway.")
+    return True
+
+
 @websocket_api.websocket_command({
     vol.Required("type"): WS_ICON_UPLOAD,
     vol.Required("name"): str,
     vol.Required("data"): str,
+    vol.Optional("max_w"): vol.Coerce(int),
+    vol.Optional("max_h"): vol.Coerce(int),
+    vol.Optional("allow_oversize"): bool,
     vol.Optional("entry_ids"): [str],
 })
 @websocket_api.async_response
 async def ws_icon_upload(hass, connection, msg):
-    """Decode an uploaded image/GIF, auto-fit it to the panel, and install it."""
+    """Decode an uploaded image/GIF, fit it to the chosen size, and install it."""
     try:
         raw = base64.b64decode(msg["data"], validate=True)
     except (ValueError, binascii.Error):
@@ -624,9 +674,11 @@ async def ws_icon_upload(hass, connection, msg):
     if len(raw) > lametric.MAX_UPLOAD_BYTES:
         connection.send_error(msg["id"], "too_large", "That image file is too large")
         return
-    icon = await lametric.async_decode_upload(hass, raw)
+    icon = await lametric.async_decode_upload(hass, raw, msg.get("max_w"), msg.get("max_h"))
     if not icon:
         connection.send_error(msg["id"], "decode_failed", "Could not read that image")
+        return
+    if _oversize_blocked(hass, connection, msg, icon):
         return
     sent = await lametric.async_install_icon(hass, msg["name"], icon, msg.get("entry_ids"))
     connection.send_result(msg["id"], {"ok": True, "sent": sent, **_icon_meta(icon)})
@@ -636,17 +688,57 @@ async def ws_icon_upload(hass, connection, msg):
     vol.Required("type"): WS_ICON_URL,
     vol.Required("name"): str,
     vol.Required("url"): str,
+    vol.Optional("max_w"): vol.Coerce(int),
+    vol.Optional("max_h"): vol.Coerce(int),
+    vol.Optional("allow_oversize"): bool,
     vol.Optional("entry_ids"): [str],
 })
 @websocket_api.async_response
 async def ws_icon_url(hass, connection, msg):
-    """Fetch an image/GIF by URL, auto-fit it to the panel, and install it."""
-    icon = await lametric.async_fetch_image(hass, msg["url"])
+    """Fetch an image/GIF by URL, fit it to the chosen size, and install it."""
+    icon = await lametric.async_fetch_image(hass, msg["url"], msg.get("max_w"), msg.get("max_h"))
     if not icon:
         connection.send_error(msg["id"], "fetch_failed", "Could not fetch or read that image URL")
         return
+    if _oversize_blocked(hass, connection, msg, icon):
+        return
     sent = await lametric.async_install_icon(hass, msg["name"], icon, msg.get("entry_ids"))
     connection.send_result(msg["id"], {"ok": True, "sent": sent, **_icon_meta(icon)})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): WS_ICON_DECODE,
+    vol.Optional("data"): str,
+    vol.Optional("url"): str,
+    vol.Optional("max_w"): vol.Coerce(int),
+    vol.Optional("max_h"): vol.Coerce(int),
+})
+@websocket_api.async_response
+async def ws_icon_decode(hass, connection, msg):
+    """Decode a source image (upload or URL) to a PNG for the editor canvas; no install."""
+    if msg.get("data"):
+        try:
+            raw = base64.b64decode(msg["data"], validate=True)
+        except (ValueError, binascii.Error):
+            connection.send_error(msg["id"], "bad_image", "Could not decode the uploaded image")
+            return
+        if len(raw) > lametric.MAX_UPLOAD_BYTES:
+            connection.send_error(msg["id"], "too_large", "That image file is too large")
+            return
+        icon = await lametric.async_decode_upload(hass, raw, msg.get("max_w"), msg.get("max_h"))
+    elif msg.get("url"):
+        icon = await lametric.async_fetch_image(hass, msg["url"], msg.get("max_w"), msg.get("max_h"))
+    else:
+        connection.send_error(msg["id"], "no_source", "Provide data or url")
+        return
+    if not icon:
+        connection.send_error(msg["id"], "decode_failed", "Could not read that image")
+        return
+    png = render_service.first_frame_png(icon)
+    if not png:
+        connection.send_error(msg["id"], "decode_failed", "Could not read that image")
+        return
+    connection.send_result(msg["id"], {"png": png, "w": icon["w"], "h": icon["h"]})
 
 
 @websocket_api.websocket_command({
@@ -664,10 +756,20 @@ async def ws_icon_remove(hass, connection, msg):
     vol.Required("type"): WS_ICON_PUSH,
     vol.Required("entry_id"): str,
     vol.Required("name"): str,
+    vol.Optional("allow_oversize"): bool,
 })
 @websocket_api.async_response
 async def ws_icon_push(hass, connection, msg):
-    """Install an already-registered icon onto a single device."""
+    """Install an already-registered icon onto a single device (blocks oversize by default)."""
+    if not msg.get("allow_oversize"):
+        icon = (await lametric.async_get_registry(hass)).get(msg["name"])
+        if icon:
+            dw, dh = _device_dims(hass, msg["entry_id"])
+            if int(icon.get("w", 8)) > dw or int(icon.get("h", 8)) > dh:
+                connection.send_error(msg["id"], "oversize",
+                    f"{msg['name']} ({icon.get('w')}×{icon.get('h')}) is larger than this "
+                    f"device ({dw}×{dh}). Enable test mode to push it anyway.")
+                return
     ok = await lametric.async_push_icon_to_device(hass, msg["name"], msg["entry_id"])
     connection.send_result(msg["id"], {"ok": ok})
 

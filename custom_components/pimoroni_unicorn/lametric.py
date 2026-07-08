@@ -22,13 +22,11 @@ from .const import CONF_DEVICE_ID, DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 ICON_SIZE       = 8
-# Largest supported footprint across models (galactic 53×11, cosmic 32×32); imported
-# icons auto-fit within this and clip to the target screen at render time.
 MAX_ICON_W      = 53
 MAX_ICON_H      = 32
 MAX_FRAMES      = 64
-MAX_ICON_BYTES  = 24 * 1024          # decoded RGB budget per icon; protects Pico RAM
-MAX_UPLOAD_BYTES = 2 * 1024 * 1024   # reject oversized source files before decode
+MAX_ICON_BYTES  = 24 * 1024
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 ICON_THUMB_URL  = "https://developer.lametric.com/content/apps/icon_thumbs/{code}"
 STORAGE_KEY     = f"{DOMAIN}_icons"
 STORAGE_VERSION = 1
@@ -48,18 +46,22 @@ async def async_fetch_icon(hass: HomeAssistant, code: int) -> dict[str, Any] | N
     return icon
 
 
-async def async_decode_upload(hass: HomeAssistant, raw: bytes) -> dict[str, Any] | None:
-    """Decode an uploaded image/GIF to frames, auto-fitting within the largest panel."""
+async def async_decode_upload(hass: HomeAssistant, raw: bytes,
+                              max_w: int | None = None,
+                              max_h: int | None = None) -> dict[str, Any] | None:
+    """Decode an uploaded image/GIF to frames, auto-fitting within the given (or largest) box."""
+    bw = min(max_w or MAX_ICON_W, MAX_ICON_W)
+    bh = min(max_h or MAX_ICON_H, MAX_ICON_H)
     try:
-        return await hass.async_add_executor_job(
-            _decode_image, raw, MAX_ICON_W, MAX_ICON_H, None)
+        return await hass.async_add_executor_job(_decode_image, raw, bw, bh, None)
     except (OSError, ValueError, KeyError) as err:
         _LOGGER.error("Icon image decode failed: %s", err)
         return None
 
 
-async def async_fetch_image(hass: HomeAssistant, url: str) -> dict[str, Any] | None:
-    """Fetch an image/GIF by URL and decode it, auto-fitting within the largest panel."""
+async def async_fetch_image(hass: HomeAssistant, url: str, max_w: int | None = None,
+                            max_h: int | None = None) -> dict[str, Any] | None:
+    """Fetch an image/GIF by URL and decode it, auto-fitting within the given (or largest) box."""
     try:
         await hass.async_add_executor_job(_validate_public_url, url)
     except (ValueError, OSError) as err:
@@ -71,7 +73,7 @@ async def async_fetch_image(hass: HomeAssistant, url: str) -> dict[str, Any] | N
     if len(raw) > MAX_UPLOAD_BYTES:
         _LOGGER.error("Icon URL image too large (%d bytes): %s", len(raw), url)
         return None
-    return await async_decode_upload(hass, raw)
+    return await async_decode_upload(hass, raw, max_w, max_h)
 
 
 def _validate_public_url(url: str) -> None:
@@ -145,7 +147,7 @@ async def async_get_registry(hass: HomeAssistant) -> dict[str, Any]:
     return domain_data["_icon_registry"]
 
 
-_STORABLE = ("code", "frames", "durations", "w", "h")
+_STORABLE = ("code", "frames", "durations", "w", "h", "n_total")
 
 
 async def async_install_icon(hass: HomeAssistant, name: str, icon: dict[str, Any],

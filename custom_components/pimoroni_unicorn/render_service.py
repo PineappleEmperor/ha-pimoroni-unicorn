@@ -112,18 +112,48 @@ def builtin_icon_names() -> list[str]:
 
 
 def render_icon_thumb(icon: dict) -> str | None:
-    """First frame of a stored icon at its native w×h as a base64 PNG."""
+    """Stored icon as a base64 GIF at native w×h — animated when it has multiple frames."""
+    icon = icon or {}
+    frames_b64 = icon.get("frames") or []
+    if not frames_b64:
+        return None
+    w = int(icon.get("w", 8))
+    h = int(icon.get("h", 8))
+    need = w * h * 3
+    from PIL import Image
+
+    imgs = []
+    for fr in frames_b64:
+        try:
+            raw = base64.b64decode(fr)
+        except (ValueError, binascii.Error):
+            return None
+        if len(raw) < need:
+            return None
+        imgs.append(Image.frombytes("RGB", (w, h), raw[:need]))
+    durations = [int(d) if int(d) > 0 else 100 for d in (icon.get("durations") or [])]
+    buf = io.BytesIO()
+    if len(imgs) > 1:
+        imgs[0].save(buf, format="GIF", save_all=True, append_images=imgs[1:],
+                     duration=durations or 100, loop=0, disposal=2)
+    else:
+        imgs[0].save(buf, format="GIF")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def first_frame_png(icon: dict) -> str | None:
+    """Frame 0 of a stored icon at its native w×h as a base64 PNG (for the editor canvas)."""
     icon = icon or {}
     frames = icon.get("frames") or []
     if not frames:
         return None
     w = int(icon.get("w", 8))
     h = int(icon.get("h", 8))
+    need = w * h * 3
     try:
         raw = base64.b64decode(frames[0])
     except (ValueError, binascii.Error):
         return None
-    need = w * h * 3
     if len(raw) < need:
         return None
     from PIL import Image

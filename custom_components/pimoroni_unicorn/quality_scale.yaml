@@ -7,9 +7,7 @@ rules:
     comment: Local push over MQTT; no polling.
   brands: done
   common-modules: done
-  config-flow-test-coverage:
-    status: todo
-    comment: No tests yet.
+  config-flow-test-coverage: done
   config-flow: done
   dependency-transparency: done
   docs-actions: done
@@ -37,8 +35,11 @@ rules:
     comment: No authentication to the device beyond MQTT broker creds (HA-managed).
   parallel-updates: done
   test-coverage:
-    status: todo
-    comment: No test suite yet.
+    status: done
+    comment: >-
+      Suite covers config/options flows, setup+unload, MQTT message handlers, services, the
+      websocket API, render_service, lametric (incl. SSRF), marketplace, update, and repair
+      problems. A pytest-cov gate (--cov-fail-under=95) in python_validate.yml enforces it.
   integration-owner: done
   docs-installation-parameters: done
   docs-configuration-parameters: done
@@ -77,4 +78,7 @@ rules:
     comment: LaMetric icon fetch uses async_get_clientsession; OTA pulls run device-side.
   strict-typing:
     status: todo
-    comment: pyright standard passes; not strict mode yet.
+    comment: >-
+      pyright standard passes clean; strict mode floods with reportUnknown*/partially-unknown
+      from Home Assistant's own untyped APIs (dicts, helpers) — not achievable without pervasive
+      casts/type: ignore. Revisit if HA ships fuller type coverage.

@@ -1,5 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { property, state } from "lit/decorators.js";
+import "./pixel-editor";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
@@ -8,7 +9,7 @@ interface WidgetCap { id: string; label: string; w: number; h: number; variants:
 interface OverlayCap { id: string; label: string; }
 interface WidgetEntry { id: string; type?: string; name?: string; x: number; y: number; cfg?: Record<string, unknown>; enabled?: boolean; }
 interface Layout { name?: string; model?: string; grid?: number; widgets: WidgetEntry[]; overlays?: string[]; }
-interface Device { entry_id: string; device_id: string; model: string; name: string; active_layout?: string; }
+interface Device { entry_id: string; device_id: string; registry_id?: string; model: string; name: string; active_layout?: string; }
 interface CatalogWidget { id: string; label: string; kind: string; requires: string[]; device_file: string; hash: string; status: string; thumb?: string; }
 interface ContentUnit { id: string; label: string; kind: string; compat: string[]; requires: string[]; screens: number; compatible: boolean; thumb?: string; }
 interface FontSpec { name: string; label: string; kind: "alpha" | "digits"; w: number; h: number; builtin?: boolean; sample: string; installed?: boolean; device_file?: string; }
@@ -105,7 +106,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private wireframe = false;
   @state() private locked = false;
   @state() private status = "";
-  @state() private tab: "layout" | "market" | "edit" | "screens" = "layout";
+  @state() private tab: "layout" | "market" | "edit" | "screens" | "paint" = "layout";
   @state() private catalog: CatalogWidget[] = [];
   @state() private busyUnits: Record<string, string> = {};
   @state() private fwManifest: FwManifest | null = null;
@@ -125,6 +126,11 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private iconFileData = "";     // base64 of a chosen image/GIF (no data: prefix)
   @state() private iconFilePreview = "";  // data URL for the local preview thumbnail
   @state() private iconImportNote = "";
+  @state() private iconDims: Record<string, [number, number]> = {};
+  @state() private iconTrunc: Record<string, [number, number]> = {};  // name -> [kept, total] frames
+  @state() private iconSizeMode: "device" | "native" | "custom" = "device";
+  @state() private iconCustomW = 16;
+  @state() private iconCustomH = 16;
   @state() private fonts: FontSpec[] = [];
   @state() private fontText = "";
   @state() private fontPngs: Record<string, string> = {};
@@ -208,7 +214,15 @@ export class PimoroniUnicornPanel extends LitElement {
       background: var(--pu-surface); box-shadow: 0 1px 3px rgba(0,0,0,.12);
     }
     .brand { font-size: 16px; font-weight: 600; letter-spacing: .2px; margin-right: 4px; }
+    .devlink { font-size: 14px; color: var(--pu-primary, var(--primary-color)); text-decoration: none;
+               padding: 6px 8px; border-radius: 8px; min-height: 40px; display: inline-flex; align-items: center; }
+    .devlink:hover { background: rgba(127,127,127,.12); }
     .grow { flex: 1; }
+    .warnbanner { margin-bottom: 12px; padding: 10px 14px; border-radius: var(--pu-radius, 12px);
+      background: color-mix(in srgb, var(--warning-color, #f4a100) 16%, transparent);
+      border: 1px solid var(--warning-color, #f4a100); font-size: 14px; }
+    .warnbanner ul { margin: 6px 0 0; padding-left: 20px; }
+    .warnbanner li { margin: 2px 0; }
     .chip {
       font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 14px;
       background: color-mix(in srgb, var(--pu-primary) 12%, transparent); color: var(--pu-primary);
@@ -363,6 +377,8 @@ export class PimoroniUnicornPanel extends LitElement {
       this.iconNames = [...(r.builtin ?? []), ...(r.installed ?? [])];
       this.installedIcons = r.installed ?? [];
       this.iconThumbs = r.thumbs ?? {};
+      this.iconDims = r.dims ?? {};
+      this.iconTrunc = r.trunc ?? {};
       this.deviceIcons = r.device_installed ?? [];
     } catch { /* icons list optional */ }
   }
@@ -373,10 +389,20 @@ export class PimoroniUnicornPanel extends LitElement {
     window.setTimeout(() => this.loadIcons(), 1500);
     window.setTimeout(() => this.loadIcons(), 4000);
   }
-  private async pushIconToDevice(name: string) {
+  // An icon is oversize when it's wider or taller than the selected device's screen.
+  private iconOversize(name: string): boolean {
+    const d = this.iconDims[name];
+    return !!d && (d[0] > this.dims[0] || d[1] > this.dims[1]);
+  }
+  private async pushIconToDevice(name: string, allowOversize = false) {
     if (!this.entryId) return;
+    if (this.iconOversize(name) && !allowOversize) {
+      const d = this.iconDims[name];
+      if (!confirm(`⚠️ TEST MODE — "${name}" is ${d[0]}×${d[1]}, larger than this device (${this.dims[0]}×${this.dims[1]}).\n\nPushing an oversize icon can hang or crash the device until it is power-cycled. Only do this to test. Continue?`)) return;
+      allowOversize = true;
+    }
     try {
-      await this.hass.callWS({ type: "pimoroni_unicorn/icon_push", entry_id: this.entryId, name });
+      await this.hass.callWS({ type: "pimoroni_unicorn/icon_push", entry_id: this.entryId, name, allow_oversize: allowOversize });
       this.status = `Installing "${name}" on this device…`;
       this.reloadIconsSoon();
     } catch (e) { this.status = `Install failed: ${(e as { message?: string })?.message ?? e}`; }
@@ -443,10 +469,14 @@ export class PimoroniUnicornPanel extends LitElement {
     const url = this.iconUrl.trim();
     if (!name || (!hasFile && !url)) return;
     const entry_ids = this.iconTargetIds();
+    const fit = this.iconSizeMode === "device" ? { max_w: this.dims[0], max_h: this.dims[1] }
+      : this.iconSizeMode === "custom"
+        ? { max_w: Math.max(1, this.iconCustomW | 0), max_h: Math.max(1, this.iconCustomH | 0) }
+        : {};  // native: no cap beyond the device-memory maximum
     try {
       const r = (hasFile
-        ? await this.hass.callWS({ type: "pimoroni_unicorn/icon_upload", name, data: this.iconFileData, entry_ids })
-        : await this.hass.callWS({ type: "pimoroni_unicorn/icon_url", name, url, entry_ids })
+        ? await this.hass.callWS({ type: "pimoroni_unicorn/icon_upload", name, data: this.iconFileData, ...fit, entry_ids })
+        : await this.hass.callWS({ type: "pimoroni_unicorn/icon_url", name, url, ...fit, entry_ids })
       ) as { ok?: boolean; sent?: string[]; w?: number; h?: number; n_kept?: number; n_total?: number };
       const sent = r.sent ?? [];
       const size = r.w && r.h ? ` ${r.w}×${r.h}` : "";
@@ -585,6 +615,7 @@ export class PimoroniUnicornPanel extends LitElement {
     await this.loadCaps({ entry_id: entryId });
     this.loadIcons();
     this.loadFonts();  // refresh per-device font install state
+    this.loadCatalog();  // refresh available pages/screens + engine version for this device
     const active = dev.active_layout ? this.stored[dev.active_layout] : undefined;
     this.loadLayout(active ?? this.defaultLayout);
     this._applyPendingDraft();
@@ -595,6 +626,7 @@ export class PimoroniUnicornPanel extends LitElement {
     this.entryId = "";
     await this.loadCaps({ model });
     this.loadIcons();
+    this.loadCatalog();  // clears device catalog; refreshes shareable content list
     this.loadLayout(this.defaultLayout);
     this._applyPendingDraft();
   }
@@ -1035,11 +1067,46 @@ export class PimoroniUnicornPanel extends LitElement {
     `;
   }
 
-  private switchTab(tab: "layout" | "market" | "edit" | "screens"): void {
+  private switchTab(tab: "layout" | "market" | "edit" | "screens" | "paint"): void {
     this.tab = tab;
     if (tab === "market") this.loadCatalog();
     else if (tab === "edit") this.previewSpec();
     else if (tab === "screens") this.buildScreenPreview();
+  }
+
+  private _devicePageHref(): string {
+    const rid = this.devices.find((d) => d.entry_id === this.entryId)?.registry_id;
+    return rid ? `/config/devices/device/${rid}` : "";
+  }
+
+  // Items on the current page that won't render right on the selected device:
+  // an oversize icon, or a widget whose box runs past the screen edge.
+  private _displayProblems(): string[] {
+    if (!this.entryId) return [];
+    const [dw, dh] = this.dims;
+    const out: string[] = [];
+    this.layout.widgets.forEach((wdg, i) => {
+      if (wdg.enabled === false) return;
+      const type = wdg.type ?? wdg.id;
+      if (type === "icon") {
+        const name = wdg.cfg?.icon as string | undefined;
+        const d = name ? this.iconDims[name] : undefined;
+        if (d && (d[0] > dw || d[1] > dh)) {
+          out.push(`Icon “${name}” (${d[0]}×${d[1]}) is bigger than the ${dw}×${dh} screen`);
+          return;
+        }
+        const t = name ? this.iconTrunc[name] : undefined;
+        if (t) {
+          out.push(`Icon “${name}” animation was trimmed to ${t[0]} of ${t[1]} frames to fit`);
+          return;
+        }
+      }
+      const box = this.wboxes[i];
+      if (box && box[0] && box[1] && (wdg.x + box[0] > dw || wdg.y + box[1] > dh)) {
+        out.push(`“${this.capFor(type)?.label ?? type}” runs off the screen`);
+      }
+    });
+    return out;
   }
 
   private _appBar() {
@@ -1053,6 +1120,9 @@ export class PimoroniUnicornPanel extends LitElement {
             ${this.devices.map((d) => html`<option value=${d.entry_id} ?selected=${d.entry_id === this.entryId}>${d.name}</option>`)}
           </select>
         </label>
+        ${this._devicePageHref()
+          ? html`<a class="devlink" href=${this._devicePageHref()} title="Open this device's Home Assistant page (settings, diagnostics, entities)">⚙ Device page</a>`
+          : ""}
         ${!this.entryId
           ? html`<label>Model
               <select @change=${(e: Event) => this.selectMock((e.target as HTMLSelectElement).value)}>
@@ -1068,18 +1138,25 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   render() {
+    const problems = this._displayProblems();
     return html`
       ${this._appBar()}
       <div class="tabs">
         <button class="tab ${this.tab === "layout" ? "on" : ""}" @click=${() => this.switchTab("layout")}>Designer</button>
         <button class="tab ${this.tab === "market" ? "on" : ""}" @click=${() => this.switchTab("market")}>Marketplace</button>
         <button class="tab ${this.tab === "edit" ? "on" : ""}" @click=${() => this.switchTab("edit")}>Widget editor</button>
+        <button class="tab ${this.tab === "paint" ? "on" : ""}" @click=${() => this.switchTab("paint")}>Icon editor</button>
         <button class="tab ${this.tab === "screens" ? "on" : ""}" @click=${() => this.switchTab("screens")}>Playlists</button>
       </div>
       ${this.status ? html`<div class="status ${/fail/i.test(this.status) ? "err" : ""}" role="status" aria-live="polite">${this.status}</div>` : ""}
+      ${problems.length ? html`<div class="warnbanner" role="alert">
+        <strong>⚠ ${problems.length} item${problems.length > 1 ? "s" : ""} on this page may not display on this device:</strong>
+        <ul>${problems.map((p) => html`<li>${p}</li>`)}</ul>
+      </div>` : ""}
       ${!this.devices.length ? html`<div class="firstrun">No Pimoroni Unicorn device connected yet — you're previewing on a mock ${this.model}. Add one under <strong>Settings → Devices &amp; Services</strong>, then pick it above to install content and push live.</div>` : ""}
       ${this.tab === "market" ? this._marketplaceView()
         : this.tab === "edit" ? this._editorView()
+        : this.tab === "paint" ? this._paintView()
         : this.tab === "screens" ? this._screensView()
         : this._layoutView()}
     `;
@@ -1478,6 +1555,20 @@ export class PimoroniUnicornPanel extends LitElement {
                 @input=${(e: Event) => { this.iconUrl = (e.target as HTMLInputElement).value; this.iconFileData = ""; this.iconFilePreview = ""; }} />
             </div>
             <div class="panelrow">
+              <label>Size</label>
+              <select @change=${(e: Event) => { this.iconSizeMode = (e.target as HTMLSelectElement).value as "device" | "native" | "custom"; }}>
+                <option value="device" ?selected=${this.iconSizeMode === "device"}>Device screen (${this.dims[0]}×${this.dims[1]})</option>
+                <option value="native" ?selected=${this.iconSizeMode === "native"}>Native (keep source)</option>
+                <option value="custom" ?selected=${this.iconSizeMode === "custom"}>Custom</option>
+              </select>
+              ${this.iconSizeMode === "custom" ? html`
+                <input type="number" min="1" max="53" style="width:56px" .value=${String(this.iconCustomW)}
+                  @input=${(e: Event) => { this.iconCustomW = parseInt((e.target as HTMLInputElement).value, 10) || 1; }} />
+                <span>×</span>
+                <input type="number" min="1" max="32" style="width:56px" .value=${String(this.iconCustomH)}
+                  @input=${(e: Event) => { this.iconCustomH = parseInt((e.target as HTMLInputElement).value, 10) || 1; }} />` : ""}
+            </div>
+            <div class="panelrow">
               <label>Name</label>
               <input style="width:120px" .value=${this.iconImgName}
                 @input=${(e: Event) => { this.iconImgName = (e.target as HTMLInputElement).value; }} />
@@ -1495,16 +1586,24 @@ export class PimoroniUnicornPanel extends LitElement {
               const onDevice = this.deviceIcons.includes(n);
               return html`<div class="iconrow">
               ${this.iconThumbs[n]
-                ? html`<img class="iconthumb" alt="" src="data:image/png;base64,${this.iconThumbs[n]}" />`
+                ? html`<img class="iconthumb" alt="" src="data:image/gif;base64,${this.iconThumbs[n]}" />`
                 : html`<div class="iconthumb empty"></div>`}
-              <span class="grow">${n}</span>
+              <span class="grow">${n}${this.iconDims[n]
+                ? html` <span class="hint">${this.iconDims[n][0]}×${this.iconDims[n][1]}</span>` : ""}
+                ${this.iconTrunc[n]
+                  ? html`<span class="badge warn" title="Its source had more frames than fit the device budget">trimmed ${this.iconTrunc[n][0]}/${this.iconTrunc[n][1]} frames</span>` : ""}
+                ${this.entryId && this.iconOversize(n)
+                  ? html`<span class="badge warn" title="Larger than this device (${this.dims[0]}×${this.dims[1]}) — won't fit and may hang it">too big for this device</span>` : ""}</span>
               ${this.entryId
                 ? (onDevice
                   ? html`<span class="badge ok">on this device</span>
                       <button class="secondary" title="Take this icon off the selected device (stays in the library)"
                         @click=${() => this.removeIconFromDevice(n)}>Remove from device</button>`
-                  : html`<button class="secondary" title="Push this icon to the selected device"
-                      @click=${() => this.pushIconToDevice(n)}>Install on device</button>`)
+                  : this.iconOversize(n)
+                    ? html`<button class="danger" title="This icon is larger than the device screen. Pushing it is for testing only and may hang the device."
+                        @click=${() => this.pushIconToDevice(n)}>Test on device ⚠</button>`
+                    : html`<button class="secondary" title="Push this icon to the selected device"
+                        @click=${() => this.pushIconToDevice(n)}>Install on device</button>`)
                 : ""}
               <button class="danger" title="Delete from the library and every device"
                 @click=${() => this.removeIcon(n)}>Delete everywhere</button></div>`;
@@ -1662,6 +1761,39 @@ export class PimoroniUnicornPanel extends LitElement {
         ${OP_TYPES.map((t) => html`<button class="addchip" title=${OP_META[t]?.desc ?? ""} @click=${() => this.addOp(t)}>+ ${OP_META[t]?.label ?? t}</button>`)}
       </div>
     `;
+  }
+
+  private _paintView() {
+    return html`<div class="pane">
+      <p class="hint">Paint an icon at this device's resolution, or load an image and edit it. Black = off (checkerboard). Saves to your icon library.</p>
+      <pixel-editor .w=${this.dims[0]} .h=${this.dims[1]}
+        .decode=${this._iconDecode}
+        @save=${(e: CustomEvent) => this._saveEditorIcon(e.detail)}></pixel-editor>
+    </div>`;
+  }
+
+  private _iconDecode = async (req: { data?: string; url?: string; maxW: number; maxH: number }) => {
+    return (await this.hass.callWS({
+      type: "pimoroni_unicorn/icon_decode",
+      data: req.data, url: req.url, max_w: req.maxW, max_h: req.maxH,
+    })) as { png: string; w: number; h: number };
+  };
+
+  private async _saveEditorIcon(detail: { name: string; dataUrl: string; w: number; h: number }) {
+    const data = detail.dataUrl.slice(detail.dataUrl.indexOf(",") + 1);
+    const entry_ids = this.iconTargetIds();
+    try {
+      const r = (await this.hass.callWS({
+        type: "pimoroni_unicorn/icon_upload", name: detail.name, data,
+        max_w: detail.w, max_h: detail.h, entry_ids,
+      })) as { sent?: string[] };
+      const sent = r.sent ?? [];
+      this.status = sent.length ? `Saved "${detail.name}" → ${sent.join(", ")}.`
+        : `Saved "${detail.name}" (no devices to push to).`;
+      this.reloadIconsSoon();
+    } catch (e) {
+      this.status = `Save failed: ${(e as { message?: string })?.message ?? e}`;
+    }
   }
 
   private _editorView() {
