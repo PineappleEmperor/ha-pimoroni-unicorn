@@ -55,6 +55,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     base = args.base_ref
+    if not _git("rev-parse", "--verify", "--quiet", base).strip():
+        print(f"ENGINE_VERSION gate: base ref {base!r} does not resolve — cannot diff (fetch it first)")
+        return 1
     changed = [f for f in _git("diff", "--name-only", f"{base}...HEAD").splitlines()
                if f in engine_paths()]
     head_ver = _engine_version((ROOT / "firmware" / "engine" / "version.py").read_text())
