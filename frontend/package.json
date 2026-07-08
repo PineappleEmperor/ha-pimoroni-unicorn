@@ -1,6 +1,6 @@
 {
   "name": "pimoroni-unicorn-panel",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "Layout editor panel for the Pimoroni Unicorn Home Assistant integration",
   "type": "module",
