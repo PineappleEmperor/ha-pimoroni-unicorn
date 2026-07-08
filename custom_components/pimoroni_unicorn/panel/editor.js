@@ -113,6 +113,11 @@ var Ut=Object.defineProperty;var jt=Object.getOwnPropertyDescriptor;var p=(c,i,t
                padding: 6px 8px; border-radius: 8px; min-height: 40px; display: inline-flex; align-items: center; }
     .devlink:hover { background: rgba(127,127,127,.12); }
     .grow { flex: 1; }
+    .warnbanner { margin-bottom: 12px; padding: 10px 14px; border-radius: var(--pu-radius, 12px);
+      background: color-mix(in srgb, var(--warning-color, #f4a100) 16%, transparent);
+      border: 1px solid var(--warning-color, #f4a100); font-size: 14px; }
+    .warnbanner ul { margin: 6px 0 0; padding-left: 20px; }
+    .warnbanner li { margin: 2px 0; }
     .chip {
       font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 14px;
       background: color-mix(in srgb, var(--pu-primary) 12%, transparent); color: var(--pu-primary);
@@ -299,7 +304,7 @@ Pushing an oversize icon can hang or crash the device until it is power-cycled. 
               @change=${a=>this.setCfg(t,s.key,a.target.value)} /></div>`:o`<div class="panelrow"><label>${s.label??s.key}</label>
           ${this.colorCtl(this.cfgVal(t,s.key)??[255,255,255],a=>this.setCfg(t,s.key,a))}</div>`})}
       <div class="panelrow"><button class="danger" @click=${()=>this.removeWidget(this.selected)}>Remove widget</button></div>
-    `:""}switchTab(t){this.tab=t,t==="market"?this.loadCatalog():t==="edit"?this.previewSpec():t==="screens"&&this.buildScreenPreview()}_devicePageHref(){let t=this.devices.find(e=>e.entry_id===this.entryId)?.registry_id;return t?`/config/devices/device/${t}`:""}_appBar(){let t=this.devices.find(e=>e.entry_id===this.entryId);return o`
+    `:""}switchTab(t){this.tab=t,t==="market"?this.loadCatalog():t==="edit"?this.previewSpec():t==="screens"&&this.buildScreenPreview()}_devicePageHref(){let t=this.devices.find(e=>e.entry_id===this.entryId)?.registry_id;return t?`/config/devices/device/${t}`:""}_displayProblems(){if(!this.entryId)return[];let[t,e]=this.dims,s=[];return this.layout.widgets.forEach((n,r)=>{if(n.enabled===!1)return;let a=n.type??n.id;if(a==="icon"){let d=n.cfg?.icon,g=d?this.iconDims[d]:void 0;if(g&&(g[0]>t||g[1]>e)){s.push(`Icon \u201C${d}\u201D (${g[0]}\xD7${g[1]}) is bigger than the ${t}\xD7${e} screen`);return}}let l=this.wboxes[r];l&&l[0]&&l[1]&&(n.x+l[0]>t||n.y+l[1]>e)&&s.push(`\u201C${this.capFor(a)?.label??a}\u201D runs off the screen`)}),s}_appBar(){let t=this.devices.find(e=>e.entry_id===this.entryId);return o`
       <div class="appbar">
         <span class="brand">Pimoroni Unicorn</span>
         <label>Device
@@ -318,7 +323,7 @@ Pushing an oversize icon can hang or crash the device until it is power-cycled. 
         ${this.dirty?o`<span class="chip warn">unsaved changes</span>`:""}
         ${this.fwManifest?.engine_version?o`<span class="hint">engine v${this.fwManifest.engine_version}</span>`:""}
         <a class="help" href="https://github.com/PineappleEmperor/ha-pimoroni-unicorn#readme" target="_blank" rel="noopener noreferrer" title="Open the documentation in a new tab">Help</a>
-      </div>`}render(){return o`
+      </div>`}render(){let t=this._displayProblems();return o`
       ${this._appBar()}
       <div class="tabs">
         <button class="tab ${this.tab==="layout"?"on":""}" @click=${()=>this.switchTab("layout")}>Designer</button>
@@ -328,6 +333,10 @@ Pushing an oversize icon can hang or crash the device until it is power-cycled. 
         <button class="tab ${this.tab==="screens"?"on":""}" @click=${()=>this.switchTab("screens")}>Playlists</button>
       </div>
       ${this.status?o`<div class="status ${/fail/i.test(this.status)?"err":""}" role="status" aria-live="polite">${this.status}</div>`:""}
+      ${t.length?o`<div class="warnbanner" role="alert">
+        <strong>⚠ ${t.length} item${t.length>1?"s":""} on this page may not display on this device:</strong>
+        <ul>${t.map(e=>o`<li>${e}</li>`)}</ul>
+      </div>`:""}
       ${this.devices.length?"":o`<div class="firstrun">No Pimoroni Unicorn device connected yet — you're previewing on a mock ${this.model}. Add one under <strong>Settings → Devices &amp; Services</strong>, then pick it above to install content and push live.</div>`}
       ${this.tab==="market"?this._marketplaceView():this.tab==="edit"?this._editorView():this.tab==="paint"?this._paintView():this.tab==="screens"?this._screensView():this._layoutView()}
     `}_layoutView(){let t=this.pxScale,e=new Set(this.layout.widgets.map(a=>this.typeOf(a))),s=this.caps.filter(a=>a.multi||!e.has(a.id)),n=new Set(this.layout.overlays??[]),r=`background-image:linear-gradient(to right,rgba(255,255,255,.10) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.10) 1px,transparent 1px);background-size:${t}px ${t}px`;return o`

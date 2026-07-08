@@ -217,6 +217,11 @@ export class PimoroniUnicornPanel extends LitElement {
                padding: 6px 8px; border-radius: 8px; min-height: 40px; display: inline-flex; align-items: center; }
     .devlink:hover { background: rgba(127,127,127,.12); }
     .grow { flex: 1; }
+    .warnbanner { margin-bottom: 12px; padding: 10px 14px; border-radius: var(--pu-radius, 12px);
+      background: color-mix(in srgb, var(--warning-color, #f4a100) 16%, transparent);
+      border: 1px solid var(--warning-color, #f4a100); font-size: 14px; }
+    .warnbanner ul { margin: 6px 0 0; padding-left: 20px; }
+    .warnbanner li { margin: 2px 0; }
     .chip {
       font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 14px;
       background: color-mix(in srgb, var(--pu-primary) 12%, transparent); color: var(--pu-primary);
@@ -1072,6 +1077,31 @@ export class PimoroniUnicornPanel extends LitElement {
     return rid ? `/config/devices/device/${rid}` : "";
   }
 
+  // Items on the current page that won't render right on the selected device:
+  // an oversize icon, or a widget whose box runs past the screen edge.
+  private _displayProblems(): string[] {
+    if (!this.entryId) return [];
+    const [dw, dh] = this.dims;
+    const out: string[] = [];
+    this.layout.widgets.forEach((wdg, i) => {
+      if (wdg.enabled === false) return;
+      const type = wdg.type ?? wdg.id;
+      if (type === "icon") {
+        const name = wdg.cfg?.icon as string | undefined;
+        const d = name ? this.iconDims[name] : undefined;
+        if (d && (d[0] > dw || d[1] > dh)) {
+          out.push(`Icon “${name}” (${d[0]}×${d[1]}) is bigger than the ${dw}×${dh} screen`);
+          return;
+        }
+      }
+      const box = this.wboxes[i];
+      if (box && box[0] && box[1] && (wdg.x + box[0] > dw || wdg.y + box[1] > dh)) {
+        out.push(`“${this.capFor(type)?.label ?? type}” runs off the screen`);
+      }
+    });
+    return out;
+  }
+
   private _appBar() {
     const dev = this.devices.find((d) => d.entry_id === this.entryId);
     return html`
@@ -1101,6 +1131,7 @@ export class PimoroniUnicornPanel extends LitElement {
   }
 
   render() {
+    const problems = this._displayProblems();
     return html`
       ${this._appBar()}
       <div class="tabs">
@@ -1111,6 +1142,10 @@ export class PimoroniUnicornPanel extends LitElement {
         <button class="tab ${this.tab === "screens" ? "on" : ""}" @click=${() => this.switchTab("screens")}>Playlists</button>
       </div>
       ${this.status ? html`<div class="status ${/fail/i.test(this.status) ? "err" : ""}" role="status" aria-live="polite">${this.status}</div>` : ""}
+      ${problems.length ? html`<div class="warnbanner" role="alert">
+        <strong>⚠ ${problems.length} item${problems.length > 1 ? "s" : ""} on this page may not display on this device:</strong>
+        <ul>${problems.map((p) => html`<li>${p}</li>`)}</ul>
+      </div>` : ""}
       ${!this.devices.length ? html`<div class="firstrun">No Pimoroni Unicorn device connected yet — you're previewing on a mock ${this.model}. Add one under <strong>Settings → Devices &amp; Services</strong>, then pick it above to install content and push live.</div>` : ""}
       ${this.tab === "market" ? this._marketplaceView()
         : this.tab === "edit" ? this._editorView()
