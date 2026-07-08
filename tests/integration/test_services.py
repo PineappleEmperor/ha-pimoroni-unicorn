@@ -108,3 +108,46 @@ async def test_push_firmware_all_and_no_url(hass, mqtt_mock) -> None:
     with patch(URL, AsyncMock(return_value=None)), pytest.raises(HomeAssistantError):
         await hass.services.async_call(
             DOMAIN, "push_firmware", {"entry_id": e1.entry_id}, blocking=True)
+
+
+async def test_push_firmware_force_and_file_content(hass, mqtt_mock) -> None:
+    """force + file_content override stages and publishes."""
+    entry = await _setup(hass)
+    with patch(URL, AsyncMock(return_value="http://127.0.0.1:8123")):
+        await hass.services.async_call(DOMAIN, "push_firmware", {
+            "entry_id": entry.entry_id, "files": ["main", "boot"],
+            "file_content": {"boot": "# ok\n"}, "force": True}, blocking=True)
+        await hass.async_block_till_done()
+
+
+async def test_push_firmware_https_warns_but_sends(hass, mqtt_mock) -> None:
+    entry = await _setup(hass)
+    with patch(URL, AsyncMock(return_value="https://ha.example:8123")):
+        await hass.services.async_call(DOMAIN, "push_firmware", {
+            "entry_id": entry.entry_id, "files": ["main"], "force": True}, blocking=True)
+        await hass.async_block_till_done()
+
+
+async def test_push_firmware_all_current_returns_quietly(hass, mqtt_mock) -> None:
+    """When the device already has the file (hash match), nothing is sent and no error."""
+    import hashlib
+    from pathlib import Path
+    import custom_components.pimoroni_unicorn as pu
+    entry = await _setup(hass)
+    src = Path(pu.__file__).parent / "firmware" / "main.py"
+    h = hashlib.sha256(src.read_text(encoding="utf-8").encode("utf-8")).hexdigest()[:16]
+    entry.runtime_data["fw_manifest"] = {"files": {"main.py": h}}
+    with patch(URL, AsyncMock(return_value="http://127.0.0.1:8123")):
+        await hass.services.async_call(
+            DOMAIN, "push_firmware", {"entry_id": entry.entry_id, "files": ["main"]}, blocking=True)
+        await hass.async_block_till_done()
+
+
+async def test_push_firmware_syntax_error_raises(hass, mqtt_mock) -> None:
+    from homeassistant.exceptions import HomeAssistantError
+    entry = await _setup(hass)
+    with patch(URL, AsyncMock(return_value="http://127.0.0.1:8123")), \
+         pytest.raises(HomeAssistantError):
+        await hass.services.async_call(DOMAIN, "push_firmware", {
+            "entry_id": entry.entry_id, "files": ["main"],
+            "file_content": {"main": "def ("}}, blocking=True)

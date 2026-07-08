@@ -72,3 +72,36 @@ async def test_registry_install_remove_push(hass: HomeAssistant, mqtt_mock) -> N
 
     await lametric.async_remove_icon(hass, "star")
     assert "star" not in await lametric.async_get_registry(hass)
+
+
+class _Resp:
+    status = 200
+    def __init__(self, data: bytes): self._data = data
+    async def read(self) -> bytes: return self._data
+
+
+class _Sess:
+    def __init__(self, data: bytes | None = None, err: bool = False):
+        self._data, self._err = data, err
+    async def get(self, url, **kw):
+        if self._err:
+            import aiohttp
+            raise aiohttp.ClientError("boom")
+        return _Resp(self._data)
+
+
+async def test_async_get_success_and_error(hass: HomeAssistant) -> None:
+    """_async_get returns bytes on 200 and None on a client error (via the real session path)."""
+    with patch("custom_components.pimoroni_unicorn.lametric.async_get_clientsession",
+               lambda h: _Sess(_png())):
+        icon = await lametric.async_fetch_icon(hass, 5)
+    assert icon and icon["code"] == 5
+    with patch("custom_components.pimoroni_unicorn.lametric.async_get_clientsession",
+               lambda h: _Sess(err=True)):
+        assert await lametric.async_fetch_icon(hass, 5) is None
+
+
+async def test_decode_failures_return_none(hass: HomeAssistant) -> None:
+    with patch(GET, AsyncMock(return_value=b"not an image")):
+        assert await lametric.async_fetch_icon(hass, 5) is None
+    assert await lametric.async_decode_upload(hass, b"not an image") is None
