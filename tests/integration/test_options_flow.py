@@ -136,3 +136,20 @@ async def test_options_select_layout(hass: HomeAssistant, entry: MockConfigEntry
     res = await opts.async_configure(res["flow_id"], {"next_step_id": "select_layout"})
     res = await opts.async_configure(res["flow_id"], {"layout_name": "mylay"})
     assert res["type"] is FlowResultType.MENU
+
+
+async def test_options_toggle_widgets(hass: HomeAssistant, mqtt_mock) -> None:
+    """With an active layout, toggle_widgets enables/disables its widgets."""
+    from custom_components.pimoroni_unicorn import layout as lay_mod
+    reg = await lay_mod.async_get_registry(hass)
+    reg["act"] = {"name": "act", "widgets": [{"id": "clock"}, {"id": "date"}]}
+    e = MockConfigEntry(domain=DOMAIN, unique_id="tw",
+                        data={CONF_DEVICE_ID: "tw", CONF_MODEL: UNICORN_MODELS[0]},
+                        options={lay_mod.CONF_ACTIVE_LAYOUT: "act"})
+    e.add_to_hass(hass)
+    opts = hass.config_entries.options
+    res = await opts.async_init(e.entry_id)
+    assert "toggle_widgets" in res["menu_options"]
+    res = await opts.async_configure(res["flow_id"], {"next_step_id": "toggle_widgets"})
+    res = await opts.async_configure(res["flow_id"], {"widgets": ["clock"]})
+    assert res["type"] is FlowResultType.MENU

@@ -36,7 +36,7 @@ jobs:
           python -m pytest
           tests/integration tests/test_render_service.py tests/test_first_frame_png.py
           tests/test_lametric.py tests/test_marketplace.py
-          --cov=custom_components/pimoroni_unicorn --cov-fail-under=93 -q
+          --cov=custom_components/pimoroni_unicorn --cov-fail-under=94 -q
 
       - name: Manifest gate unit tests
         run: python -m pytest tests/test_manifest_gate.py -q

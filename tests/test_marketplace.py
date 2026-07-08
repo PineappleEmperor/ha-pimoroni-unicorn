@@ -150,3 +150,15 @@ def test_save_custom_roundtrip_via_widget_path(mk, tmp_path):
             "draw": [{"op": "value", "bind": "x"}]}
     mk.save_custom(str(tmp_path), spec)
     assert mk.unit_device_file("wp", mk.widgets_dir(str(tmp_path))) is not None
+
+
+def test_resolve_install_custom_widget(mk, tmp_path):
+    (tmp_path / "widget_cust.json").write_text(
+        '{"id": "cust", "requires": ["font:tall"], "draw": [{"op": "pixel", "x": 0, "y": 0}]}')
+    files = mk.resolve_install("cust", custom_dir=str(tmp_path))
+    assert files and any(f[0].endswith("widget_cust.json") for f in files)
+
+
+def test_widget_requires_custom_badjson(mk, tmp_path):
+    (tmp_path / "widget_bad.json").write_text("{not json")
+    assert mk._widget_requires("bad", str(tmp_path)) == []
