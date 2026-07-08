@@ -69,3 +69,32 @@ def test_save_and_delete_custom(mk, tmp_path):
     assert "mine" in got
     mk.delete_custom(str(tmp_path), "mine")
     assert "mine" not in {w["id"] for w in mk.custom_widgets(mk.widgets_dir(str(tmp_path)))}
+
+
+def test_layout_and_screenset_units(mk):
+    layouts = mk.builtin_layouts()
+    units = mk.layout_units(layouts)
+    assert units and all("id" in u and "compat" in u for u in units)
+    first = sorted(layouts)[0]
+    ss = {"S1": {"label": "S1", "layouts": [first], "dwell": 10, "transition": "none"}}
+    sunits = mk.screenset_units(ss, layouts)
+    assert sunits and sunits[0]["id"] == "S1"
+
+
+def test_resolve_layout_and_screenset_install(mk):
+    lay = {"widgets": [{"id": "clock", "cfg": {}}]}
+    assert isinstance(mk.resolve_layout_install(lay), list)
+    layouts = {"L": lay}
+    ss = {"label": "S", "layouts": ["L"], "dwell": 10, "transition": "none"}
+    assert isinstance(mk.resolve_screenset_install(ss, layouts), list)
+
+
+def test_unit_device_file(mk):
+    df = mk.unit_device_file("clock")
+    assert df is None or df.endswith(".py")
+
+
+def test_device_diff_missing_and_current(mk):
+    # Device has none of the units -> everything is missing/outdated.
+    diff = mk.device_diff({"engine_version": "1.7.0", "files": {}})
+    assert any(d["status"] in ("missing", "outdated", "not_installed") for d in diff)

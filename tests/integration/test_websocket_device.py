@@ -132,3 +132,34 @@ async def test_notify_all_fields_and_dismiss(hass, mqtt_mock) -> None:
     await hass.services.async_call(
         DOMAIN, "dismiss_notification", {"device_id": did, "all": True}, blocking=True)
     await hass.async_block_till_done()
+
+
+async def test_capabilities_model_only_and_render_weather(hass, mqtt_mock, hass_ws_client) -> None:
+    """capabilities works with just a model; render accepts a forced weather condition."""
+    await _setup(hass)
+    c = await hass_ws_client(hass)
+    cap = await _call(c, type="pimoroni_unicorn/capabilities", model="cosmic")
+    assert cap["success"] and cap["result"]["dims"] == [32, 32]
+    r = await _call(c, type="pimoroni_unicorn/render", model="cosmic",
+                    layout={"widgets": []}, weather="rain")
+    assert r["success"]
+
+
+async def test_deploy_screenset_success(hass, mqtt_mock, hass_ws_client) -> None:
+    entry = await _setup(hass)
+    c = await hass_ws_client(hass)
+    lay = {"widgets": [{"id": "clock", "x": 0, "y": 0, "cfg": {}}]}
+    await _call(c, type="pimoroni_unicorn/save_layout", name="p", layout=lay)
+    await _call(c, type="pimoroni_unicorn/save_screenset", name="ss",
+                screenset={"label": "ss", "layouts": ["p"], "dwell": 10, "transition": "none"})
+    with patch(f"{FW}.async_deploy_screenset", AsyncMock(return_value=True)) as dep:
+        r = await _call(c, type="pimoroni_unicorn/deploy_screenset",
+                        entry_id=entry.entry_id, name="ss", override=True)
+        assert r["success"] and dep.called
+
+
+async def test_font_install_unknown_entry(hass, mqtt_mock, hass_ws_client) -> None:
+    await _setup(hass)
+    c = await hass_ws_client(hass)
+    r = await _call(c, type="pimoroni_unicorn/font_install", entry_id="nope", font="digits")
+    assert not r["success"] and r["error"]["code"] == "not_found"

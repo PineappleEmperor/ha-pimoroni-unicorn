@@ -123,3 +123,16 @@ async def test_options_import_layout_success(hass: HomeAssistant, entry: MockCon
     res = await opts.async_configure(
         res["flow_id"], {"layout_json": '{"name": "L", "widgets": []}'})
     assert res["type"] is FlowResultType.MENU
+
+
+async def test_options_select_layout(hass: HomeAssistant, entry: MockConfigEntry, mqtt_mock) -> None:
+    """With a stored layout, the menu offers select_layout and it sets the active page."""
+    from custom_components.pimoroni_unicorn import layout as lay_mod
+    reg = await lay_mod.async_get_registry(hass)
+    reg["mylay"] = {"name": "mylay", "widgets": []}
+    opts = hass.config_entries.options
+    res = await opts.async_init(entry.entry_id)
+    assert "select_layout" in res["menu_options"]
+    res = await opts.async_configure(res["flow_id"], {"next_step_id": "select_layout"})
+    res = await opts.async_configure(res["flow_id"], {"layout_name": "mylay"})
+    assert res["type"] is FlowResultType.MENU
