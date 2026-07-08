@@ -1,5 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { property, state } from "lit/decorators.js";
+import "./pixel-editor";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
@@ -105,7 +106,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private wireframe = false;
   @state() private locked = false;
   @state() private status = "";
-  @state() private tab: "layout" | "market" | "edit" | "screens" = "layout";
+  @state() private tab: "layout" | "market" | "edit" | "screens" | "paint" = "layout";
   @state() private catalog: CatalogWidget[] = [];
   @state() private busyUnits: Record<string, string> = {};
   @state() private fwManifest: FwManifest | null = null;
@@ -1056,7 +1057,7 @@ export class PimoroniUnicornPanel extends LitElement {
     `;
   }
 
-  private switchTab(tab: "layout" | "market" | "edit" | "screens"): void {
+  private switchTab(tab: "layout" | "market" | "edit" | "screens" | "paint"): void {
     this.tab = tab;
     if (tab === "market") this.loadCatalog();
     else if (tab === "edit") this.previewSpec();
@@ -1095,12 +1096,14 @@ export class PimoroniUnicornPanel extends LitElement {
         <button class="tab ${this.tab === "layout" ? "on" : ""}" @click=${() => this.switchTab("layout")}>Designer</button>
         <button class="tab ${this.tab === "market" ? "on" : ""}" @click=${() => this.switchTab("market")}>Marketplace</button>
         <button class="tab ${this.tab === "edit" ? "on" : ""}" @click=${() => this.switchTab("edit")}>Widget editor</button>
+        <button class="tab ${this.tab === "paint" ? "on" : ""}" @click=${() => this.switchTab("paint")}>Icon editor</button>
         <button class="tab ${this.tab === "screens" ? "on" : ""}" @click=${() => this.switchTab("screens")}>Playlists</button>
       </div>
       ${this.status ? html`<div class="status ${/fail/i.test(this.status) ? "err" : ""}" role="status" aria-live="polite">${this.status}</div>` : ""}
       ${!this.devices.length ? html`<div class="firstrun">No Pimoroni Unicorn device connected yet — you're previewing on a mock ${this.model}. Add one under <strong>Settings → Devices &amp; Services</strong>, then pick it above to install content and push live.</div>` : ""}
       ${this.tab === "market" ? this._marketplaceView()
         : this.tab === "edit" ? this._editorView()
+        : this.tab === "paint" ? this._paintView()
         : this.tab === "screens" ? this._screensView()
         : this._layoutView()}
     `;
@@ -1703,6 +1706,39 @@ export class PimoroniUnicornPanel extends LitElement {
         ${OP_TYPES.map((t) => html`<button class="addchip" title=${OP_META[t]?.desc ?? ""} @click=${() => this.addOp(t)}>+ ${OP_META[t]?.label ?? t}</button>`)}
       </div>
     `;
+  }
+
+  private _paintView() {
+    return html`<div class="pane">
+      <p class="hint">Paint an icon at this device's resolution, or load an image and edit it. Black = off (checkerboard). Saves to your icon library.</p>
+      <pixel-editor .w=${this.dims[0]} .h=${this.dims[1]}
+        .decode=${this._iconDecode}
+        @save=${(e: CustomEvent) => this._saveEditorIcon(e.detail)}></pixel-editor>
+    </div>`;
+  }
+
+  private _iconDecode = async (req: { data?: string; url?: string; maxW: number; maxH: number }) => {
+    return (await this.hass.callWS({
+      type: "pimoroni_unicorn/icon_decode",
+      data: req.data, url: req.url, max_w: req.maxW, max_h: req.maxH,
+    })) as { png: string; w: number; h: number };
+  };
+
+  private async _saveEditorIcon(detail: { name: string; dataUrl: string; w: number; h: number }) {
+    const data = detail.dataUrl.slice(detail.dataUrl.indexOf(",") + 1);
+    const entry_ids = this.iconTargetIds();
+    try {
+      const r = (await this.hass.callWS({
+        type: "pimoroni_unicorn/icon_upload", name: detail.name, data,
+        max_w: detail.w, max_h: detail.h, entry_ids,
+      })) as { sent?: string[] };
+      const sent = r.sent ?? [];
+      this.status = sent.length ? `Saved "${detail.name}" → ${sent.join(", ")}.`
+        : `Saved "${detail.name}" (no devices to push to).`;
+      this.reloadIconsSoon();
+    } catch (e) {
+      this.status = `Save failed: ${(e as { message?: string })?.message ?? e}`;
+    }
   }
 
   private _editorView() {
