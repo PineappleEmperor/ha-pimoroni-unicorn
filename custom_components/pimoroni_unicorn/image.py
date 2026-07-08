@@ -21,7 +21,7 @@ from .const import (
 from .entity import device_info
 
 PARALLEL_UPDATES = 0
-REFRESH = timedelta(seconds=5)  # re-render cadence for the live mirror
+REFRESH = timedelta(seconds=30)  # re-render cadence for the live mirror (also ticks on page/state changes)
 
 
 def _model_key(entry: PUConfigEntry) -> str:
