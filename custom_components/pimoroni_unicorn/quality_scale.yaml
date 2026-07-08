@@ -77,5 +77,5 @@ rules:
     status: done
     comment: LaMetric icon fetch uses async_get_clientsession; OTA pulls run device-side.
   strict-typing:
-    status: todo
-    comment: pyright standard passes; not strict mode yet.
+    status: done
+    comment: pyrightconfig.json is typeCheckingMode=strict; pyright passes clean in CI.
