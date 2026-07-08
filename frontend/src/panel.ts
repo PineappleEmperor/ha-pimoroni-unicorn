@@ -31,6 +31,7 @@ const WEATHER_TEST: [string, string][] = [
   ["fog", "Fog"], ["rain", "Rain"], ["snow", "Snow"], ["thunderstorm", "Storm"],
 ];
 const MOCK = "__mock__";
+const DRAFT_KEY = "pu_panel_draft";
 
 // Declarative op types and their per-op fields (all ops also carry x, y).
 const OP_TYPES = ["value", "bar", "rect", "pixel", "icon", "dot"];
@@ -106,6 +107,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private status = "";
   @state() private tab: "layout" | "market" | "edit" | "screens" = "layout";
   @state() private catalog: CatalogWidget[] = [];
+  @state() private busyUnits: Record<string, string> = {};
   @state() private fwManifest: FwManifest | null = null;
   @state() private activePage: string | null = null;  // page name the device reports rendering
   @state() private contentLayouts: ContentUnit[] = [];
@@ -143,6 +145,26 @@ export class PimoroniUnicornPanel extends LitElement {
   private renderTimer?: number;
   private pushTimer?: number;
   private _frameTimers: Record<string, number> = {};
+  private _pendingDraft: { entryId: string; layoutName: string; layout: Layout } | null = null;
+  private _onBeforeUnload = (e: BeforeUnloadEvent): void => { if (this.dirty) { e.preventDefault(); e.returnValue = ""; } };
+
+  private _persistDraft(): void {
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ entryId: this.entryId, layoutName: this.layoutName, layout: this.layout })); } catch { /* storage unavailable */ }
+  }
+  private _clearDraft(): void {
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+  }
+  private _applyPendingDraft(): void {
+    const d = this._pendingDraft;
+    this._pendingDraft = null;
+    if (!d || d.entryId !== this.entryId || !d.layout?.widgets) return;
+    this.layout = JSON.parse(JSON.stringify(d.layout));
+    this.layoutName = d.layoutName || this.layoutName;
+    this.snapshot = JSON.parse(JSON.stringify(this.layout));
+    this.dirty = true;
+    this.status = "Restored your unsaved changes — Save to keep them, or pick another page to discard.";
+    this.renderPreview();
+  }
 
   static styles = css`
     :host {
@@ -168,6 +190,10 @@ export class PimoroniUnicornPanel extends LitElement {
     }
     .group { display: inline-flex; gap: 12px; align-items: center; flex-wrap: wrap; }
     .grouplabel { font-size: 11px; font-weight: 600; color: var(--secondary-text-color, #79747e); }
+    .help { font-size: 13px; color: var(--pu-primary); text-decoration: none; }
+    .help:hover { text-decoration: underline; }
+    .firstrun { margin: 4px 0 16px; padding: 12px 16px; border-radius: var(--pu-radius); font-size: 14px;
+      color: var(--primary-text-color, #1c1b1f); background: color-mix(in srgb, var(--pu-primary) 8%, var(--pu-surface)); }
     .empty { background:
       repeating-linear-gradient(45deg, var(--pu-outline) 0 1px, transparent 1px 7px), var(--pu-surface) !important; }
     .group + .group { padding-left: 16px; border-left: 1px solid var(--pu-outline); }
@@ -280,6 +306,8 @@ export class PimoroniUnicornPanel extends LitElement {
     }
     .catalog li .grow { flex: 1; }
     .badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 12px; white-space: nowrap; background: color-mix(in srgb, var(--pu-primary) 12%, transparent); color: var(--pu-primary); }
+    .badge.working { animation: pupulse 1.2s ease-in-out infinite; }
+    @keyframes pupulse { 50% { opacity: .5; } }
     .badges { display: flex; flex-wrap: wrap; gap: 6px; }
     .badge.ok { background: color-mix(in srgb, var(--success-color, #2e7d32) 18%, transparent); color: var(--success-color, #2e7d32); }
     .badge.warn { background: color-mix(in srgb, var(--warning-color, #ed6c02) 20%, transparent); color: var(--warning-color, #ed6c02); }
@@ -291,6 +319,8 @@ export class PimoroniUnicornPanel extends LitElement {
     .fieldgrid { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: center; }
     .flabel { font-size: 14px; color: var(--secondary-text-color, #49454f); }
     .fhint { font-size: 12px; color: var(--secondary-text-color, #79747e); margin-left: 8px; }
+    .fmtchip { font-family: ui-monospace, monospace; font-size: 11px; padding: 3px 8px; border-radius: 8px; border: 1px solid var(--pu-outline); background: transparent; color: var(--secondary-text-color, #79747e); cursor: pointer; }
+    .fmtchip:hover { border-color: var(--pu-primary); color: var(--pu-primary); }
     .fcell { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
     .frow { display: flex; align-items: center; gap: 14px; padding: 8px 10px; border: 1px solid var(--pu-outline); border-radius: 8px; margin-bottom: 6px; }
     .iconrow { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 12px; border: 1px solid var(--pu-outline); border-radius: 10px; margin-bottom: 6px; }
@@ -305,7 +335,10 @@ export class PimoroniUnicornPanel extends LitElement {
     }
   `;
 
-  protected firstUpdated(): void { this.loadDevices(); this.loadIcons(); this.loadFonts(); }
+  protected firstUpdated(): void {
+    try { const raw = localStorage.getItem(DRAFT_KEY); this._pendingDraft = raw ? JSON.parse(raw) : null; } catch { this._pendingDraft = null; }
+    this.loadDevices(); this.loadIcons(); this.loadFonts();
+  }
   protected updated(): void {
     if (this._ro) return;
     const wrap = this.renderRoot.querySelector(".stagewrap");
@@ -411,9 +444,11 @@ export class PimoroniUnicornPanel extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener("keydown", this._onKey);
+    window.addEventListener("beforeunload", this._onBeforeUnload);
   }
   disconnectedCallback(): void {
     window.removeEventListener("keydown", this._onKey);
+    window.removeEventListener("beforeunload", this._onBeforeUnload);
     this._ro?.disconnect();
     this._ro = undefined;
     Object.values(this._frameTimers).forEach((t) => clearInterval(t));
@@ -430,6 +465,7 @@ export class PimoroniUnicornPanel extends LitElement {
     // composedPath()[0] pierces the shadow DOM; e.target is retargeted to the host on window.
     const t = e.composedPath()[0] as HTMLElement | undefined;
     const tag = t?.tagName;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); this.save(); return; }
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || t?.isContentEditable) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && this.tab === "layout") {
       e.preventDefault();
@@ -502,6 +538,7 @@ export class PimoroniUnicornPanel extends LitElement {
     this.loadFonts();  // refresh per-device font install state
     const active = dev.active_layout ? this.stored[dev.active_layout] : undefined;
     this.loadLayout(active ?? this.defaultLayout);
+    this._applyPendingDraft();
   }
 
   private async selectMock(model: string): Promise<void> {
@@ -510,6 +547,7 @@ export class PimoroniUnicornPanel extends LitElement {
     await this.loadCaps({ model });
     this.loadIcons();
     this.loadLayout(this.defaultLayout);
+    this._applyPendingDraft();
   }
 
   private async refreshStored(): Promise<void> {
@@ -560,6 +598,7 @@ export class PimoroniUnicornPanel extends LitElement {
     this.redoStack = [];
     this.snapshot = JSON.parse(JSON.stringify(this.layout));
     this.dirty = true;
+    this._persistDraft();
     this.requestUpdate();
     this.scheduleRender();
   }
@@ -796,6 +835,7 @@ export class PimoroniUnicornPanel extends LitElement {
     await this.hass.callWS({ type: "pimoroni_unicorn/save_layout", name: this.layoutName, layout: this.layout });
     await this.refreshStored();
     this.dirty = false;
+    this._clearDraft();
     this.status = `Saved "${this.layoutName}" to the library.`;
   }
   private newPage(): void {
@@ -827,6 +867,7 @@ export class PimoroniUnicornPanel extends LitElement {
       const r = await this.hass.callWS({ type: "pimoroni_unicorn/deploy_layout", entry_id: this.entryId, name: this.layoutName, override: true });
       this.status = r.ok ? `Deployed "${this.layoutName}" (installed any missing widgets/fonts first).` : "Deploy failed.";
       this.dirty = false;
+      this._clearDraft();
     } catch (e) { this.status = `Deploy failed: ${(e as { message?: string })?.message ?? e}`; }
   }
   private async deleteLayout(): Promise<void> {
@@ -973,6 +1014,7 @@ export class PimoroniUnicornPanel extends LitElement {
         <span class="grow"></span>
         ${this.dirty ? html`<span class="chip warn">unsaved changes</span>` : ""}
         ${this.fwManifest?.engine_version ? html`<span class="hint">engine v${this.fwManifest.engine_version}</span>` : ""}
+        <a class="help" href="https://github.com/PineappleEmperor/ha-pimoroni-unicorn#readme" target="_blank" rel="noopener noreferrer" title="Open the documentation in a new tab">Help</a>
       </div>`;
   }
 
@@ -986,6 +1028,7 @@ export class PimoroniUnicornPanel extends LitElement {
         <button class="tab ${this.tab === "screens" ? "on" : ""}" @click=${() => this.switchTab("screens")}>Playlists</button>
       </div>
       ${this.status ? html`<div class="status ${/fail/i.test(this.status) ? "err" : ""}" role="status" aria-live="polite">${this.status}</div>` : ""}
+      ${!this.devices.length ? html`<div class="firstrun">No Pimoroni Unicorn device connected yet — you're previewing on a mock ${this.model}. Add one under <strong>Settings → Devices &amp; Services</strong>, then pick it above to install content and push live.</div>` : ""}
       ${this.tab === "market" ? this._marketplaceView()
         : this.tab === "edit" ? this._editorView()
         : this.tab === "screens" ? this._screensView()
@@ -1132,6 +1175,23 @@ export class PimoroniUnicornPanel extends LitElement {
     this.catalog = c.widgets ?? [];
     const m = await this.hass.callWS({ type: "pimoroni_unicorn/fw_manifest", entry_id: this.entryId });
     this.fwManifest = m.manifest ?? null;
+    this._reconcileBusy();
+  }
+  private _reconcileBusy(): void {
+    if (!Object.keys(this.busyUnits).length) return;
+    const next = { ...this.busyUnits };
+    let changed = false;
+    for (const [id, action] of Object.entries(this.busyUnits)) {
+      const w = this.catalog.find((x) => x.id === id);
+      const done = action === "Installing" ? w?.status === "installed" : !w || w.status === "not_installed";
+      if (done) { delete next[id]; changed = true; }
+    }
+    if (changed) this.busyUnits = next;
+  }
+  private _setBusy(id: string, action: string | null): void {
+    const next = { ...this.busyUnits };
+    if (action) next[id] = action; else delete next[id];
+    this.busyUnits = next;
   }
 
   private async loadContent() {
@@ -1218,20 +1278,29 @@ export class PimoroniUnicornPanel extends LitElement {
   }
   private async installWidget(id: string) {
     if (!confirm(`Install "${id}" on the device? It will reboot (~20s) and briefly go dark.`)) return;
+    this._setBusy(id, "Installing");
     try {
       await this.hass.callWS({ type: "pimoroni_unicorn/fw_install", entry_id: this.entryId, widget_id: id });
-      this.status = `Installing ${id}…`;
+      this.status = `Installing ${id}… the device will reboot and reconnect.`;
       this.reloadCatalogSoon();
-    } catch (e) { this.status = `Install failed: ${(e as { message?: string })?.message ?? e}`; }
+      this._busyTimeout(id);
+    } catch (e) { this._setBusy(id, null); this.status = `Install failed: ${(e as { message?: string })?.message ?? e}`; }
   }
 
   private async removeWidgetUnit(id: string) {
     if (!confirm(`Remove "${id}" from the device? It will reboot (~20s) and briefly go dark.`)) return;
+    this._setBusy(id, "Removing");
     try {
       await this.hass.callWS({ type: "pimoroni_unicorn/fw_remove", entry_id: this.entryId, widget_id: id });
-      this.status = `Removing ${id}…`;
+      this.status = `Removing ${id}… the device will reboot and reconnect.`;
       this.reloadCatalogSoon();
-    } catch (e) { this.status = `Remove failed: ${(e as { message?: string })?.message ?? e}`; }
+      this._busyTimeout(id);
+    } catch (e) { this._setBusy(id, null); this.status = `Remove failed: ${(e as { message?: string })?.message ?? e}`; }
+  }
+  private _busyTimeout(id: string): void {
+    window.setTimeout(() => {
+      if (this.busyUnits[id]) { this._setBusy(id, null); this.status = `"${id}" didn't confirm — check the device is powered and back on Wi-Fi, then Refresh.`; }
+    }, 30000);
   }
 
   private _thumb(src?: string) {
@@ -1303,9 +1372,11 @@ export class PimoroniUnicornPanel extends LitElement {
               <div class="cell-name">${w.label}</div>
               <div class="hint">${w.requires?.length ? html`<span title=${w.requires.join(", ")}>${w.requires.length} dep(s)</span>` : "—"}</div>
               <div><span class="badge ${cls[w.status] ?? ""}">${lbl[w.status] ?? w.status}</span></div>
-              <div class="cell-action">${w.status === "installed"
-                ? html`<button class="danger" @click=${() => this.removeWidgetUnit(w.id)}>Remove</button>`
-                : html`<button @click=${() => this.installWidget(w.id)}>${w.status === "outdated" ? "Update" : "Install"}</button>`}</div>
+              <div class="cell-action">${this.busyUnits[w.id]
+                ? html`<span class="badge working">${this.busyUnits[w.id]}…</span>`
+                : w.status === "installed"
+                  ? html`<button class="danger" @click=${() => this.removeWidgetUnit(w.id)}>Remove</button>`
+                  : html`<button @click=${() => this.installWidget(w.id)}>${w.status === "outdated" ? "Update" : "Install"}</button>`}</div>
             </div>`)}
           </div>`
         : html`<p class="hint">Select a device to manage installed widgets.</p>`)}
@@ -1465,6 +1536,9 @@ export class PimoroniUnicornPanel extends LitElement {
         ${this.iconNames.map((o) => html`<option ?selected=${op[key] === o}>${o}</option>`)}</select>`;
     else if (key === "bind") control = html`<input type="text" style="width:140px" list="pu-bind-list" placeholder="solar…"
         .value=${String(op[key] ?? "")} @change=${(e: Event) => this.setOpField(i, key, (e.target as HTMLInputElement).value)} />`;
+    else if (key === "fmt") control = html`<input type="text" style="width:96px" placeholder="{:.1f}"
+        .value=${String(op[key] ?? "")} @change=${(e: Event) => this.setOpField(i, key, (e.target as HTMLInputElement).value)} />
+        ${["{}", "{:.0f}", "{:.1f}", "{}%", "{:.1f}°"].map((p) => html`<button class="fmtchip" title="Use ${p}" @click=${() => this.setOpField(i, "fmt", p)}>${p}</button>`)}`;
     else control = html`<input type="text" style="width:120px" .value=${String(op[key] ?? "")} @change=${(e: Event) => this.setOpField(i, key, (e.target as HTMLInputElement).value)} />`;
     return html`${label}<span class="fcell">${control}${hint ? html`<span class="fhint">${hint}</span>` : ""}</span>`;
   }
@@ -1493,7 +1567,10 @@ export class PimoroniUnicornPanel extends LitElement {
     const s = this.parsedSpec();
     if (!s) return html`<p class="status err">Spec isn't valid JSON — switch to YAML / JSON to fix it.</p>`;
     return html`
-      <datalist id="pu-bind-list">${KNOWN_BINDS.map((b) => html`<option value=${b}></option>`)}</datalist>
+      <datalist id="pu-bind-list">
+        ${KNOWN_BINDS.map((b) => html`<option value=${b}></option>`)}
+        ${Object.keys(this.hass?.states ?? {}).map((e) => html`<option value=${e}></option>`)}
+      </datalist>
       <div class="fieldgrid">
         <span class="flabel">ID</span><span class="fcell"><input style="width:140px" .value=${s.id ?? ""} @change=${(e: Event) => this.setSpecField("id", (e.target as HTMLInputElement).value)} /><span class="fhint">unique id, e.g. my_widget</span></span>
         <span class="flabel">Label</span><span class="fcell"><input style="width:140px" .value=${s.label ?? ""} @change=${(e: Event) => this.setSpecField("label", (e.target as HTMLInputElement).value)} /></span>
@@ -1613,10 +1690,14 @@ export class PimoroniUnicornPanel extends LitElement {
           ${names.length ? names.map((n) => {
             const on = this.screenLayouts.includes(n);
             const pos = this.screenLayouts.indexOf(n);
-            return html`<div class="panelrow">
+            return html`<div class="panelrow" tabindex=${on ? "0" : "-1"}
+              @keydown=${on ? (e: KeyboardEvent) => {
+                if (e.altKey && e.key === "ArrowUp") { e.preventDefault(); this.moveScreen(n, -1); }
+                else if (e.altKey && e.key === "ArrowDown") { e.preventDefault(); this.moveScreen(n, 1); }
+              } : undefined}>
               <input type="checkbox" ?checked=${on}
                 @change=${(e: Event) => this.toggleScreen(n, (e.target as HTMLInputElement).checked)} />
-              ${on ? html`<span class="chip">${pos + 1}</span>` : ""}
+              ${on ? html`<span class="chip" title="Position ${pos + 1}">${pos + 1}</span>` : ""}
               <span class="grow">${n}</span>
               ${on ? html`
                 <button class="zbtn secondary" ?disabled=${pos === 0} @click=${() => this.moveScreen(n, -1)} title="Move up" aria-label="Move ${n} up">▲</button>
