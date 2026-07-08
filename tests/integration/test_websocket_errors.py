@@ -88,3 +88,13 @@ async def test_icon_upload_bad_and_too_large(hass, mqtt_mock, hass_ws_client) ->
     c = await hass_ws_client(hass)
     assert await _err(c, type="pimoroni_unicorn/icon_upload", name="x", data="!!notb64!!") == "bad_image"
     assert await _err(c, type="pimoroni_unicorn/icon_decode", data="Zm9v") == "decode_failed"
+
+
+async def test_more_unknown_entry_and_decode_edges(hass, mqtt_mock, hass_ws_client) -> None:
+    await _setup(hass)
+    c = await hass_ws_client(hass)
+    assert await _err(c, type="pimoroni_unicorn/push_screens", entry_id="x",
+                      layouts=["p"], dwell=10, transition="none") == "not_found"
+    assert await _err(c, type="pimoroni_unicorn/fw_remove", entry_id="x", widget_id="clock") == "not_found"
+    assert await _err(c, type="pimoroni_unicorn/icon_decode") == "no_source"
+    assert await _err(c, type="pimoroni_unicorn/icon_decode", data="!!bad!!") == "bad_image"

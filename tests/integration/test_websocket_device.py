@@ -183,3 +183,35 @@ async def test_notify_no_content_and_downconvert_and_dismiss_nodev(hass, mqtt_mo
     await hass.services.async_call(
         DOMAIN, "dismiss_notification", {"device_id": "ghost", "all": True}, blocking=True)
     await hass.async_block_till_done()
+
+
+async def test_push_layout_set_active(hass, mqtt_mock, hass_ws_client) -> None:
+    entry = await _setup(hass)
+    c = await hass_ws_client(hass)
+    lay = {"widgets": [{"id": "clock", "x": 0, "y": 0, "cfg": {}}]}
+    r = await _call(c, type="pimoroni_unicorn/push_layout", entry_id=entry.entry_id,
+                    layout=lay, name="active1", set_active=True)
+    assert r["success"]
+
+
+async def test_icons_trunc_and_device_installed(hass, mqtt_mock, hass_ws_client) -> None:
+    from custom_components.pimoroni_unicorn import lametric
+    entry = await _setup(hass)
+    reg = await lametric.async_get_registry(hass)
+    reg["anim"] = {"frames": [base64.b64encode(bytes(8 * 8 * 3)).decode()],
+                   "w": 8, "h": 8, "n_total": 12}
+    entry.runtime_data["fw_manifest"] = {"engine_version": "1.7.0", "files": {"anim.json": "h"}}
+    c = await hass_ws_client(hass)
+    r = await _call(c, type="pimoroni_unicorn/icons", entry_id=entry.entry_id)
+    assert r["result"]["trunc"].get("anim") == [1, 12]
+    assert "anim" in r["result"]["device_installed"]
+
+
+async def test_icon_push_oversize_blocked(hass, mqtt_mock, hass_ws_client) -> None:
+    from custom_components.pimoroni_unicorn import lametric
+    entry = await _setup(hass, model="Stellar Unicorn", dev="devsx")  # 16x16
+    reg = await lametric.async_get_registry(hass)
+    reg["big"] = {"frames": [base64.b64encode(bytes(32 * 32 * 3)).decode()], "w": 32, "h": 32}
+    c = await hass_ws_client(hass)
+    r = await _call(c, type="pimoroni_unicorn/icon_push", entry_id=entry.entry_id, name="big")
+    assert not r["success"] and r["error"]["code"] == "oversize"
