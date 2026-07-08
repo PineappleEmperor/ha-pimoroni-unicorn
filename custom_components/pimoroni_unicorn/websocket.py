@@ -572,6 +572,7 @@ async def ws_icons(hass, connection, msg):
         return {n: render_service.render_icon_thumb(registry[n]) for n in installed}
 
     thumbs = await hass.async_add_executor_job(_thumbs)
+    dims = {n: [int(registry[n].get("w", 8)), int(registry[n].get("h", 8))] for n in installed}
     device_installed = []
     if msg.get("entry_id"):
         files = (_fw_manifest(hass, msg["entry_id"]) or {}).get("files") or {}
@@ -580,6 +581,7 @@ async def ws_icons(hass, connection, msg):
         "builtin": render_service.builtin_icon_names(),
         "installed": installed,
         "thumbs": thumbs,
+        "dims": dims,
         "device_installed": device_installed,
     })
 
@@ -611,11 +613,13 @@ def _icon_meta(icon: dict) -> dict:
     vol.Required("type"): WS_ICON_UPLOAD,
     vol.Required("name"): str,
     vol.Required("data"): str,
+    vol.Optional("max_w"): vol.Coerce(int),
+    vol.Optional("max_h"): vol.Coerce(int),
     vol.Optional("entry_ids"): [str],
 })
 @websocket_api.async_response
 async def ws_icon_upload(hass, connection, msg):
-    """Decode an uploaded image/GIF, auto-fit it to the panel, and install it."""
+    """Decode an uploaded image/GIF, fit it to the chosen size, and install it."""
     try:
         raw = base64.b64decode(msg["data"], validate=True)
     except (ValueError, binascii.Error):
@@ -624,7 +628,7 @@ async def ws_icon_upload(hass, connection, msg):
     if len(raw) > lametric.MAX_UPLOAD_BYTES:
         connection.send_error(msg["id"], "too_large", "That image file is too large")
         return
-    icon = await lametric.async_decode_upload(hass, raw)
+    icon = await lametric.async_decode_upload(hass, raw, msg.get("max_w"), msg.get("max_h"))
     if not icon:
         connection.send_error(msg["id"], "decode_failed", "Could not read that image")
         return
@@ -636,12 +640,14 @@ async def ws_icon_upload(hass, connection, msg):
     vol.Required("type"): WS_ICON_URL,
     vol.Required("name"): str,
     vol.Required("url"): str,
+    vol.Optional("max_w"): vol.Coerce(int),
+    vol.Optional("max_h"): vol.Coerce(int),
     vol.Optional("entry_ids"): [str],
 })
 @websocket_api.async_response
 async def ws_icon_url(hass, connection, msg):
-    """Fetch an image/GIF by URL, auto-fit it to the panel, and install it."""
-    icon = await lametric.async_fetch_image(hass, msg["url"])
+    """Fetch an image/GIF by URL, fit it to the chosen size, and install it."""
+    icon = await lametric.async_fetch_image(hass, msg["url"], msg.get("max_w"), msg.get("max_h"))
     if not icon:
         connection.send_error(msg["id"], "fetch_failed", "Could not fetch or read that image URL")
         return

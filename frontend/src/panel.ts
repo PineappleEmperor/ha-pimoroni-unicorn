@@ -125,6 +125,10 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private iconFileData = "";     // base64 of a chosen image/GIF (no data: prefix)
   @state() private iconFilePreview = "";  // data URL for the local preview thumbnail
   @state() private iconImportNote = "";
+  @state() private iconDims: Record<string, [number, number]> = {};
+  @state() private iconSizeMode: "device" | "native" | "custom" = "device";
+  @state() private iconCustomW = 16;
+  @state() private iconCustomH = 16;
   @state() private fonts: FontSpec[] = [];
   @state() private fontText = "";
   @state() private fontPngs: Record<string, string> = {};
@@ -363,6 +367,7 @@ export class PimoroniUnicornPanel extends LitElement {
       this.iconNames = [...(r.builtin ?? []), ...(r.installed ?? [])];
       this.installedIcons = r.installed ?? [];
       this.iconThumbs = r.thumbs ?? {};
+      this.iconDims = r.dims ?? {};
       this.deviceIcons = r.device_installed ?? [];
     } catch { /* icons list optional */ }
   }
@@ -443,10 +448,14 @@ export class PimoroniUnicornPanel extends LitElement {
     const url = this.iconUrl.trim();
     if (!name || (!hasFile && !url)) return;
     const entry_ids = this.iconTargetIds();
+    const fit = this.iconSizeMode === "device" ? { max_w: this.dims[0], max_h: this.dims[1] }
+      : this.iconSizeMode === "custom"
+        ? { max_w: Math.max(1, this.iconCustomW | 0), max_h: Math.max(1, this.iconCustomH | 0) }
+        : {};  // native: no cap beyond the device-memory maximum
     try {
       const r = (hasFile
-        ? await this.hass.callWS({ type: "pimoroni_unicorn/icon_upload", name, data: this.iconFileData, entry_ids })
-        : await this.hass.callWS({ type: "pimoroni_unicorn/icon_url", name, url, entry_ids })
+        ? await this.hass.callWS({ type: "pimoroni_unicorn/icon_upload", name, data: this.iconFileData, ...fit, entry_ids })
+        : await this.hass.callWS({ type: "pimoroni_unicorn/icon_url", name, url, ...fit, entry_ids })
       ) as { ok?: boolean; sent?: string[]; w?: number; h?: number; n_kept?: number; n_total?: number };
       const sent = r.sent ?? [];
       const size = r.w && r.h ? ` ${r.w}×${r.h}` : "";
@@ -585,6 +594,7 @@ export class PimoroniUnicornPanel extends LitElement {
     await this.loadCaps({ entry_id: entryId });
     this.loadIcons();
     this.loadFonts();  // refresh per-device font install state
+    this.loadCatalog();  // refresh available pages/screens + engine version for this device
     const active = dev.active_layout ? this.stored[dev.active_layout] : undefined;
     this.loadLayout(active ?? this.defaultLayout);
     this._applyPendingDraft();
@@ -595,6 +605,7 @@ export class PimoroniUnicornPanel extends LitElement {
     this.entryId = "";
     await this.loadCaps({ model });
     this.loadIcons();
+    this.loadCatalog();  // clears device catalog; refreshes shareable content list
     this.loadLayout(this.defaultLayout);
     this._applyPendingDraft();
   }
@@ -1478,6 +1489,20 @@ export class PimoroniUnicornPanel extends LitElement {
                 @input=${(e: Event) => { this.iconUrl = (e.target as HTMLInputElement).value; this.iconFileData = ""; this.iconFilePreview = ""; }} />
             </div>
             <div class="panelrow">
+              <label>Size</label>
+              <select @change=${(e: Event) => { this.iconSizeMode = (e.target as HTMLSelectElement).value as "device" | "native" | "custom"; }}>
+                <option value="device" ?selected=${this.iconSizeMode === "device"}>Device screen (${this.dims[0]}×${this.dims[1]})</option>
+                <option value="native" ?selected=${this.iconSizeMode === "native"}>Native (keep source)</option>
+                <option value="custom" ?selected=${this.iconSizeMode === "custom"}>Custom</option>
+              </select>
+              ${this.iconSizeMode === "custom" ? html`
+                <input type="number" min="1" max="53" style="width:56px" .value=${String(this.iconCustomW)}
+                  @input=${(e: Event) => { this.iconCustomW = parseInt((e.target as HTMLInputElement).value, 10) || 1; }} />
+                <span>×</span>
+                <input type="number" min="1" max="32" style="width:56px" .value=${String(this.iconCustomH)}
+                  @input=${(e: Event) => { this.iconCustomH = parseInt((e.target as HTMLInputElement).value, 10) || 1; }} />` : ""}
+            </div>
+            <div class="panelrow">
               <label>Name</label>
               <input style="width:120px" .value=${this.iconImgName}
                 @input=${(e: Event) => { this.iconImgName = (e.target as HTMLInputElement).value; }} />
@@ -1495,9 +1520,10 @@ export class PimoroniUnicornPanel extends LitElement {
               const onDevice = this.deviceIcons.includes(n);
               return html`<div class="iconrow">
               ${this.iconThumbs[n]
-                ? html`<img class="iconthumb" alt="" src="data:image/png;base64,${this.iconThumbs[n]}" />`
+                ? html`<img class="iconthumb" alt="" src="data:image/gif;base64,${this.iconThumbs[n]}" />`
                 : html`<div class="iconthumb empty"></div>`}
-              <span class="grow">${n}</span>
+              <span class="grow">${n}${this.iconDims[n]
+                ? html` <span class="hint">${this.iconDims[n][0]}×${this.iconDims[n][1]}</span>` : ""}</span>
               ${this.entryId
                 ? (onDevice
                   ? html`<span class="badge ok">on this device</span>

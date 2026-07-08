@@ -48,18 +48,22 @@ async def async_fetch_icon(hass: HomeAssistant, code: int) -> dict[str, Any] | N
     return icon
 
 
-async def async_decode_upload(hass: HomeAssistant, raw: bytes) -> dict[str, Any] | None:
-    """Decode an uploaded image/GIF to frames, auto-fitting within the largest panel."""
+async def async_decode_upload(hass: HomeAssistant, raw: bytes,
+                              max_w: int | None = None,
+                              max_h: int | None = None) -> dict[str, Any] | None:
+    """Decode an uploaded image/GIF to frames, auto-fitting within the given (or largest) box."""
+    bw = min(max_w or MAX_ICON_W, MAX_ICON_W)
+    bh = min(max_h or MAX_ICON_H, MAX_ICON_H)
     try:
-        return await hass.async_add_executor_job(
-            _decode_image, raw, MAX_ICON_W, MAX_ICON_H, None)
+        return await hass.async_add_executor_job(_decode_image, raw, bw, bh, None)
     except (OSError, ValueError, KeyError) as err:
         _LOGGER.error("Icon image decode failed: %s", err)
         return None
 
 
-async def async_fetch_image(hass: HomeAssistant, url: str) -> dict[str, Any] | None:
-    """Fetch an image/GIF by URL and decode it, auto-fitting within the largest panel."""
+async def async_fetch_image(hass: HomeAssistant, url: str, max_w: int | None = None,
+                            max_h: int | None = None) -> dict[str, Any] | None:
+    """Fetch an image/GIF by URL and decode it, auto-fitting within the given (or largest) box."""
     try:
         await hass.async_add_executor_job(_validate_public_url, url)
     except (ValueError, OSError) as err:
@@ -71,7 +75,7 @@ async def async_fetch_image(hass: HomeAssistant, url: str) -> dict[str, Any] | N
     if len(raw) > MAX_UPLOAD_BYTES:
         _LOGGER.error("Icon URL image too large (%d bytes): %s", len(raw), url)
         return None
-    return await async_decode_upload(hass, raw)
+    return await async_decode_upload(hass, raw, max_w, max_h)
 
 
 def _validate_public_url(url: str) -> None:
