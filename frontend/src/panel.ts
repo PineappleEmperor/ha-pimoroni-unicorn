@@ -296,6 +296,9 @@ export class PimoroniUnicornPanel extends LitElement {
     .swatch { position: relative; display: inline-flex; }
     .swatch .x { position: absolute; top: -7px; right: -7px; width: 18px; height: 18px; line-height: 16px; padding: 0; border-radius: 50%; border: none; background: var(--pu-outline); color: #fff; font-size: 12px; cursor: pointer; }
     .swatches .add { width: 32px; height: 32px; padding: 0; border-radius: 6px; border: 1px dashed var(--pu-outline); background: transparent; color: inherit; font-size: 16px; cursor: pointer; }
+    @media (prefers-reduced-motion: reduce) {
+      * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    }
   `;
 
   protected firstUpdated(): void { this.loadDevices(); this.loadIcons(); this.loadFonts(); }
@@ -982,7 +985,7 @@ export class PimoroniUnicornPanel extends LitElement {
       <div class="bar">
         <div class="group">
           <label>Page
-            <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; if (this.guardDiscard()) this.loadLayout(v === "__new__" ? this.defaultLayout : this.stored[v]); else this.requestUpdate(); }}>
+            <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v === "__new__") this.newPage(); else if (this.guardDiscard()) this.loadLayout(this.stored[v]); else this.requestUpdate(); }}>
               ${Object.keys(this.stored).map((n) => html`<option ?selected=${n === this.layoutName}>${n}</option>`)}
               <option value="__new__">+ new page</option>
             </select>
@@ -1278,7 +1281,9 @@ export class PimoroniUnicornPanel extends LitElement {
         <p class="hint">Built-in icons ship with the engine. Add LaMetric gallery icons by code, then choose which devices to install them on.</p>
         <div class="panelrow">
           ${this.iconCode ? html`<img class="iconprev" alt=""
-            src="https://developer.lametric.com/content/apps/icon_thumbs/${this.iconCode}" />`
+            src="https://developer.lametric.com/content/apps/icon_thumbs/${this.iconCode}"
+            @load=${(e: Event) => ((e.target as HTMLImageElement).style.visibility = "visible")}
+            @error=${(e: Event) => ((e.target as HTMLImageElement).style.visibility = "hidden")} />`
             : html`<div class="iconprev"></div>`}
           <div class="grow">
             <div class="panelrow">
@@ -1403,7 +1408,11 @@ export class PimoroniUnicornPanel extends LitElement {
   }
   private setOpField(i: number, key: string, val: unknown): void {
     const s = this.parsedSpec(); if (!s || !Array.isArray(s.draw)) return;
-    s.draw[i] = { ...s.draw[i], [key]: val }; this.writeSpec(s);
+    const prev = s.draw[i] ?? {};
+    s.draw[i] = key === "op"
+      ? { op: val, x: prev.x ?? 0, y: prev.y ?? 0 }
+      : { ...prev, [key]: val };
+    this.writeSpec(s);
   }
   private addOp(type: string): void {
     const s = this.parsedSpec() ?? {}; s.draw = [...(s.draw ?? []), { op: type, x: 0, y: 0 }]; this.writeSpec(s);
