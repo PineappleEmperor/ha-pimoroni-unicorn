@@ -289,6 +289,7 @@ export class PimoroniUnicornPanel extends LitElement {
     .fhint { font-size: 12px; color: var(--secondary-text-color, #79747e); margin-left: 8px; }
     .fcell { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
     .frow { display: flex; align-items: center; gap: 14px; padding: 8px 10px; border: 1px solid var(--pu-outline); border-radius: 8px; margin-bottom: 6px; }
+    .iconrow { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 12px; border: 1px solid var(--pu-outline); border-radius: 10px; margin-bottom: 6px; }
     .fmeta { display: flex; flex-direction: column; gap: 2px; width: 160px; flex: none; }
     .fprev { height: 40px; image-rendering: pixelated; background: #000; border-radius: 6px; padding: 0 8px; object-fit: contain; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
     .swatches { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
@@ -368,7 +369,7 @@ export class PimoroniUnicornPanel extends LitElement {
     this.reloadIconsSoon();
   }
   private async removeIcon(name: string) {
-    if (!confirm(`Delete icon "${name}" from all devices?`)) return;
+    if (!confirm(`Delete "${name}" everywhere? This removes it from the library and every device, and can't be undone.`)) return;
     await this.hass.callWS({ type: "pimoroni_unicorn/icon_remove", name });
     this.status = `Removed icon "${name}".`;
     this.reloadIconsSoon();
@@ -1302,24 +1303,27 @@ export class PimoroniUnicornPanel extends LitElement {
             </div>
           </div>
         </div>
-        ${this.entryId ? html`<p class="hint">On-device status is shown for the selected device. “Install” pushes a registry icon to just this device; “Remove” takes it off this device only. “Delete” removes it everywhere.</p>` : ""}
+        ${this.entryId
+          ? html`<p class="hint">“Install on device” / “Remove from device” affect only the selected device. “Delete everywhere” removes the icon from the library and every device.</p>`
+          : html`<p class="hint">Select a device above to install or remove these on a specific device. “Delete everywhere” removes an icon from the library and every device.</p>`}
         ${this.installedIcons.length
           ? this.installedIcons.map((n) => {
               const onDevice = this.deviceIcons.includes(n);
-              return html`<div class="panelrow">
+              return html`<div class="iconrow">
               ${this.iconThumbs[n]
                 ? html`<img class="iconthumb" alt="" src="data:image/png;base64,${this.iconThumbs[n]}" />`
                 : html`<div class="iconthumb"></div>`}
               <span class="grow">${n}</span>
               ${this.entryId
                 ? (onDevice
-                  ? html`<button class="zbtn" title="Remove from this device"
-                      @click=${() => this.removeIconFromDevice(n)}>On device ✓</button>`
-                  : html`<button class="zbtn" title="Install on this device"
-                      @click=${() => this.pushIconToDevice(n)}>Install</button>`)
+                  ? html`<span class="badge ok">on this device</span>
+                      <button class="secondary" title="Take this icon off the selected device (stays in the library)"
+                        @click=${() => this.removeIconFromDevice(n)}>Remove from device</button>`
+                  : html`<button class="secondary" title="Push this icon to the selected device"
+                      @click=${() => this.pushIconToDevice(n)}>Install on device</button>`)
                 : ""}
-              <button class="danger zbtn" title="Delete from all devices"
-                @click=${() => this.removeIcon(n)}>Delete</button></div>`;
+              <button class="danger" title="Delete from the library and every device"
+                @click=${() => this.removeIcon(n)}>Delete everywhere</button></div>`;
             })
           : html`<p class="hint">No custom icons installed yet.</p>`}
       `)}

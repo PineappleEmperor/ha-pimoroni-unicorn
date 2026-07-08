@@ -189,3 +189,8 @@ scripts/emulator/layouts/
 
 # Frontend build deps
 frontend/node_modules/
+
+# impeccable design-skill context (local, not shipped)
+PRODUCT.md
+DESIGN.md
+.impeccable/
