@@ -598,6 +598,12 @@ async def ws_icons(hass, connection, msg):
 
     thumbs = await hass.async_add_executor_job(_thumbs)
     dims = {n: [int(registry[n].get("w", 8)), int(registry[n].get("h", 8))] for n in installed}
+    trunc = {}
+    for n in installed:
+        kept = len(registry[n].get("frames") or [])
+        total = int(registry[n].get("n_total", kept))
+        if total > kept:
+            trunc[n] = [kept, total]
     device_installed = []
     if msg.get("entry_id"):
         files = (_fw_manifest(hass, msg["entry_id"]) or {}).get("files") or {}
@@ -607,6 +613,7 @@ async def ws_icons(hass, connection, msg):
         "installed": installed,
         "thumbs": thumbs,
         "dims": dims,
+        "trunc": trunc,
         "device_installed": device_installed,
     })
 

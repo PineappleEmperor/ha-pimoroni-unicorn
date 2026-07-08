@@ -127,6 +127,7 @@ export class PimoroniUnicornPanel extends LitElement {
   @state() private iconFilePreview = "";  // data URL for the local preview thumbnail
   @state() private iconImportNote = "";
   @state() private iconDims: Record<string, [number, number]> = {};
+  @state() private iconTrunc: Record<string, [number, number]> = {};  // name -> [kept, total] frames
   @state() private iconSizeMode: "device" | "native" | "custom" = "device";
   @state() private iconCustomW = 16;
   @state() private iconCustomH = 16;
@@ -377,6 +378,7 @@ export class PimoroniUnicornPanel extends LitElement {
       this.installedIcons = r.installed ?? [];
       this.iconThumbs = r.thumbs ?? {};
       this.iconDims = r.dims ?? {};
+      this.iconTrunc = r.trunc ?? {};
       this.deviceIcons = r.device_installed ?? [];
     } catch { /* icons list optional */ }
   }
@@ -1093,6 +1095,11 @@ export class PimoroniUnicornPanel extends LitElement {
           out.push(`Icon “${name}” (${d[0]}×${d[1]}) is bigger than the ${dw}×${dh} screen`);
           return;
         }
+        const t = name ? this.iconTrunc[name] : undefined;
+        if (t) {
+          out.push(`Icon “${name}” animation was trimmed to ${t[0]} of ${t[1]} frames to fit`);
+          return;
+        }
       }
       const box = this.wboxes[i];
       if (box && box[0] && box[1] && (wdg.x + box[0] > dw || wdg.y + box[1] > dh)) {
@@ -1583,6 +1590,8 @@ export class PimoroniUnicornPanel extends LitElement {
                 : html`<div class="iconthumb empty"></div>`}
               <span class="grow">${n}${this.iconDims[n]
                 ? html` <span class="hint">${this.iconDims[n][0]}×${this.iconDims[n][1]}</span>` : ""}
+                ${this.iconTrunc[n]
+                  ? html`<span class="badge warn" title="Its source had more frames than fit the device budget">trimmed ${this.iconTrunc[n][0]}/${this.iconTrunc[n][1]} frames</span>` : ""}
                 ${this.entryId && this.iconOversize(n)
                   ? html`<span class="badge warn" title="Larger than this device (${this.dims[0]}×${this.dims[1]}) — won't fit and may hang it">too big for this device</span>` : ""}</span>
               ${this.entryId
