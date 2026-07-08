@@ -151,3 +151,11 @@ async def test_push_firmware_syntax_error_raises(hass, mqtt_mock) -> None:
         await hass.services.async_call(DOMAIN, "push_firmware", {
             "entry_id": entry.entry_id, "files": ["main"],
             "file_content": {"main": "def ("}}, blocking=True)
+
+
+async def test_push_firmware_unknown_device_noop(hass, mqtt_mock) -> None:
+    """A device_id that resolves to nothing logs + returns without error."""
+    await _setup(hass)
+    await hass.services.async_call(
+        DOMAIN, "push_firmware", {"device_id": "ghost"}, blocking=True)
+    await hass.async_block_till_done()

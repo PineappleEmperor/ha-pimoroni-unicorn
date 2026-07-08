@@ -163,3 +163,23 @@ async def test_font_install_unknown_entry(hass, mqtt_mock, hass_ws_client) -> No
     c = await hass_ws_client(hass)
     r = await _call(c, type="pimoroni_unicorn/font_install", entry_id="nope", font="digits")
     assert not r["success"] and r["error"]["code"] == "not_found"
+
+
+async def test_notify_no_content_and_downconvert_and_dismiss_nodev(hass, mqtt_mock) -> None:
+    """Empty notify raises; a pre-v2 device downconverts; dismiss to an unknown device no-ops."""
+    import homeassistant.helpers.device_registry as dr
+    from homeassistant.exceptions import ServiceValidationError
+    entry = await _setup(hass)
+    did = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)[0].id
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "send_notification", {"device_id": did, "message": ""}, blocking=True)
+
+    entry.runtime_data["notify_caps"] = {"v": 1}  # pre-v2 device -> downconvert
+    await hass.services.async_call(
+        DOMAIN, "send_notification",
+        {"device_id": did, "message": "hi", "effect": "rainbow"}, blocking=True)
+
+    await hass.services.async_call(
+        DOMAIN, "dismiss_notification", {"device_id": "ghost", "all": True}, blocking=True)
+    await hass.async_block_till_done()

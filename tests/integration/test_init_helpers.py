@@ -107,3 +107,62 @@ async def test_setup_publishers_fire_on_state_change(hass: HomeAssistant, mqtt_m
     hass.states.async_set("sun.sun", "above_horizon")
     hass.states.async_set("weather.home", "cloudy", {"temperature": 10.2})
     await hass.async_block_till_done()
+
+
+async def test_rewire_retrack_removes_stale(hass: HomeAssistant, mqtt_mock) -> None:
+    """Re-wiring a new entity set clears the previously-tracked entities (removal publish)."""
+    hass.states.async_set("binary_sensor.a", "on")
+    hass.states.async_set("sensor.p", "1.0")
+    hass.states.async_set("binary_sensor.b", "on")
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="dev3",
+                            data={CONF_DEVICE_ID: "dev3", CONF_MODEL: "Galactic Unicorn"})
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    first = {"widgets": [
+        {"id": "sensor", "cfg": {"entity": "binary_sensor.a"}},
+        {"id": "value", "cfg": {"entity": "sensor.p"}}]}
+    await pu._async_rewire_sensor_feed(hass, entry, first)
+    second = {"widgets": [{"id": "sensor", "cfg": {"entity": "binary_sensor.b"}}]}
+    await pu._async_rewire_sensor_feed(hass, entry, second)
+    await hass.async_block_till_done()
+    assert entry.runtime_data["sensor_entities"] == {"binary_sensor.b"}
+    assert entry.runtime_data["value_entities"] == set()
+
+
+async def test_rewire_with_custom_declarative_spec(hass: HomeAssistant, mqtt_mock) -> None:
+    """A custom declarative widget's dot/value binds are tracked via its spec."""
+    import json as _json
+    from custom_components.pimoroni_unicorn import marketplace
+    wdir = marketplace.widgets_dir(hass.config.config_dir)
+    wdir.mkdir(parents=True, exist_ok=True)
+    (wdir / "widget_mycustom.json").write_text(_json.dumps({
+        "id": "mycustom",
+        "draw": [{"op": "dot", "bind": "$sensor", "on_state": "open"},
+                 {"op": "value", "bind": "$num"}]}))
+    hass.states.async_set("binary_sensor.z", "open")
+    hass.states.async_set("sensor.z2", "3.0")
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="dev4",
+                            data={CONF_DEVICE_ID: "dev4", CONF_MODEL: "Galactic Unicorn"})
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    lay = {"widgets": [{"id": "mycustom",
+                        "cfg": {"sensor": "binary_sensor.z", "num": "sensor.z2"}}]}
+    await pu._async_rewire_sensor_feed(hass, entry, lay)
+    assert entry.runtime_data["sensor_entities"] == {"binary_sensor.z"}
+    assert entry.runtime_data["value_entities"] == {"sensor.z2"}
+
+
+async def test_live_state_uses_diag_weather(hass: HomeAssistant, mqtt_mock) -> None:
+    """live_state prefers the device-reported weather + temp from diag."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="dev5",
+                            data={CONF_DEVICE_ID: "dev5", CONF_MODEL: "Galactic Unicorn"})
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    entry.runtime_data["diag"] = {"weather": "rain", "weather_temp": 12.5}
+    state = pu.live_state(hass, entry)
+    assert state["weather"] == "rain"
