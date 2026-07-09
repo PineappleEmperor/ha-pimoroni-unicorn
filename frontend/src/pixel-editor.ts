@@ -1,12 +1,12 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { hexToRgb, rgbToHex, floodFill, sampleSource } from "./pixel-utils";
+import { hexToRgb, rgbToHex, floodFill, sampleSource, contentBounds, cropRegion } from "./pixel-utils";
 
 type Tool = "pencil" | "eraser" | "pick" | "fill";
 type DecodeFn = (req: { data?: string; url?: string; maxW: number; maxH: number })
   => Promise<{ png: string; w: number; h: number }>;
 
-const MAX_W = 53, MAX_H = 32, UNDO_LIMIT = 50, CELL = 12;
+const MAX_W = 53, MAX_H = 32, UNDO_LIMIT = 50;
 
 @customElement("pixel-editor")
 export class PixelEditor extends LitElement {
@@ -20,7 +20,9 @@ export class PixelEditor extends LitElement {
   @state() private swatches: string[] = ["#ffffff", "#ff3355", "#33cc66", "#3399ff"];
   @state() private name = "";
   @state() private zoomPct = 100;
+  @state() private editCell = 0;  // px per cell on the edit canvas; 0 = fit to stage
   @state() private status = "";
+  private _skipResize = false;
   private undoStack: Uint8ClampedArray[] = [];
   private redoStack: Uint8ClampedArray[] = [];
   private src: { data: Uint8ClampedArray; w: number; h: number } | null = null;
@@ -31,10 +33,11 @@ export class PixelEditor extends LitElement {
     :host { display: block; }
     .wrap { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
     .rail { flex: 0 0 auto; min-width: 150px; display: flex; flex-direction: column; gap: 8px; }
-    .stage { flex: 1 1 320px; display: flex; justify-content: center; background: #000;
-             border-radius: 8px; padding: 12px; min-height: 200px; }
+    .stage { flex: 1 1 320px; display: flex; justify-content: center; align-items: flex-start;
+             background: #000; border-radius: 8px; padding: 12px; min-height: 200px;
+             max-height: 64vh; overflow: auto; overscroll-behavior: contain; }
     canvas { image-rendering: pixelated; touch-action: none;
-             box-shadow: 0 0 0 1px var(--divider-color, #444); max-width: 100%; }
+             box-shadow: 0 0 0 1px var(--divider-color, #444); }
     .tools { display: flex; flex-wrap: wrap; gap: 6px; }
     button { min-height: 40px; min-width: 40px; }
     button.on { outline: 2px solid var(--primary-color, #03a9f4); }
@@ -46,7 +49,21 @@ export class PixelEditor extends LitElement {
   `;
 
   protected willUpdate(changed: Map<string, unknown>): void {
-    if (changed.has("w") || changed.has("h")) this.resize(this.w, this.h, false);
+    if ((changed.has("w") || changed.has("h")) && !this._skipResize) this.resize(this.w, this.h, false);
+    this._skipResize = false;
+  }
+
+  private get cellPx(): number {
+    if (this.editCell > 0) return this.editCell;
+    return Math.max(3, Math.min(40, Math.floor(Math.min(600 / this.w, 380 / this.h))));
+  }
+  private zoomEdit(delta: number): void {
+    this.editCell = Math.max(3, Math.min(40, this.cellPx + delta));
+  }
+  private onWheel(ev: WheelEvent): void {
+    if (!ev.ctrlKey && !ev.metaKey) return;  // plain wheel pans the stage
+    ev.preventDefault();
+    this.zoomEdit(ev.deltaY < 0 ? 2 : -2);
   }
 
   private resize(w: number, h: number, keep: boolean): void {
@@ -61,6 +78,32 @@ export class PixelEditor extends LitElement {
         }
     }
     this.w = w; this.h = h; this.px = next; this.draw();
+  }
+  private applyResize(w: number, h: number): void {
+    this._skipResize = true;
+    this.resize(w, h, true);
+  }
+  private _adoptSourceSize(): void {
+    if (!this.src) return;
+    let nw = this.src.w, nh = this.src.h;
+    if (nw > MAX_W || nh > MAX_H) {
+      const k = Math.min(MAX_W / nw, MAX_H / nh);
+      nw = Math.max(1, Math.round(nw * k));
+      nh = Math.max(1, Math.round(nh * k));
+    }
+    this._skipResize = true;
+    this.w = nw; this.h = nh; this.px = new Uint8ClampedArray(nw * nh * 3);
+  }
+  private fitToContent(): void {
+    const b = contentBounds(this.px, this.w, this.h);
+    if (!b) { this.status = "Nothing drawn to fit."; return; }
+    const cw = b.x1 - b.x0 + 1, ch = b.y1 - b.y0 + 1;
+    if (cw === this.w && ch === this.h) { this.status = "Already tight to the content."; return; }
+    this.snapshot();
+    const cropped = cropRegion(this.px, this.w, b.x0, b.y0, cw, ch);
+    this._skipResize = true;
+    this.w = cw; this.h = ch; this.px = cropped; this.draw();
+    this.status = `Fitted to ${cw}×${ch}.`;
   }
 
   private snapshot(): void {
@@ -90,7 +133,8 @@ export class PixelEditor extends LitElement {
   private draw(): void {
     const c = this.canvas;
     if (!c) return;
-    c.width = this.w * CELL; c.height = this.h * CELL;
+    const cell = this.cellPx;
+    c.width = this.w * cell; c.height = this.h * cell;
     const ctx = c.getContext("2d");
     if (!ctx) return;
     for (let y = 0; y < this.h; y++)
@@ -102,7 +146,7 @@ export class PixelEditor extends LitElement {
         } else {
           ctx.fillStyle = `rgb(${r},${g},${b})`;
         }
-        ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+        ctx.fillRect(x * cell, y * cell, cell, cell);
       }
   }
 
@@ -176,7 +220,9 @@ export class PixelEditor extends LitElement {
     const data = ictx.getImageData(0, 0, off.width, off.height).data;
     this.src = { data: new Uint8ClampedArray(data), w: off.width, h: off.height };
     this.zoomPct = 100; this.srcOffX = 0; this.srcOffY = 0;
+    this._adoptSourceSize();
     this.stampSource();
+    this.status = `Imported ${off.width}×${off.height} → editing at ${this.w}×${this.h}.`;
   }
 
   private stampSource(): void {
@@ -232,6 +278,12 @@ export class PixelEditor extends LitElement {
             <button title="Undo" @click=${this.undo}>↶</button>
             <button title="Redo" @click=${this.redo}>↷</button>
           </div>
+          <label>View · ${this.cellPx}px/cell</label>
+          <div class="tools">
+            <button title="Zoom out" aria-label="Zoom out" @click=${() => this.zoomEdit(-2)}>−</button>
+            <button title="Fit to view" aria-label="Fit to view" @click=${() => { this.editCell = 0; }}>Fit</button>
+            <button title="Zoom in" aria-label="Zoom in" @click=${() => this.zoomEdit(2)}>+</button>
+          </div>
           <label>Colour</label>
           <input type="color" .value=${this.color}
             @input=${(e: Event) => this.pickColor((e.target as HTMLInputElement).value)} />
@@ -243,7 +295,7 @@ export class PixelEditor extends LitElement {
           </div>
         </div>
 
-        <div class="stage">
+        <div class="stage" @wheel=${this.onWheel}>
           <canvas
             @pointerdown=${this.onDown} @pointermove=${this.onMove}
             @pointerup=${this.onUp} @pointercancel=${this.onUp}></canvas>
@@ -254,23 +306,24 @@ export class PixelEditor extends LitElement {
           <input type="file" accept="image/png,image/gif,image/apng,image/webp" @change=${this.onFile} />
           <button @click=${this.onUrl}>From URL…</button>
           ${this.src ? html`
-            <label>Zoom ${this.zoomPct}%</label>
+            <label>Crop zoom ${this.zoomPct}%</label>
             <input type="range" min="50" max="400" .value=${String(this.zoomPct)}
               @input=${(e: Event) => { this.zoomPct = +(e.target as HTMLInputElement).value; this.stampSource(); }} />
             <div class="tools">
-              <button @click=${() => { this.srcOffX -= 1; this.stampSource(); }}>←</button>
-              <button @click=${() => { this.srcOffX += 1; this.stampSource(); }}>→</button>
-              <button @click=${() => { this.srcOffY -= 1; this.stampSource(); }}>↑</button>
-              <button @click=${() => { this.srcOffY += 1; this.stampSource(); }}>↓</button>
+              <button title="Pan source left" aria-label="Pan source left" @click=${() => { this.srcOffX -= 1; this.stampSource(); }}>←</button>
+              <button title="Pan source right" aria-label="Pan source right" @click=${() => { this.srcOffX += 1; this.stampSource(); }}>→</button>
+              <button title="Pan source up" aria-label="Pan source up" @click=${() => { this.srcOffY -= 1; this.stampSource(); }}>↑</button>
+              <button title="Pan source down" aria-label="Pan source down" @click=${() => { this.srcOffY += 1; this.stampSource(); }}>↓</button>
             </div>` : ""}
           <label>Size</label>
           <div class="tools">
-            <input type="number" min="1" max="53" .value=${String(this.w)} style="width:56px"
-              @change=${(e: Event) => this.resize(+(e.target as HTMLInputElement).value, this.h, true)} />
+            <input type="number" min="1" max="53" .value=${String(this.w)} style="width:56px" aria-label="Width"
+              @change=${(e: Event) => this.applyResize(+(e.target as HTMLInputElement).value, this.h)} />
             <span>×</span>
-            <input type="number" min="1" max="32" .value=${String(this.h)} style="width:56px"
-              @change=${(e: Event) => this.resize(this.w, +(e.target as HTMLInputElement).value, true)} />
+            <input type="number" min="1" max="32" .value=${String(this.h)} style="width:56px" aria-label="Height"
+              @change=${(e: Event) => this.applyResize(this.w, +(e.target as HTMLInputElement).value)} />
           </div>
+          <button title="Crop the canvas tight to the drawn pixels" @click=${this.fitToContent}>Fit to content</button>
           <label>Name</label>
           <input type="text" .value=${this.name} style="width:120px"
             @input=${(e: Event) => { this.name = (e.target as HTMLInputElement).value; }} />
