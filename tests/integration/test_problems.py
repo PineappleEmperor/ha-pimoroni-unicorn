@@ -48,3 +48,21 @@ async def test_clean_page_no_issues(hass: HomeAssistant) -> None:
     entry = _stellar(hass, {"ok": {"w": 8, "h": 8, "frames": ["a", "b"], "n_total": 2}}, page)
     await problems.async_sync_issues(hass, entry)
     assert not entry.runtime_data["issue_ids"]
+
+
+async def test_acked_oversize_icon_suppressed(hass: HomeAssistant) -> None:
+    """An oversize icon whose widget acks 'oversize' raises no repair."""
+    page = {"widgets": [{"id": "icon", "x": 0, "y": 0, "cfg": {"icon": "big"}, "ack": ["oversize"]}]}
+    entry = _stellar(hass, {"big": {"w": 32, "h": 32, "frames": ["x"]}}, page)
+    await problems.async_sync_issues(hass, entry)
+    reg = ir.async_get(hass)
+    assert reg.async_get_issue(DOMAIN, f"{entry.entry_id}_oversize_big") is None
+    assert not entry.runtime_data["issue_ids"]
+
+
+async def test_acked_trimmed_icon_suppressed(hass: HomeAssistant) -> None:
+    """A trimmed icon whose widget acks 'trimmed' raises no repair."""
+    page = {"widgets": [{"id": "icon", "x": 0, "y": 0, "cfg": {"icon": "anim"}, "ack": ["trimmed"]}]}
+    entry = _stellar(hass, {"anim": {"w": 8, "h": 8, "frames": ["a", "b"], "n_total": 20}}, page)
+    await problems.async_sync_issues(hass, entry)
+    assert not entry.runtime_data["issue_ids"]
