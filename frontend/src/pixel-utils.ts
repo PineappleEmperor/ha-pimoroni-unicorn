@@ -29,6 +29,37 @@ export function floodFill(
   }
 }
 
+export function contentBounds(
+  px: Uint8ClampedArray, w: number, h: number,
+): { x0: number; y0: number; x1: number; y1: number } | null {
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 3;
+      if (px[i] || px[i + 1] || px[i + 2]) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  return x1 < 0 ? null : { x0, y0, x1, y1 };
+}
+
+export function cropRegion(
+  px: Uint8ClampedArray, w: number, x0: number, y0: number, cw: number, ch: number,
+): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(cw * ch * 3);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      const o = (y * cw + x) * 3, i = ((y0 + y) * w + (x0 + x)) * 3;
+      out[o] = px[i]; out[o + 1] = px[i + 1]; out[o + 2] = px[i + 2];
+    }
+  }
+  return out;
+}
+
 export function sampleSource(
   src: Uint8ClampedArray, sw: number, sh: number,
   offX: number, offY: number, scale: number, w: number, h: number,
