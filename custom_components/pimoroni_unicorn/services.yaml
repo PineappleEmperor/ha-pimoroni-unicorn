@@ -5,68 +5,72 @@ send_notification:
       selector:
         device:
           integration: pimoroni_unicorn
+          multiple: true
     message:
       selector:
         text: {}
     icon:
       selector:
         text: {}
-    icon_scale:
+    color:
       selector:
-        number:
-          min: 1
-          max: 4
-          step: 1
-          mode: slider
-    icon_position:
-      selector:
-        select:
-          options:
-            - {value: left, label: Left}
-            - {value: center, label: Center}
-            - {value: right, label: Right}
-    effect:
-      selector:
-        select:
-          options:
-            - {value: rainbow, label: Rainbow}
-            - {value: fire, label: Fire}
-            - {value: matrix, label: Matrix}
-            - {value: scanner, label: Scanner}
-            - {value: comet, label: Comet}
-            - {value: snow, label: Snow}
-            - {value: confetti, label: Confetti}
-            - {value: flash, label: Flash}
-            - {value: pulse, label: Pulse}
-            - {value: bounce, label: Bounce}
-            - {value: supercomputer, label: Supercomputer}
-            - {value: retroprompt, label: Retro prompt}
-    sound:
-      selector:
-        select:
-          options:
-            - {value: beep, label: Beep}
-            - {value: chime, label: Chime}
-            - {value: alert, label: Alert}
-    duration:
-      selector:
-        number:
-          min: 1
-          max: 60
-          step: 0.5
-          unit_of_measurement: s
+        color_rgb: {}
     appearance:
       collapsed: true
       fields:
-        color:
+        font:
+          required: true
+          default: bitmap8
           selector:
-            color_rgb: {}
+            select:
+              options:
+                - {value: bitmap8, label: Standard}
+                - {value: heavy, label: Heavy}
+                - {value: font5x9, label: Tall}
+                - {value: font3x5, label: Compact}
+        bold:
+          required: true
+          default: false
+          selector:
+            boolean: {}
+        outlined:
+          required: true
+          default: false
+          selector:
+            boolean: {}
         bg_color:
           selector:
             color_rgb: {}
-        outlined:
+        icon_scale:
           selector:
-            boolean: {}
+            number:
+              min: 1
+              max: 4
+              step: 1
+              mode: slider
+        icon_position:
+          selector:
+            select:
+              options:
+                - {value: left, label: Left}
+                - {value: center, label: Center}
+                - {value: right, label: Right}
+        effect:
+          selector:
+            select:
+              options:
+                - {value: rainbow, label: Rainbow}
+                - {value: fire, label: Fire}
+                - {value: matrix, label: Matrix}
+                - {value: scanner, label: Scanner}
+                - {value: comet, label: Comet}
+                - {value: snow, label: Snow}
+                - {value: confetti, label: Confetti}
+                - {value: flash, label: Flash}
+                - {value: pulse, label: Pulse}
+                - {value: bounce, label: Bounce}
+                - {value: supercomputer, label: Supercomputer}
+                - {value: retroprompt, label: Retro prompt}
         entrance:
           selector:
             select:
@@ -78,6 +82,47 @@ send_notification:
                 - {value: slide_right, label: Slide in from right}
                 - {value: center_out, label: Center out}
                 - {value: fade, label: Fade in}
+    behaviour:
+      collapsed: true
+      fields:
+        sound:
+          selector:
+            select:
+              options:
+                - {value: beep, label: Beep}
+                - {value: chime, label: Chime}
+                - {value: alert, label: Alert}
+        hold:
+          required: true
+          default: false
+          selector:
+            boolean: {}
+        stack:
+          required: true
+          default: false
+          selector:
+            boolean: {}
+        wakeup:
+          required: true
+          default: false
+          selector:
+            boolean: {}
+    timing:
+      collapsed: true
+      fields:
+        duration:
+          selector:
+            number:
+              min: 1
+              max: 60
+              step: 0.5
+              unit_of_measurement: s
+        repeat:
+          selector:
+            number:
+              min: 1
+              max: 10
+              step: 1
         scroll_speed:
           selector:
             number:
@@ -90,24 +135,6 @@ send_notification:
               min: 0.1
               max: 5
               step: 0.1
-    behaviour:
-      collapsed: true
-      fields:
-        hold:
-          selector:
-            boolean: {}
-        repeat:
-          selector:
-            number:
-              min: 1
-              max: 10
-              step: 1
-        stack:
-          selector:
-            boolean: {}
-        wakeup:
-          selector:
-            boolean: {}
 
 dismiss_notification:
   fields:
@@ -116,7 +143,10 @@ dismiss_notification:
       selector:
         device:
           integration: pimoroni_unicorn
+          multiple: true
     all:
+      required: true
+      default: false
       selector:
         boolean: {}
 

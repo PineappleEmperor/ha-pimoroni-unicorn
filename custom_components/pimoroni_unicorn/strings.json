@@ -144,11 +144,11 @@
   "services": {
     "send_notification": {
       "name": "Send notification (guided builder)",
-      "description": "Build and send a notification with a guided form. Equivalent to the device's notify entity with the same options passed under data.",
+      "description": "Build and send a notification with a guided form. Targets one or more Pimoroni Unicorn displays.",
       "fields": {
         "device_id": {
-          "name": "Device",
-          "description": "The Pimoroni Unicorn device to notify."
+          "name": "Devices",
+          "description": "One or more Pimoroni Unicorn devices to notify."
         },
         "message": {
           "name": "Message",
@@ -157,6 +157,26 @@
         "icon": {
           "name": "Icon",
           "description": "Name of an icon installed on the device, or a LaMetric gallery code. Install icons from the Unicorn panel or Configure → Install LaMetric icon."
+        },
+        "color": {
+          "name": "Text colour",
+          "description": "RGB colour for the message text (default white)."
+        },
+        "font": {
+          "name": "Font",
+          "description": "Text face. Standard is the default; Heavy is a purpose-drawn bold cut that reads well on the Galactic but is wider, so long text scrolls sooner. Compact has no lowercase."
+        },
+        "bold": {
+          "name": "Bold",
+          "description": "Thicken whichever font is selected. Widens the outline to match."
+        },
+        "outlined": {
+          "name": "Outlined text",
+          "description": "Draw a black outline around the text."
+        },
+        "bg_color": {
+          "name": "Background colour",
+          "description": "RGB background colour (default black)."
         },
         "icon_scale": {
           "name": "Icon scale",
@@ -170,45 +190,17 @@
           "name": "Effect",
           "description": "Full-screen background animation."
         },
-        "sound": {
-          "name": "Sound",
-          "description": "Sound effect to play (audio models only)."
-        },
-        "duration": {
-          "name": "Duration",
-          "description": "Minimum seconds to show (auto-extends to finish scrolling text)."
-        },
-        "color": {
-          "name": "Text colour",
-          "description": "RGB colour for the message text (default white)."
-        },
-        "bg_color": {
-          "name": "Background colour",
-          "description": "RGB background colour (default black)."
-        },
-        "outlined": {
-          "name": "Outlined text",
-          "description": "Draw a black outline around the text."
-        },
         "entrance": {
           "name": "Entrance effect",
           "description": "Transition when the notification appears."
         },
-        "scroll_speed": {
-          "name": "Scroll speed",
-          "description": "Text scroll speed multiplier (1 = default)."
-        },
-        "effect_speed": {
-          "name": "Effect speed",
-          "description": "Animation speed multiplier (1 = default)."
+        "sound": {
+          "name": "Sound",
+          "description": "Sound effect to play (audio models only)."
         },
         "hold": {
           "name": "Hold",
           "description": "Keep showing until dismissed or replaced."
-        },
-        "repeat": {
-          "name": "Repeat",
-          "description": "Number of full scroll passes for overflowing text."
         },
         "stack": {
           "name": "Stack",
@@ -217,6 +209,22 @@
         "wakeup": {
           "name": "Wake up",
           "description": "Show even while the display is asleep."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Minimum seconds to show, default 10 (auto-extends to finish scrolling text)."
+        },
+        "repeat": {
+          "name": "Repeat",
+          "description": "Number of full scroll passes for overflowing text."
+        },
+        "scroll_speed": {
+          "name": "Scroll speed",
+          "description": "Text scroll speed multiplier (1 = default)."
+        },
+        "effect_speed": {
+          "name": "Effect speed",
+          "description": "Animation speed multiplier (1 = default)."
         }
       },
       "sections": {
@@ -225,16 +233,19 @@
         },
         "behaviour": {
           "name": "Behaviour"
+        },
+        "timing": {
+          "name": "Timing"
         }
       }
     },
     "dismiss_notification": {
       "name": "Dismiss notification",
-      "description": "Dismiss the active notification on a Pimoroni Unicorn display.",
+      "description": "Dismiss the active notification on one or more Pimoroni Unicorn displays.",
       "fields": {
         "device_id": {
-          "name": "Device",
-          "description": "The Pimoroni Unicorn device to dismiss on."
+          "name": "Devices",
+          "description": "One or more Pimoroni Unicorn devices to dismiss on."
         },
         "all": {
           "name": "Clear queue",
