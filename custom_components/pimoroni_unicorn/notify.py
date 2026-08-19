@@ -18,6 +18,7 @@ from .const import (
     DOMAIN,
     NOTIFY_EFFECTS,
     NOTIFY_ENTRANCES,
+    NOTIFY_FONTS,
     NOTIFY_PAYLOAD_VERSION,
     NOTIFY_SOUNDS,
 )
@@ -27,12 +28,14 @@ _LOGGER = logging.getLogger(__name__)
 _SPEED = vol.All(vol.Coerce(float), vol.Range(min=0.1, max=5.0))
 
 GENERIC_NOTIFY_SCHEMA = vol.Schema({
-    vol.Required("device_id"):                 cv.string,
+    vol.Required("device_id"):                 vol.All(cv.ensure_list, [cv.string]),
     vol.Optional(ATTR_MESSAGE, default=""):    cv.string,
     vol.Optional("icon"):                      vol.Any(cv.string, list),
     vol.Optional("icon_scale"):                vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=1, max=4))),
     vol.Optional("icon_position"):             vol.Any(None, vol.In(["left", "center", "right"])),
     vol.Optional("effect"):                    vol.In(NOTIFY_EFFECTS),
+    vol.Optional("font"):                      vol.In(NOTIFY_FONTS),
+    vol.Optional("bold"):                      cv.boolean,
     vol.Optional("effect_speed"):              _SPEED,
     vol.Optional("sound"):                     vol.In(NOTIFY_SOUNDS),
     vol.Optional("color"):                     list,
@@ -48,14 +51,14 @@ GENERIC_NOTIFY_SCHEMA = vol.Schema({
 })
 
 DISMISS_SCHEMA = vol.Schema({
-    vol.Required("device_id"):          cv.string,
+    vol.Required("device_id"):          vol.All(cv.ensure_list, [cv.string]),
     vol.Optional("all", default=False): cv.boolean,
 })
 
 _V2_FIELDS = (
     "icon", "icon_scale", "icon_position", "effect", "effect_speed", "sound", "color", "bg_color",
     "duration", "repeat", "hold", "stack", "scroll_speed", "entrance",
-    "outlined", "wakeup",
+    "outlined", "wakeup", "font", "bold",
 )
 
 
@@ -100,6 +103,22 @@ def _resolve_entry(hass: HomeAssistant, ha_device_id: str):
     return entry, {**entry.data, **entry.options}.get(CONF_DEVICE_ID, "")
 
 
+def _resolve_targets(hass: HomeAssistant, ha_device_ids: list[str]):
+    """Resolve HA device ids to [(config_entry, mqtt_device_id)], skipping unknown ones.
+
+    One removed device in a multi-target call must not silence the rest, so unresolved ids
+    are warned about and dropped; the caller decides what an empty result means.
+    """
+    targets = []
+    for ha_device_id in ha_device_ids:
+        entry, device_id = _resolve_entry(hass, ha_device_id)
+        if device_id:
+            targets.append((entry, device_id))
+        else:
+            _LOGGER.warning("Pimoroni Unicorn: no MQTT device for %s, skipping", ha_device_id)
+    return targets
+
+
 def _maybe_downconvert(hass: HomeAssistant, entry, payload: dict[str, Any]) -> dict[str, Any]:
     """Downconvert when the device reported pre-v2 capabilities."""
     caps = (entry.runtime_data or {}).get("notify_caps")
@@ -111,15 +130,16 @@ def _maybe_downconvert(hass: HomeAssistant, entry, payload: dict[str, Any]) -> d
 def make_generic_notify_handler(hass: HomeAssistant):
     """Return the pimoroni_unicorn.send_notification handler (v2)."""
     async def async_handle(call: ServiceCall) -> None:
-        entry, device_id = _resolve_entry(hass, call.data["device_id"])
-        if not device_id:
+        targets = _resolve_targets(hass, call.data["device_id"])
+        if not targets:
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="no_device")
         payload = _build_payload_v2(call.data.get(ATTR_MESSAGE, ""), call.data)
         if not _has_content(payload):
             raise ServiceValidationError(
                 translation_domain=DOMAIN, translation_key="no_notify_content")
-        payload = _maybe_downconvert(hass, entry, payload)
-        await async_publish(hass, f"{device_id}/notify", json.dumps(payload))
+        for entry, device_id in targets:
+            await async_publish(hass, f"{device_id}/notify",
+                                json.dumps(_maybe_downconvert(hass, entry, payload)))
 
     return async_handle
 
@@ -127,11 +147,12 @@ def make_generic_notify_handler(hass: HomeAssistant):
 def make_dismiss_handler(hass: HomeAssistant):
     """Return the pimoroni_unicorn.dismiss_notification handler."""
     async def async_handle(call: ServiceCall) -> None:
-        _entry, device_id = _resolve_entry(hass, call.data["device_id"])
-        if not device_id:
-            _LOGGER.error("Pimoroni Unicorn dismiss: no MQTT device for the selected device")
+        targets = _resolve_targets(hass, call.data["device_id"])
+        if not targets:
+            _LOGGER.error("Pimoroni Unicorn dismiss: no MQTT device for the selected devices")
             return
-        await async_publish(
-            hass, f"{device_id}/notify/dismiss", json.dumps({"all": call.data.get("all", False)}))
+        body = json.dumps({"all": call.data.get("all", False)})
+        for _entry, device_id in targets:
+            await async_publish(hass, f"{device_id}/notify/dismiss", body)
 
     return async_handle
