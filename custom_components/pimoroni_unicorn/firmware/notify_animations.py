@@ -350,7 +350,7 @@ def _notify_ms_per_px(notif):
 
 def compute_duration_ms(notif):
     """Total display time in ms, or None for hold-until-dismissed."""
-    duration_ms = int(notif.get("duration", 3) * 1000)
+    duration_ms = int(notif.get("duration", 10) * 1000)
     if notif.get("v") != 2:
         return duration_ms
     if notif.get("hold"):
