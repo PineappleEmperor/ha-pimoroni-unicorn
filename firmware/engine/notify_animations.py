@@ -2,14 +2,16 @@
 
 import random
 
+from bitfonts import BitFont, font3x5, font5x9, font_heavy
 from sounds import NOTIFY_SOUNDS
 import icons as _icons
 import uos
 
-_g      = None
-_width  = 0
-_height = 0
-_BLACK  = None
+_g       = None
+_bitfont = None
+_width   = 0
+_height  = 0
+_BLACK   = None
 
 _fire_heat = None
 
@@ -24,11 +26,12 @@ NOTIFY_CAPABILITIES = {}
 
 def init(graphics, width, height):
     """Initialise notify_animations module with graphics context and display dimensions."""
-    global _g, _width, _height, _BLACK
-    _g      = graphics
-    _width  = width
-    _height = height
-    _BLACK  = graphics.create_pen(0, 0, 0)
+    global _g, _bitfont, _width, _height, _BLACK
+    _g       = graphics
+    _bitfont = BitFont(graphics)
+    _width   = width
+    _height  = height
+    _BLACK   = graphics.create_pen(0, 0, 0)
     _icons.init(graphics)
     NOTIFY_ANIMATIONS.clear()
     NOTIFY_ANIMATIONS.update(_load_animations())
@@ -38,6 +41,7 @@ def init(graphics, width, height):
         "animations": list(NOTIFY_ANIMATIONS.keys()),
         "effects":    list(NOTIFY_ANIMATIONS.keys()),
         "sounds":     list(NOTIFY_SOUNDS.keys()),
+        "fonts":      list(_TEXT_FACES.keys()),
         "icons":      list(_icons.STATIC_ICONS.keys()),
         "entrances":  ["none", "swipe_left", "swipe_right", "slide_left", "slide_right",
                        "center_out", "fade"],
@@ -136,23 +140,81 @@ def _anim_unknown(elapsed_ms, ax, ay, aw, ah, color, bg_color):
         _g.text("?", ax + aw // 2 - 3, ay + ah // 2 - 4, scale=1)
 
 
-def _draw_notify_text(text, tx, ty, tw, th, color, elapsed_ms, outlined, ms_per_px=_SCROLL_MS_PER_PX):
+_OUTLINE_RING = ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1))
+
+# name -> (glyph table, cell height, force-uppercase). A None table means PicoGraphics'
+# built-in bitmap8. font3x5 has no lowercase, so text is folded rather than dropped.
+_TEXT_FACES = {
+    "bitmap8": (None,       8, False),
+    "font3x5": (font3x5,    5, True),
+    "font5x9": (font5x9,    9, False),
+    "heavy":   (font_heavy, 9, False),
+}
+
+
+def _text_style(notif):
+    """Resolve a notification's text style to (face, bold, outlined)."""
+    face = _TEXT_FACES.get(notif.get("font"), _TEXT_FACES["bitmap8"])
+    return face, bool(notif.get("bold")), bool(notif.get("outlined"))
+
+
+def _measure_styled(text, face, bold):
+    """Width of text in a face, accounting for the widened advance bold needs."""
+    table, _h, upper = face
+    spacing = 2 if bold else 1
+    if table is None:
+        _g.set_font("bitmap8")
+        return _g.measure_text(text.upper() if upper else text, 1, spacing)
+    width = 0
+    for ch in (text.upper() if upper else text):
+        glyph = table.get(ch)
+        if glyph is not None:
+            width += glyph["w"] + spacing
+    return width - spacing if width else 0
+
+
+def _blit_styled(text, x, y, face, bold):
+    """Draw text once at (x, y), smeared a pixel right when bold.
+
+    The smear alone would close bitmap8's 1px letter gap and fuse adjacent glyphs, so the
+    advance widens to 2px with it. Callers draw this at each outline offset too, which is
+    what makes the ring enclose the bolded shape rather than sit inside it.
+    """
+    table, _h, upper = face
+    spacing = 2 if bold else 1
+    if upper:
+        text = text.upper()
+    for dx in ((0, 1) if bold else (0,)):
+        if table is None:
+            _g.text(text, x + dx, y, -1, 1, 0, spacing)
+            continue
+        cx = x + dx
+        for ch in text:
+            glyph = table.get(ch)
+            if glyph is None:
+                continue
+            _bitfont.draw_char(ch, cx, y, table)
+            cx += glyph["w"] + spacing
+
+
+def _draw_notify_text(text, tx, ty, tw, th, color, elapsed_ms, style, ms_per_px=_SCROLL_MS_PER_PX):
     """Draw notification text (scrolling if too wide) within a bounding region."""
+    face, bold, outlined = style
     _g.set_font("bitmap8")
-    text_w = _g.measure_text(text, 1)
+    text_w = _measure_styled(text, face, bold)
     if text_w <= tw:
         sx = tx + (tw - text_w) // 2
     else:
         adv = elapsed_ms // ms_per_px
         sx  = tx + tw - (adv % (text_w + tw))
-    text_y = ty + (th - 8) // 2
+    text_y = ty + (th - face[1]) // 2
     _g.set_clip(tx, ty, tw, th)
     if outlined:
         _g.set_pen(_BLACK)
-        for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)):
-            _g.text(text, sx + ox, text_y + oy, -1, 1)
+        for ox, oy in _OUTLINE_RING:
+            _blit_styled(text, sx + ox, text_y + oy, face, bold)
     _g.set_pen(_g.create_pen(*color))
-    _g.text(text, sx, text_y, -1, 1)
+    _blit_styled(text, sx, text_y, face, bold)
     _g.remove_clip()
 
 
@@ -224,7 +286,7 @@ def _draw_simple_notification(notif, elapsed_ms):
     text     = notif.get("text", "")
     icon     = notif.get("icon")
     anim     = notif.get("animation", "")
-    outlined = notif.get("outlined", False)
+    style    = _text_style(notif)
 
     _g.set_pen(_g.create_pen(*bg_color))
     _g.clear()
@@ -232,7 +294,7 @@ def _draw_simple_notification(notif, elapsed_ms):
     if icon is not None:
         _draw_icon_panel(icon, elapsed_ms, _icons.ICON_SIZE, color, bg_color)
         if text:
-            _draw_notify_text(text, _ICON_PANEL_WIDTH, 0, _width - _ICON_PANEL_WIDTH, _height, color, elapsed_ms, outlined)
+            _draw_notify_text(text, _ICON_PANEL_WIDTH, 0, _width - _ICON_PANEL_WIDTH, _height, color, elapsed_ms, style)
     else:
         anim_fn = NOTIFY_ANIMATIONS.get(anim)
         if anim and anim_fn is None:
@@ -240,7 +302,7 @@ def _draw_simple_notification(notif, elapsed_ms):
         if anim_fn:
             anim_fn(elapsed_ms, 0, 0, _width, _height, color, bg_color)
         if text:
-            _draw_notify_text(text, 0, 0, _width, _height, color, elapsed_ms, outlined)
+            _draw_notify_text(text, 0, 0, _width, _height, color, elapsed_ms, style)
 
 
 def _draw_advanced_notification(notif, elapsed_ms):
@@ -251,7 +313,7 @@ def _draw_advanced_notification(notif, elapsed_ms):
     anim     = notif.get("animation", "")
     icon     = notif.get("icon")
     layout   = notif.get("layout", "fullscreen")
-    outlined = notif.get("outlined", False)
+    style    = _text_style(notif)
     entrance = notif.get("entrance", "none")
     sw       = notif.get("split_width", _SPLIT_WIDTH_DEFAULT)
 
@@ -267,7 +329,7 @@ def _draw_advanced_notification(notif, elapsed_ms):
         else:
             _g.set_pen(_g.create_pen(*bg_color))
             _g.rectangle(0, 0, sw, _height)
-        _draw_notify_text(text, sw + 1, 0, _width - sw - 1, _height, color, elapsed_ms, outlined)
+        _draw_notify_text(text, sw + 1, 0, _width - sw - 1, _height, color, elapsed_ms, style)
     else:
         if anim_fn:
             anim_fn(elapsed_ms, 0, 0, _width, _height, color, bg_color)
@@ -275,7 +337,7 @@ def _draw_advanced_notification(notif, elapsed_ms):
             _g.set_pen(_g.create_pen(*bg_color))
             _g.clear()
         if text:
-            _draw_notify_text(text, 0, 0, _width, _height, color, elapsed_ms, outlined)
+            _draw_notify_text(text, 0, 0, _width, _height, color, elapsed_ms, style)
 
     _apply_entrance(elapsed_ms, entrance)
 
@@ -288,7 +350,7 @@ def _notify_ms_per_px(notif):
 
 def compute_duration_ms(notif):
     """Total display time in ms, or None for hold-until-dismissed."""
-    duration_ms = int(notif.get("duration", 3) * 1000)
+    duration_ms = int(notif.get("duration", 10) * 1000)
     if notif.get("v") != 2:
         return duration_ms
     if notif.get("hold"):
@@ -296,8 +358,8 @@ def compute_duration_ms(notif):
     text = notif.get("text", "")
     if not text:
         return duration_ms
-    _g.set_font("bitmap8")
-    text_w = _g.measure_text(text, 1)
+    face, bold, _outlined = _text_style(notif)
+    text_w = _measure_styled(text, face, bold)
     tw = _width - _ICON_PANEL_WIDTH if notif.get("icon") is not None else _width
     if text_w <= tw:
         return duration_ms
@@ -312,7 +374,7 @@ def _draw_v2_notification(notif, elapsed_ms):
     text     = notif.get("text", "")
     icon     = notif.get("icon")
     effect   = notif.get("effect", "")
-    outlined = notif.get("outlined", False)
+    style    = _text_style(notif)
     entrance = notif.get("entrance", "none")
     dx       = _slide_dx(entrance, elapsed_ms)
 
@@ -348,7 +410,7 @@ def _draw_v2_notification(notif, elapsed_ms):
         tx, tw = 0, _width
 
     if text:
-        _draw_notify_text(text, tx + dx, 0, tw, _height, color, elapsed_ms, outlined, _notify_ms_per_px(notif))
+        _draw_notify_text(text, tx + dx, 0, tw, _height, color, elapsed_ms, style, _notify_ms_per_px(notif))
 
     _apply_entrance(elapsed_ms, entrance)
 
@@ -374,7 +436,7 @@ def _draw_legacy_notification(notif, elapsed_ms):
     text     = notif.get("text", "")
     anim     = notif.get("animation", "")
     layout   = notif.get("layout", "fullscreen")
-    outlined = notif.get("outlined", False)
+    style    = _text_style(notif)
 
     anim_fn = NOTIFY_ANIMATIONS.get(anim)
     if anim and anim_fn is None:
@@ -387,7 +449,7 @@ def _draw_legacy_notification(notif, elapsed_ms):
         else:
             _g.set_pen(_g.create_pen(*bg_color))
             _g.rectangle(0, 0, sw, _height)
-        _draw_notify_text(text, sw + 1, 0, _width - sw - 1, _height, color, elapsed_ms, outlined)
+        _draw_notify_text(text, sw + 1, 0, _width - sw - 1, _height, color, elapsed_ms, style)
     else:
         if anim_fn:
             anim_fn(elapsed_ms, 0, 0, _width, _height, color, bg_color)
@@ -395,4 +457,4 @@ def _draw_legacy_notification(notif, elapsed_ms):
             _g.set_pen(_g.create_pen(*bg_color))
             _g.clear()
         if text:
-            _draw_notify_text(text, 0, 0, _width, _height, color, elapsed_ms, outlined)
+            _draw_notify_text(text, 0, 0, _width, _height, color, elapsed_ms, style)

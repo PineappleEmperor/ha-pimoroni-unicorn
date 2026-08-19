@@ -42,6 +42,7 @@ async def device_problems(hass: HomeAssistant, entry: PUConfigEntry) -> list[dic
         if wdg.get("enabled") is False:
             continue
         wid = wdg.get("type", wdg.get("id"))
+        ack = wdg.get("ack") or []
         x, y = int(wdg.get("x", 0)), int(wdg.get("y", 0))
         if wid == "icon":
             name = (wdg.get("cfg") or {}).get("icon")
@@ -49,21 +50,23 @@ async def device_problems(hass: HomeAssistant, entry: PUConfigEntry) -> list[dic
             if icon:
                 iw, ih = int(icon.get("w", 8)), int(icon.get("h", 8))
                 if iw > dw or ih > dh:
-                    out.append({
-                        "issue_id": f"{entry.entry_id}_oversize_{name}",
-                        "translation_key": "icon_oversize",
-                        "placeholders": {"icon": str(name), "size": f"{iw}x{ih}", "screen": f"{dw}x{dh}"}})
+                    if "oversize" not in ack:
+                        out.append({
+                            "issue_id": f"{entry.entry_id}_oversize_{name}",
+                            "translation_key": "icon_oversize",
+                            "placeholders": {"icon": str(name), "size": f"{iw}x{ih}", "screen": f"{dw}x{dh}"}})
                     continue
                 kept = len(icon.get("frames") or [])
                 total = int(icon.get("n_total", kept))
                 if total > kept:
-                    out.append({
-                        "issue_id": f"{entry.entry_id}_truncated_{name}",
-                        "translation_key": "icon_truncated",
-                        "placeholders": {"icon": str(name), "kept": str(kept), "total": str(total)}})
+                    if "trimmed" not in ack:
+                        out.append({
+                            "issue_id": f"{entry.entry_id}_truncated_{name}",
+                            "translation_key": "icon_truncated",
+                            "placeholders": {"icon": str(name), "kept": str(kept), "total": str(total)}})
                     continue
         box = boxes[i] if i < len(boxes) else None
-        if box and box[0] and box[1] and (x + box[0] > dw or y + box[1] > dh):
+        if box and box[0] and box[1] and (x + box[0] > dw or y + box[1] > dh) and "offscreen" not in ack:
             out.append({
                 "issue_id": f"{entry.entry_id}_overflow_{i}_{wid}",
                 "translation_key": "widget_overflow",
