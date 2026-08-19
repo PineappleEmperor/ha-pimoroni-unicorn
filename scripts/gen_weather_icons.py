@@ -4,6 +4,7 @@ Fetches the 16x16 and 32x32 monochrome XBM icons, derives an 8x8 set by majority
 downscale, and emits a bit-packed module. Re-run to refresh the art. Attribution lives
 in NOTICE; this is a build tool, not shipped to the device.
 """
+# skill-audit: local-tool
 from pathlib import Path
 import re
 import urllib.error
