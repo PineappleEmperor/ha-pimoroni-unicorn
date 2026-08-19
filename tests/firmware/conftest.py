@@ -237,3 +237,11 @@ def enable_event_loop_debug():
 def engine_stubs():
     """Marker fixture; stubs are installed at collection time."""
     return True
+
+
+@pytest.fixture
+def enable_custom_integrations() -> None:
+    """Shadow the phacc fixture the root conftest's autouse hook depends on."""
+    # This job installs neither Home Assistant nor the plugin (mpy-cross + pytest only),
+    # so the real fixture does not exist and every test would error during setup.
+    return None

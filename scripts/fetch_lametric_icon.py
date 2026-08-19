@@ -7,6 +7,7 @@ Usage:
   python scripts/fetch_lametric_icon.py 1234 --json check    device JSON -> check.json
   python scripts/fetch_lametric_icon.py 1234 --builtin check STATIC_ICONS snippet -> stdout
 """
+# skill-audit: local-tool
 
 import argparse
 import base64

@@ -104,11 +104,9 @@ def _resolve_entry(hass: HomeAssistant, ha_device_id: str):
 
 
 def _resolve_targets(hass: HomeAssistant, ha_device_ids: list[str]):
-    """Resolve HA device ids to [(config_entry, mqtt_device_id)], skipping unknown ones.
-
-    One removed device in a multi-target call must not silence the rest, so unresolved ids
-    are warned about and dropped; the caller decides what an empty result means.
-    """
+    """Resolve HA device ids to [(config_entry, mqtt_device_id)], skipping unknown ones."""
+    # One removed device in a multi-target call must not silence the rest, so unresolved
+    # ids are dropped with a warning; the caller decides what an empty result means.
     targets = []
     for ha_device_id in ha_device_ids:
         entry, device_id = _resolve_entry(hass, ha_device_id)

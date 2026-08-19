@@ -122,11 +122,9 @@ class PimoroniUnicornSensor(SensorEntity):
 
     @callback
     def _recompute(self) -> None:
-        """Recompute value + attributes from the cached diag + firmware manifest payloads.
-
-        Sets the _attr_* backing fields so HA's cached_property values are invalidated;
-        computing in an overridden cached_property would freeze at the first read.
-        """
+        """Recompute value + attributes from the cached diag + firmware manifest payloads."""
+        # Sets the _attr_* backing fields so HA's cached_property values are invalidated;
+        # computing in an overridden cached_property would freeze at the first read.
         data = self._entry.runtime_data or {}
         diag = data.get("diag") or {}
         manifest = data.get("fw_manifest") or {}

@@ -1,5 +1,7 @@
 """Pimoroni Unicorn Home Assistant integration."""
 
+from __future__ import annotations
+
 import ast
 from collections.abc import Callable, Coroutine
 from datetime import timedelta
@@ -189,12 +191,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: PUConfigEntry) -> bool:
 
 
 async def async_remove_config_entry_device(hass, config_entry, device_entry) -> bool:
-    """Allow deleting a stale device from the UI.
-
-    The active device (matching the entry's current device_id) is recreated by
-    the entity platforms, so deletion is blocked; any other device left behind by
-    an earlier device_id is orphaned and may be removed.
-    """
+    """Allow deleting a stale device from the UI."""
+    # The active device (matching the entry's current device_id) is recreated by the
+    # entity platforms, so deletion is blocked; any other device left behind by an
+    # earlier device_id is orphaned and may be removed.
     current = _merged_opts(config_entry).get(CONF_DEVICE_ID)
     return ("mqtt", current) not in device_entry.identifiers
 

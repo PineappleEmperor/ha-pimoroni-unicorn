@@ -11,6 +11,7 @@ collide with other modules in the Home Assistant process.
 `sync` writes the transformed copies; `check` recomputes the transform and
 asserts the committed copies match (CI guard against drift).
 """
+# skill-audit: local-tool
 
 import argparse
 from pathlib import Path

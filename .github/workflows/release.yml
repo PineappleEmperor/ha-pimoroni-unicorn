@@ -12,42 +12,57 @@ jobs:
     name: Create Release Asset
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
 
-      - name: Create integration ZIP
+      # The tag is the version. HACS installs the asset built here, so the manifest
+      # inside this zip is what users actually get, and patching it means no PR has
+      # to carry a hand-written bump. frenck/spook patches the same way, from the
+      # same event. The committed manifest value is a placeholder between releases.
+      #
+      # Overriding a bump stays trivial: tag what you want.
+      - name: Set the manifest version from the tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+((a|b|rc)[0-9]+)?$'; then
+            echo "::error::release tag '$RELEASE_TAG' is not a valid version"
+            exit 1
+          fi
+          python3 - "$VERSION" <<'PY'
+          import json, pathlib, sys
+
+          version = sys.argv[1]
+          manifest = next(pathlib.Path("custom_components").glob("*/manifest.json"))
+          data = json.loads(manifest.read_text())
+          data["version"] = version
+          manifest.write_text(json.dumps(data, indent=2) + "\n")
+          print(f"{manifest}: version={version}")
+          PY
+
+      - name: Create ZIP file
         run: |
           cd custom_components/pimoroni_unicorn
-          zip -r ../../pimoroni_unicorn.zip .
-          cd ../..
-          ls -la pimoroni_unicorn.zip
+          zip -r "$GITHUB_WORKSPACE/pimoroni_unicorn.zip" . -x '*/__pycache__/*' '*.pyc'
 
+      # Repo-specific, beyond the skill template: the first device flash is physical
+      # (USB/Thonny), so every release since v2.0.0 has shipped the firmware tree as a
+      # second asset. Dropping it would strip a download users depend on.
       - name: Create firmware ZIP
         run: |
           cd firmware
-          # Ship a ready-to-edit settings/secrets.py (from the template) so users don't rename.
           cp settings/secrets.example.py settings/secrets.py
-          zip -r ../pimoroni_unicorn_firmware.zip . -x 'settings/secrets.example.py' -x '*/__pycache__/*' -x '__pycache__/*'
+          zip -r "$GITHUB_WORKSPACE/pimoroni_unicorn_firmware.zip" . \
+            -x 'settings/secrets.example.py' '*/__pycache__/*' '__pycache__/*' '*.pyc'
           rm settings/secrets.py
-          cd ..
-          ls -la pimoroni_unicorn_firmware.zip
 
-      - name: Upload integration asset
-        uses: actions/upload-release-asset@v1
+      # No `${{ }}` inside a run block: the expression is substituted as text before
+      # the shell sees it, so a crafted tag would execute here. Pass it as env.
+      - name: Upload release assets
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./pimoroni_unicorn.zip
-          asset_name: pimoroni_unicorn.zip
-          asset_content_type: application/zip
-
-      - name: Upload firmware asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./pimoroni_unicorn_firmware.zip
-          asset_name: pimoroni_unicorn_firmware.zip
-          asset_content_type: application/zip
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            "$GITHUB_WORKSPACE/pimoroni_unicorn.zip" \
+            "$GITHUB_WORKSPACE/pimoroni_unicorn_firmware.zip" --clobber

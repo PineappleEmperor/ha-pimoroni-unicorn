@@ -1,17 +1,28 @@
-name: HACS Action
+name: HACS Validation
 
 on:
   push:
+    branches: [main]
   pull_request:
   schedule:
     - cron: "0 0 * * *"
-  workflow_dispatch:
+
+# hacs/action is pinned to @main deliberately — that is the ref HACS documents,
+# and a tag pin silently stops tracking their validation rules. The trade-off is
+# a mutable ref Dependabot cannot bump, so the blast radius is capped instead:
+# read-only permissions, and checkout drops the token rather than leaving it in
+# .git/config for the action to read.
+permissions:
+  contents: read
 
 jobs:
-  validate-hacs:
-    runs-on: "ubuntu-latest"
+  hacs:
+    runs-on: ubuntu-latest
     steps:
-      - name: HACS validation
-        uses: "hacs/action@main"
+      - uses: actions/checkout@v7
         with:
-          category: "integration"
+          persist-credentials: false
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration

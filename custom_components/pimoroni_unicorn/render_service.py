@@ -12,6 +12,8 @@ import io
 import sys
 import time
 import types
+from types import ModuleType
+from typing import cast
 
 MODEL_DIMS = {
     "galactic": (53, 11),
@@ -36,18 +38,18 @@ _loaded = None
 
 def _install_mocks() -> None:
     if not hasattr(time, "ticks_ms"):
-        time.ticks_ms   = lambda: int(time.monotonic() * 1000)  # type: ignore[attr-defined]
-        time.ticks_diff = lambda a, b: a - b  # type: ignore[attr-defined]
-        time.ticks_add  = lambda a, b: a + b  # type: ignore[attr-defined]
+        setattr(time, "ticks_ms",   lambda: int(time.monotonic() * 1000))
+        setattr(time, "ticks_diff", lambda a, b: a - b)
+        setattr(time, "ticks_add",  lambda a, b: a + b)
     if not hasattr(builtins, "micropython"):
-        builtins.micropython = types.SimpleNamespace(  # type: ignore[attr-defined]
+        setattr(builtins, "micropython", types.SimpleNamespace(
             native=lambda f: f, viper=lambda f: f, const=lambda x: x
-        )
+        ))
     # icons.py imports uos/ubinascii at module top; neither is touched when
     # drawing built-in icons, so a thin shim is enough for the preview.
-    sys.modules.setdefault("ubinascii", binascii)  # type: ignore[arg-type]
-    sys.modules.setdefault("uos", types.SimpleNamespace(  # type: ignore[arg-type]
-        listdir=lambda *_a: [], mkdir=lambda *_a: None, remove=lambda *_a: None))
+    sys.modules.setdefault("ubinascii", binascii)
+    sys.modules.setdefault("uos", cast(ModuleType, types.SimpleNamespace(
+        listdir=lambda *_a: [], mkdir=lambda *_a: None, remove=lambda *_a: None)))
 
 
 def _modules():

@@ -17,13 +17,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_device_base_url(hass: HomeAssistant) -> str | None:
-    """HA base URL the device can fetch from — prefers HA's own LAN IP so no DNS is needed.
-
-    The device pulls over plain HTTP on the LAN; resolving the configured hostname is
-    unreliable both on the device (MicroPython mDNS) and sometimes on the HA host itself
-    (e.g. a `.hass`/mDNS name getaddrinfo can't resolve), so we use the address HA is
-    actually reachable at on the LAN.
-    """
+    """HA base URL the device can fetch from — prefers HA's own LAN IP so no DNS is needed."""
+    # The device pulls over plain HTTP on the LAN; resolving the configured hostname is
+    # unreliable both on the device (MicroPython mDNS) and sometimes on the HA host itself
+    # (e.g. a `.hass`/mDNS name getaddrinfo can't resolve), so use the address HA is
+    # actually reachable at on the LAN.
     try:
         configured = get_url(
             hass, allow_internal=True, allow_external=False, allow_cloud=False, allow_ip=True)
@@ -62,11 +60,9 @@ def _device_files(hass: HomeAssistant, entry) -> dict:
 
 
 async def _stage_and_ota(hass: HomeAssistant, entry, files: list[tuple[str, str]]) -> bool:
-    """Stage (device_path, content) files under www and trigger a device OTA pull.
-
-    An empty file list is a success (nothing to install); returns False only on a
-    real failure (no HA URL).
-    """
+    """Stage (device_path, content) files under www and trigger a device OTA pull."""
+    # An empty file list is a success (nothing to install); returns False only on a
+    # real failure (no HA URL).
     if not files:
         return True
     device_id = _device_id(entry)
