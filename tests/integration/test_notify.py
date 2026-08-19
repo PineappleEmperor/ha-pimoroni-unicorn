@@ -1,14 +1,21 @@
 """Coverage for send_notification / dismiss_notification: targeting, fan-out and payload."""
 from __future__ import annotations
 
+import ast
 import json
+import pathlib
 
 import homeassistant.helpers.device_registry as dr
 import pytest
 import voluptuous as vol
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.pimoroni_unicorn.const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN
+from custom_components.pimoroni_unicorn.const import (
+    CONF_DEVICE_ID,
+    CONF_MODEL,
+    DOMAIN,
+    NOTIFY_FONTS,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 
@@ -120,3 +127,29 @@ async def test_dismiss_fans_out(hass, mqtt_mock) -> None:
     sent = _notify_payloads(mqtt_mock, "/notify/dismiss")
     assert set(sent) == {"dev1/notify/dismiss", "dev2/notify/dismiss"}
     assert all(p == {"all": True} for p in sent.values())
+
+
+def _engine_face_names() -> list[str]:
+    """Face names the engine declares, read via ast — importing it needs MicroPython stubs."""
+    src = (pathlib.Path(__file__).resolve().parents[2]
+           / "firmware" / "engine" / "notify_animations.py").read_text()
+    for node in ast.walk(ast.parse(src)):
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and getattr(node.targets[0], "id", None) == "_TEXT_FACES"):
+            return sorted(key.value for key in node.value.keys)
+    raise AssertionError("_TEXT_FACES not found in the engine")
+
+
+def test_schema_fonts_match_the_engine() -> None:
+    """A face added to one side and not the other renders as the silent bitmap8 fallback."""
+    assert sorted(NOTIFY_FONTS) == _engine_face_names()
+
+
+def test_schema_fonts_match_the_form_options() -> None:
+    """The picker must offer exactly what the schema will accept."""
+    import yaml
+    services = yaml.safe_load(
+        (pathlib.Path(__file__).resolve().parents[2] / "custom_components"
+         / "pimoroni_unicorn" / "services.yaml").read_text())
+    field = services["send_notification"]["fields"]["appearance"]["fields"]["font"]
+    assert sorted(o["value"] for o in field["selector"]["select"]["options"]) == sorted(NOTIFY_FONTS)

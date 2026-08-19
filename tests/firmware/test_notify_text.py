@@ -6,13 +6,19 @@ byte-faithful render/ shim — the same PicoGraphics stand-in the HA preview use
 from __future__ import annotations
 
 import importlib
+import pathlib
+import sys
 
 import pytest
 
-from custom_components.pimoroni_unicorn.const import NOTIFY_FONTS
-from custom_components.pimoroni_unicorn.render.shim import PicoGraphics
+# Imported as a TOP-LEVEL `render` package, not via custom_components.pimoroni_unicorn:
+# that package's __init__ pulls in homeassistant, which the firmware job does not install.
+sys.path.append(str(pathlib.Path(__file__).resolve().parents[2]
+                    / "custom_components" / "pimoroni_unicorn"))
+from render.shim import PicoGraphics  # noqa: E402
 
 WIDTH, HEIGHT = 53, 11
+EXPECTED_FACES = ["bitmap8", "font3x5", "font5x9", "heavy"]
 
 
 @pytest.fixture
@@ -47,13 +53,13 @@ def _render(na, text, notif, elapsed_ms=50 * WIDTH):
     return [[buf[y * WIDTH + x] != (0, 0, 0) for y in range(HEIGHT)] for x in range(WIDTH)]
 
 
-def test_face_names_match_the_service_schema(na):
-    """The picker's options and the engine's faces must not drift apart."""
-    assert sorted(na._TEXT_FACES) == sorted(NOTIFY_FONTS)
+def test_engine_declares_the_expected_faces(na):
+    """Pins the engine side; test_notify.py checks it against the service schema."""
+    assert sorted(na._TEXT_FACES) == EXPECTED_FACES
 
 
 def test_every_face_renders_something(na):
-    for font in NOTIFY_FONTS:
+    for font in EXPECTED_FACES:
         cols = _render(na, "Hi", {"font": font})
         assert any(any(col) for col in cols), f"{font} drew nothing"
 
