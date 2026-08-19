@@ -94,7 +94,7 @@ ENGINE_FILE_KEYS = list(OTA_SOURCE_FILES)
 # Bundled engine version (the update entity diffs the device's reported
 # engine_version against this). Keep in sync with firmware/engine/version.py.
 # Versioned independently of the integration manifest version.
-ENGINE_VERSION = "1.7.0"
+ENGINE_VERSION = "1.8.0"
 
 # Engine builds below this need a one-time USB reflash (the foldered file layout
 # landed in 1.1.0); OTA cannot migrate a flat device, so the update entity refuses
@@ -125,6 +125,10 @@ NOTIFY_STATIC_ICONS: list[str] = []
 
 NOTIFY_ENTRANCES = ["none", "swipe_left", "swipe_right", "slide_left", "slide_right",
                     "center_out", "fade"]
+
+# Text faces the engine can draw notifications in; must match _TEXT_FACES in
+# firmware/engine/notify_animations.py. "heavy" is the purpose-drawn bold cut.
+NOTIFY_FONTS = ["bitmap8", "heavy", "font5x9", "font3x5"]
 
 # v2 notification payload. NOTIFY_EFFECTS is the renamed concept for animations.
 NOTIFY_EFFECTS = NOTIFY_ANIMATIONS
