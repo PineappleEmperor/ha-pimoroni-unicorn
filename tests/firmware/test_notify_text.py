@@ -141,3 +141,35 @@ def test_duration_measures_the_selected_face(na):
     plain = na.compute_duration_ms({"v": 2, "text": long_text})
     heavy = na.compute_duration_ms({"v": 2, "text": long_text, "font": "heavy"})
     assert heavy > plain
+
+
+def test_heavy_face_has_no_baked_in_sidebearings():
+    """Every glyph's ink must fill its cell, so the advance is ink width + one gap."""
+    # A glyph whose cell is wider than its ink adds a second blank column between it and
+    # the next letter: 'Ocado' rendered c->a at 2px while every other pair sat at 1px.
+    bitfonts = importlib.import_module("bitfonts")
+    offenders = []
+    for char, glyph in bitfonts.font_heavy.items():
+        width, height = glyph["w"], glyph["h"]
+        cols = [c for c in range(width) for r in range(height)
+                if glyph["data"] & (1 << ((height - 1 - r) * width + (width - 1 - c)))]
+        if not cols:
+            continue
+        if min(cols) != 0 or max(cols) != width - 1:
+            offenders.append((char, min(cols), width - 1 - max(cols)))
+    assert not offenders, f"glyphs padded inside their cell (char, padL, padR): {offenders}"
+
+
+def test_heavy_face_letter_gaps_are_uniform(na):
+    """Adjacent letters sit exactly one blank column apart, whatever the pair."""
+    face = na._TEXT_FACES["heavy"]
+    for word in ("Ocado", "Hello", "kick", "often", "fluffy"):
+        cols = _render(na, word, {"font": "heavy"})
+        lit = [i for i, col in enumerate(cols) if any(col)]
+        runs, prev = [], None
+        for i in lit:
+            if prev is not None and i - prev > 1:
+                runs.append(i - prev - 1)
+            prev = i
+        assert all(g == 1 for g in runs), f"{word}: gap widths {runs}"
+    assert face is not None
