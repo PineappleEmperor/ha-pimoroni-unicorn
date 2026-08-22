@@ -152,7 +152,7 @@
         },
         "message": {
           "name": "Message",
-          "description": "Text to show (scrolls if it does not fit)."
+          "description": "Text to show (scrolls if it does not fit). Dropped on displays too small to scroll it beside an icon, unless it is short enough to fit."
         },
         "icon": {
           "name": "Icon",
@@ -184,7 +184,7 @@
         },
         "icon_position": {
           "name": "Icon position",
-          "description": "Where the icon sits: left panel + text (default), centred (icon-focused, e.g. Stellar), or right."
+          "description": "Where the icon sits: left panel + text (default), centred, or right. Ignored on displays too small to show both — a Stellar shows the icon alone, centred."
         },
         "effect": {
           "name": "Effect",

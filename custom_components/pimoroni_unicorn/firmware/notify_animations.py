@@ -18,6 +18,7 @@ _fire_heat = None
 _SCROLL_MS_PER_PX    = 50
 _SPLIT_WIDTH_DEFAULT = 13
 _ICON_PANEL_WIDTH    = 9   # 8px icon + 1px gap
+_MIN_SCROLL_W        = 14  # below this, scrolling text beside an icon is unreadable
 _ENTRANCE_DURATION_MS = 850  # long enough to actually see the entrance transition
 
 NOTIFY_ANIMATIONS   = {}
@@ -355,16 +356,51 @@ def compute_duration_ms(notif):
         return duration_ms
     if notif.get("hold"):
         return None
-    text = notif.get("text", "")
-    if not text:
+    style = _text_style(notif)
+    _ix, _panel_w, _tx, tw, show_text = _notify_layout(notif, style)
+    if not show_text:
         return duration_ms
-    face, bold, _outlined = _text_style(notif)
-    text_w = _measure_styled(text, face, bold)
-    tw = _width - _ICON_PANEL_WIDTH if notif.get("icon") is not None else _width
+    face, bold, _outlined = style
+    text_w = _measure_styled(notif.get("text", ""), face, bold)
     if text_w <= tw:
         return duration_ms
     repeat = max(1, int(notif.get("repeat", 1)))
     return max(duration_ms, repeat * (text_w + tw) * _notify_ms_per_px(notif))
+
+
+def _notify_layout(notif, style):
+    """Icon/text geometry for this panel: (icon_x, panel_w, text_x, text_w, show_text).
+
+    Shared by the renderer and compute_duration_ms so a suppressed text can never be
+    given scroll time it does not use.
+    """
+    icon = notif.get("icon")
+    text = notif.get("text", "")
+    if icon is None:
+        return 0, 0, 0, _width, bool(text)
+
+    iscale  = notif.get("icon_scale", 1)
+    isz     = _icons.ICON_SIZE * (int(iscale) if iscale and iscale > 1 else 1)
+    panel_w = min(_width, isz + 1)
+    pos     = notif.get("icon_position", "left")
+    if pos == "center":
+        ix, tx, tw = max(0, (_width - isz) // 2), 0, _width
+    elif pos == "right":
+        ix, tx, tw = _width - panel_w, 0, max(0, _width - panel_w)
+    else:
+        margin = 2 if _width >= 32 else 0
+        ix, tx, tw = margin, margin + panel_w, max(0, _width - margin - panel_w)
+
+    if not text:
+        return ix, panel_w, tx, tw, False
+
+    # Text that fits is always drawn, on any panel. Only text that would have to scroll
+    # through a sliver is dropped in favour of the icon — a 16x16 Stellar leaves 7px
+    # beside an 8px icon. Measured, not keyed on model, so a wider panel keeps its text.
+    face, bold, _outlined = style
+    if _measure_styled(text, face, bold) > tw and (_width - panel_w) < _MIN_SCROLL_W:
+        return max(0, (_width - isz) // 2), panel_w, 0, 0, False
+    return ix, panel_w, tx, tw, True
 
 
 def _draw_v2_notification(notif, elapsed_ms):
@@ -389,27 +425,19 @@ def _draw_v2_notification(notif, elapsed_ms):
         _g.set_pen(_g.create_pen(*bg_color))
         _g.clear()
 
+    ix, panel_w, tx, tw, show_text = _notify_layout(notif, style)
+
     if icon is not None:
         iscale = notif.get("icon_scale", 1)
-        isz = _icons.ICON_SIZE * (int(iscale) if iscale and iscale > 1 else 1)
-        panel_w = min(_width, isz + 1)
-        iy = max(0, (_height - isz) // 2)
-        pos = notif.get("icon_position", "left")
-        if pos == "center":
-            ix, tx, tw = max(0, (_width - isz) // 2), 0, _width
-        elif pos == "right":
-            ix, tx, tw = _width - panel_w, 0, max(0, _width - panel_w)
-        else:
-            margin = 2 if _width >= 32 else 0
-            ix, tx, tw = margin, margin + panel_w, max(0, _width - margin - panel_w)
-        if anim_fn is None and pos != "center":
+        isz    = _icons.ICON_SIZE * (int(iscale) if iscale and iscale > 1 else 1)
+        iy     = max(0, (_height - isz) // 2)
+        centred = ix == max(0, (_width - isz) // 2)
+        if anim_fn is None and not centred:
             _g.set_pen(_g.create_pen(*bg_color))
             _g.rectangle(ix + dx, 0, panel_w, _height)
         _icons.draw_icon(icon, ix + dx, iy, elapsed_ms, iscale)
-    else:
-        tx, tw = 0, _width
 
-    if text:
+    if show_text:
         _draw_notify_text(text, tx + dx, 0, tw, _height, color, elapsed_ms, style, _notify_ms_per_px(notif))
 
     _apply_entrance(elapsed_ms, entrance)

@@ -173,3 +173,64 @@ def test_heavy_face_letter_gaps_are_uniform(na):
             prev = i
         assert all(g == 1 for g in runs), f"{word}: gap widths {runs}"
     assert face is not None
+
+
+def _layout(na, width, notif):
+    """Run _notify_layout against a panel of the given width."""
+    prev = na._width
+    na._width = width
+    try:
+        return na._notify_layout(notif, na._text_style(notif))
+    finally:
+        na._width = prev
+
+
+def test_stellar_drops_text_it_cannot_scroll(na):
+    """16x16 leaves 7px beside an 8px icon, so a long message yields the icon alone."""
+    *_, show_text = _layout(na, 16, {"icon": "bell", "text": "Back door opened"})
+    assert show_text is False
+
+
+def test_stellar_keeps_text_that_actually_fits(na):
+    """The rule must not swallow a message short enough to render — that reads as a bug."""
+    *_, show_text = _layout(na, 16, {"icon": "bell", "text": "Hi", "font": "font3x5"})
+    assert show_text is True
+
+
+def test_stellar_without_an_icon_uses_the_whole_panel(na):
+    ix, panel_w, tx, tw, show_text = _layout(na, 16, {"text": "Back door opened"})
+    assert (tx, tw, show_text) == (0, 16, True)
+    assert panel_w == 0
+
+
+@pytest.mark.parametrize("width", [32, 53])
+def test_larger_panels_still_scroll_beside_the_icon(na, width):
+    """Only panels too narrow to scroll drop text; Cosmic and Galactic are unaffected."""
+    *_, tw, show_text = _layout(na, width, {"icon": "bell", "text": "Back door opened"})[1:]
+    assert show_text is True
+    assert tw >= na._MIN_SCROLL_W
+
+
+def test_suppressed_text_centres_the_icon(na):
+    """icon_position has no meaning once the icon is the whole notification."""
+    left = _layout(na, 16, {"icon": "bell", "text": "Back door opened"})
+    right = _layout(na, 16, {"icon": "bell", "text": "Back door opened",
+                             "icon_position": "right"})
+    assert left[0] == right[0] == (16 - 8) // 2
+
+
+def test_duration_does_not_wait_for_text_it_never_draws(na):
+    """A Stellar must not sit on a static icon for a scroll that was suppressed."""
+    # duration=1 puts the floor well below the scroll time, so a suppressed text is the
+    # only way this can come back as 1000ms. With the floor at 10s both branches collide.
+    notif = {"v": 2, "icon": "bell", "duration": 1,
+             "text": "a much longer message than the panel could ever show at once"}
+    prev = na._width
+    na._width = 16
+    try:
+        stellar = na.compute_duration_ms(notif)
+    finally:
+        na._width = prev
+    galactic = na.compute_duration_ms(notif)
+    assert stellar == 1_000, "suppressed text must not extend the display time"
+    assert galactic > stellar
