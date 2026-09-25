@@ -104,7 +104,7 @@ send_notification:
             boolean: {}
         wakeup:
           required: true
-          default: false
+          default: true
           selector:
             boolean: {}
     timing:

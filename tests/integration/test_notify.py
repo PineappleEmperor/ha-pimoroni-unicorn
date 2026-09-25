@@ -56,7 +56,7 @@ async def test_single_device_id_string_still_works(hass, mqtt_mock) -> None:
         DOMAIN, "send_notification",
         {"device_id": _reg_id(hass, entry), "message": "hi"}, blocking=True)
     await hass.async_block_till_done()
-    assert _notify_payloads(mqtt_mock) == {"dev1/notify": {"v": 2, "text": "hi"}}
+    assert _notify_payloads(mqtt_mock) == {"dev1/notify": {"v": 2, "text": "hi", "wakeup": True}}
 
 
 async def test_fans_out_to_every_target(hass, mqtt_mock) -> None:
@@ -79,6 +79,15 @@ async def test_font_and_bold_reach_the_payload(hass, mqtt_mock) -> None:
     assert payload["font"] == "heavy"
     assert payload["bold"] is True
     assert payload["outlined"] is True
+
+
+async def test_wakeup_false_is_passed_through(hass, mqtt_mock) -> None:
+    entry = await _setup(hass, "dev1")
+    await hass.services.async_call(
+        DOMAIN, "send_notification",
+        {"device_id": [_reg_id(hass, entry)], "message": "hi", "wakeup": False}, blocking=True)
+    await hass.async_block_till_done()
+    assert _notify_payloads(mqtt_mock)["dev1/notify"]["wakeup"] is False
 
 
 async def test_unknown_font_is_rejected(hass, mqtt_mock) -> None:

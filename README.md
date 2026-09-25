@@ -135,7 +135,7 @@ A notification with an `icon` shows it in a left panel beside the text; an `effe
 **Effects:** `rainbow`, `fire`, `matrix`, `scanner`, `comet`, `snow`, `confetti`, `flash`, `pulse`, `bounce`, `supercomputer`, `retroprompt`
 **Sounds** (Galactic, Cosmic, Stellar — all have onboard audio): `beep`, `chime`, `alert`
 
-`data:` fields: `icon`, `effect`, `effect_speed`, `sound`, `color`, `bg_color`, `duration`, `scroll_speed`, `entrance`, `outlined`, plus behaviour — `hold` (stay until dismissed/replaced), `repeat` (full scroll passes), `stack` (off = replace immediately), `wakeup` (show while asleep). Duration auto-extends so overflowing text completes its scroll.
+`data:` fields: `icon`, `effect`, `effect_speed`, `sound`, `color`, `bg_color`, `duration`, `scroll_speed`, `entrance`, `outlined`, plus behaviour — `hold` (stay until dismissed/replaced), `repeat` (full scroll passes), `stack` (off = replace immediately), `wakeup` (show while asleep, default on; off drops it while asleep). Duration auto-extends so overflowing text completes its scroll.
 
 ### Icons
 

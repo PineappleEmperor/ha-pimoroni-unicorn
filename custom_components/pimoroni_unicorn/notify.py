@@ -47,7 +47,7 @@ GENERIC_NOTIFY_SCHEMA = vol.Schema({
     vol.Optional("scroll_speed"):              _SPEED,
     vol.Optional("entrance"):                  vol.In(NOTIFY_ENTRANCES),
     vol.Optional("outlined"):                  cv.boolean,
-    vol.Optional("wakeup"):                    cv.boolean,
+    vol.Optional("wakeup", default=True):      cv.boolean,
 })
 
 DISMISS_SCHEMA = vol.Schema({
