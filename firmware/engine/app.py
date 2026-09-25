@@ -134,6 +134,11 @@ _notify_start_ms = 0
 _notify_end_ms   = 0
 _ota_pending     = None
 
+
+def _wakes(notif):
+    """Whether a notification may light the display while it is asleep."""
+    return notif.get("wakeup", True) is not False
+
 LAYOUT_PATH = "/settings/layout.json"
 SCREENS_PATH = "/settings/screens.json"
 
@@ -642,7 +647,8 @@ def on_message(topic, message):
                 has_anim   = data.get("animation", "") in NOTIFY_ANIMATIONS
                 has_effect = data.get("effect", "") in NOTIFY_ANIMATIONS
                 has_icon   = data.get("icon") is not None
-                if has_text or has_anim or has_effect or has_icon:
+                awake_ok   = system_state == "AWAKE" or _wakes(data)
+                if (has_text or has_anim or has_effect or has_icon) and awake_ok:
                     if data.get("stack") is not True:
                         _notify_queue.clear()
                         _notify_active = None
@@ -981,11 +987,16 @@ async def main_loop():
 
         if system_state != "AWAKE" and last_state == "AWAKE":
             _sleep_anim_left = SLEEP_ANIM_FRAMES  # just fell asleep (button or HA) -> play Zzz
+            if _notify_active is not None and not _wakes(_notify_active):
+                _notify_active = None
+                if HAS_AUDIO:
+                    unicorn.stop_playing()
+            _notify_queue[:] = [n for n in _notify_queue if _wakes(n)]
         last_state = system_state
 
         notify_wakeup = system_state != "AWAKE" and (
-            (_notify_active is not None and _notify_active.get("wakeup"))
-            or (_notify_active is None and _notify_queue and _notify_queue[0].get("wakeup"))
+            (_notify_active is not None and _wakes(_notify_active))
+            or (_notify_active is None and _notify_queue and _wakes(_notify_queue[0]))
         )
 
         if system_state == "AWAKE" or notify_wakeup:

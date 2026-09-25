@@ -208,7 +208,7 @@
         },
         "wakeup": {
           "name": "Wake up",
-          "description": "Show even while the display is asleep."
+          "description": "Show even while the display is asleep. When off, a notification sent while asleep is dropped."
         },
         "duration": {
           "name": "Duration",
