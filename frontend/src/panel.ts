@@ -83,6 +83,7 @@ const unhex = (s: string): Rgb => {
 
 export class PimoroniUnicornPanel extends LitElement {
   @property({ attribute: false }) hass!: any;
+  @property({ attribute: false }) narrow = false;
 
   @state() private devices: Device[] = [];
   @state() private entryId = "";          // "" = mock (no device)
@@ -209,6 +210,12 @@ export class PimoroniUnicornPanel extends LitElement {
     .empty { background:
       repeating-linear-gradient(45deg, var(--pu-outline) 0 1px, transparent 1px 7px), var(--pu-surface) !important; }
     .group + .group { padding-left: 16px; border-left: 1px solid var(--pu-outline); }
+    .menubtn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 48px; height: 48px; margin: -12px 0 -12px -12px; padding: 0;
+      border: none; border-radius: 50%; background: none; color: inherit; cursor: pointer;
+    }
+    .menubtn:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
     .appbar {
       display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
       padding: 12px 18px; margin-bottom: 16px; border-radius: var(--pu-radius);
@@ -1150,6 +1157,10 @@ export class PimoroniUnicornPanel extends LitElement {
     const dev = this.devices.find((d) => d.entry_id === this.entryId);
     return html`
       <div class="appbar">
+        ${this.narrow ? html`<button class="menubtn" aria-label="Open sidebar" title="Open sidebar"
+          @click=${() => this.dispatchEvent(new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true }))}>
+          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z"/></svg>
+        </button>` : ""}
         <span class="brand">Pimoroni Unicorn</span>
         <label>Device
           <select @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; v === MOCK ? this.selectMock(this.model) : this.selectDevice(v); }}>
