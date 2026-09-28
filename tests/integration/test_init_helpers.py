@@ -33,6 +33,25 @@ def test_num_payload() -> None:
     assert pu._num_payload("unknown") == ""
     assert pu._num_payload("notanumber") == ""
     assert pu._num_payload(None) == ""
+    assert pu._num_payload("1234.56", 0) == "1235.0"
+    assert pu._num_payload("1234.56", 1) == "1234.6"
+
+
+def test_layout_value_precision() -> None:
+    specs = {"custom": {"draw": [
+        {"op": "value", "bind": "$e", "fmt": "{:.1f}"},
+        {"op": "value", "bind": "sensor.raw", "fmt": "{}"},
+    ]}}
+    lay = {"widgets": [
+        {"id": "value", "cfg": {"entity": "sensor.power", "decimals": 0}},
+        {"id": "value", "cfg": {"entity": "sensor.temp", "decimals": 0}},
+        {"id": "custom", "cfg": {"e": "sensor.temp"}},
+        {"id": "value", "cfg": {"entity": "sensor.soc", "decimals": 0}},
+        {"id": "energy", "cfg": {"soc_entity": "sensor.soc"}},
+    ]}
+    assert pu._layout_value_precision(lay, specs) == {
+        "sensor.power": 0, "sensor.temp": 1, "sensor.raw": None, "sensor.soc": None,
+    }
 
 
 def test_split_bind() -> None:
@@ -137,6 +156,28 @@ async def test_rewire_feed_binds_attributes(hass: HomeAssistant, mqtt_mock) -> N
     live = pu.live_state(hass, entry)
     assert live["display_sensors"]["sensor.lola.attributes.state"] == {"state": False}
     assert live["sensor.lola.attributes.snacks"] == 2.0
+
+
+async def _entry(hass: HomeAssistant) -> MockConfigEntry:
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="dev1",
+                            data={CONF_DEVICE_ID: "dev1", CONF_MODEL: "Galactic Unicorn"})
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry
+
+
+async def test_rewire_rounds_to_displayed_precision(hass: HomeAssistant, mqtt_mock) -> None:
+    """A change the widget cannot show is not sent."""
+    hass.states.async_set("sensor.power", "1234.4")
+    entry = await _entry(hass)
+    await pu._async_rewire_sensor_feed(
+        hass, entry, {"widgets": [{"id": "value", "cfg": {"entity": "sensor.power", "decimals": 0}}]})
+    topic = "dev1/display/sensor.power/num"
+    for v in ("1234.2", "1233.9", "1235.6"):
+        hass.states.async_set("sensor.power", v)
+        await hass.async_block_till_done()
+    assert _published(mqtt_mock, topic) == ["1234.0", "1236.0"]
 
 
 async def test_setup_publishers_fire_on_state_change(hass: HomeAssistant, mqtt_mock) -> None:

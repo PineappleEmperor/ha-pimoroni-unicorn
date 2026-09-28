@@ -509,14 +509,15 @@ def _layout_sensor_rules(
     return rules
 
 
-def _num_payload(value: Any) -> str:
-    """Numeric /display/<id>/num payload; '' clears it when the bind has no usable number."""
+def _num_payload(value: Any, decimals: int | None = None) -> str:
+    """Numeric /display/<id>/num payload, rounded to `decimals` if given; '' when unusable."""
     if value is None or str(value).strip().lower() in ("unknown", "unavailable", ""):
         return ""
     try:
-        return str(float(value))
+        num = float(value)
     except (ValueError, TypeError):
         return ""
+    return str(num if decimals is None else round(num, decimals))
 
 
 # An entity bind: `sensor.x` (its state) or `sensor.x.attributes.<name>`, HA's own object path.
@@ -608,6 +609,43 @@ def _layout_value_entities(lay: dict[str, Any] | None, specs: dict | None = None
     return out
 
 
+_FIXED_FMT = re.compile(r"^\{:\.(\d)f\}$")
+
+
+def _layout_value_precision(
+    lay: dict[str, Any] | None, specs: dict | None = None
+) -> dict[str, int | None]:
+    """Finest decimals each numeric bind is drawn at; None where any use needs the exact value."""
+    uses: dict[str, list[int | None]] = {}
+    for w in (lay or {}).get("widgets", []):
+        cfg = w.get("cfg") or {}
+        wid = w.get("type", w.get("id"))
+        if wid == "value":
+            if _split_bind(cfg.get("entity")):
+                try:
+                    dec: int | None = max(0, int(cfg.get("decimals", 0)))
+                except (ValueError, TypeError):
+                    dec = None
+                uses.setdefault(cfg["entity"], []).append(dec)
+        elif specs and wid in specs:
+            for op in specs[wid].get("draw", []):
+                if not isinstance(op, dict) or op.get("op") not in ("value", "bar"):
+                    continue
+                if ent := _resolve_bind(op, cfg):
+                    m = _FIXED_FMT.match(str(op.get("fmt", ""))) if op.get("op") == "value" else None
+                    uses.setdefault(ent, []).append(int(m.group(1)) if m else None)
+        else:
+            # energy derives net power and a truncated battery % from its inputs, and a bar maps
+            # the value to pixels, so both need the exact number.
+            for ent in _layout_value_entities({"widgets": [w]}, specs):
+                uses.setdefault(ent, []).append(None)
+    out: dict[str, int | None] = {}
+    for ent, decs in uses.items():
+        ints = [d for d in decs if d is not None]
+        out[ent] = max(ints) if len(ints) == len(decs) else None
+    return out
+
+
 def _add_entity(out: set[str], ent: Any) -> None:
     if _split_bind(ent):
         out.add(ent)
@@ -622,12 +660,15 @@ async def _async_rewire_sensor_feed(
     custom_dir = marketplace.widgets_dir(hass.config.config_dir)
     specs = await hass.async_add_executor_job(_load_custom_specs, custom_dir)
     rules = _layout_sensor_rules(lay, specs)
+    precision = _layout_value_precision(lay, specs)
     await _rewire_channel(hass, store, device_id, _layout_sensor_entities(lay, specs),
                           "sensor_entities", "sensor_unsub", "state",
                           lambda key, v: "ON" if _sensor_on_rule(rules.get(key), v) else "OFF",
                           meta=rules)
     await _rewire_channel(hass, store, device_id, _layout_value_entities(lay, specs),
-                          "value_entities", "value_unsub", "num", lambda _key, v: _num_payload(v))
+                          "value_entities", "value_unsub", "num",
+                          lambda key, v: _num_payload(v, precision.get(key)),
+                          meta=precision)
 
 
 async def _rewire_channel(
