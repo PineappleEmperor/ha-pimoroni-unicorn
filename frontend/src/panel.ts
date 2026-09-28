@@ -1,7 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { property, state } from "lit/decorators.js";
 import "./pixel-editor";
-import { bindOptions, fieldIsNumeric, joinBind, splitBind } from "./bind-utils";
+import { UPDATE_RATES, bindOptions, fieldIsNumeric, joinBind, splitBind } from "./bind-utils";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
@@ -1093,6 +1093,11 @@ export class PimoroniUnicornPanel extends LitElement {
         return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
           ${this.colorCtl((this.cfgVal(entry, f.key) as Rgb) ?? [255, 255, 255], (v) => this.setCfg(entry, f.key, v))}</div>`;
       })}
+      ${cap.cfg_fields.some((f) => f.type === "entity") ? html`<div class="panelrow"><label>Update rate</label>
+        <select title="Most often a changed value is sent to the device; the latest value always arrives"
+          @change=${(e: Event) => this.setCfg(entry, "update_rate", (e.target as HTMLSelectElement).value)}>
+          ${UPDATE_RATES.map((r) => html`<option ?selected=${(this.cfgVal(entry, "update_rate") ?? "live") === r}>${r}</option>`)}
+        </select></div>` : ""}
       <div class="panelrow"><button class="danger" @click=${() => this.removeWidget(this.selected)}>Remove widget</button></div>
     `;
   }

@@ -1,5 +1,8 @@
 const ATTR_SEP = ".attributes.";
 
+// Keys of UPDATE_RATES in the integration; "live" sends every change.
+export const UPDATE_RATES = ["live", "5s", "30s", "1m", "5m"];
+
 export interface BindOption { attr: string; label: string; }
 
 export function splitBind(bind: string): [string, string] {

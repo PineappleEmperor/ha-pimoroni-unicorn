@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from collections.abc import Callable, Coroutine
 from datetime import timedelta
+from functools import partial
 import hashlib
 import json
 import logging
@@ -610,6 +611,7 @@ def _layout_value_entities(lay: dict[str, Any] | None, specs: dict | None = None
 
 
 _FIXED_FMT = re.compile(r"^\{:\.(\d)f\}$")
+UPDATE_RATES = {"live": 0, "5s": 5, "30s": 30, "1m": 60, "5m": 300}
 
 
 def _layout_value_precision(
@@ -646,6 +648,17 @@ def _layout_value_precision(
     return out
 
 
+def _layout_bind_rates(lay: dict[str, Any] | None, specs: dict | None = None) -> dict[str, int]:
+    """Minimum seconds between sends per bind; the fastest widget using a bind wins."""
+    rates: dict[str, int] = {}
+    for w in (lay or {}).get("widgets", []):
+        secs = UPDATE_RATES.get(str((w.get("cfg") or {}).get("update_rate", "live")), 0)
+        one = {"widgets": [w]}
+        for ent in _layout_sensor_entities(one, specs) | _layout_value_entities(one, specs):
+            rates[ent] = min(rates.get(ent, secs), secs)
+    return {ent: secs for ent, secs in rates.items() if secs}
+
+
 def _add_entity(out: set[str], ent: Any) -> None:
     if _split_bind(ent):
         out.add(ent)
@@ -661,23 +674,27 @@ async def _async_rewire_sensor_feed(
     specs = await hass.async_add_executor_job(_load_custom_specs, custom_dir)
     rules = _layout_sensor_rules(lay, specs)
     precision = _layout_value_precision(lay, specs)
+    rates = _layout_bind_rates(lay, specs)
     await _rewire_channel(hass, store, device_id, _layout_sensor_entities(lay, specs),
                           "sensor_entities", "sensor_unsub", "state",
                           lambda key, v: "ON" if _sensor_on_rule(rules.get(key), v) else "OFF",
-                          meta=rules)
+                          meta=rules, rates=rates)
     await _rewire_channel(hass, store, device_id, _layout_value_entities(lay, specs),
                           "value_entities", "value_unsub", "num",
                           lambda key, v: _num_payload(v, precision.get(key)),
-                          meta=precision)
+                          meta=precision, rates=rates)
 
 
 async def _rewire_channel(
     hass: HomeAssistant, store: dict[str, Any], device_id: str, binds: set[str],
     ent_key: str, unsub_key: str, suffix: str, payload: Any, meta: Any = None,
+    rates: dict[str, int] | None = None,
 ) -> None:
     """Track entity binds and mirror each bound value to /display/<bind>/<suffix>."""
-    meta_key = f"{ent_key}_meta"
-    if binds == store.get(ent_key) and store.get(unsub_key) and store.get(meta_key) == meta:
+    meta_key, rates_key = f"{ent_key}_meta", f"{ent_key}_rates"
+    rates = {k: v for k, v in (rates or {}).items() if k in binds}
+    if (binds == store.get(ent_key) and store.get(unsub_key)
+            and store.get(meta_key) == meta and store.get(rates_key, {}) == rates):
         return
 
     for unsub in store.get(unsub_key, []):
@@ -687,6 +704,7 @@ async def _rewire_channel(
         await async_publish(hass, f"{device_id}/display/{removed}/{suffix}", "", retain=True)
     store[ent_key] = binds
     store[meta_key] = meta
+    store[rates_key] = rates
 
     by_entity: dict[str, list[tuple[str, str | None]]] = {}
     for key in binds:
@@ -695,13 +713,45 @@ async def _rewire_channel(
     # Attribute churn (e.g. a "53m ago" attribute) fires state events for every bind on that
     # entity, so only a changed payload is republished.
     sent: dict[str, str] = {}
+    sent_at: dict[str, float] = {}
+    held: dict[str, tuple[str | None, Any]] = {}
+    timers: dict[str, Callable[[], None]] = {}
 
     async def _send(key: str, attr: str | None, state: Any) -> None:
         value = payload(key, _bind_value(state, attr))
         if sent.get(key) == value:
             return
         sent[key] = value
+        sent_at[key] = hass.loop.time()
         await async_publish(hass, f"{device_id}/display/{key}/{suffix}", value, retain=True)
+
+    @callback
+    def _flush(key: str, _now: Any) -> None:
+        timers.pop(key, None)
+        if key in held:
+            hass.async_create_task(_send(key, *held.pop(key)))
+
+    @callback
+    def _deliver(key: str, attr: str | None, state: Any) -> None:
+        # A rate-limited bind holds its latest value and sends it when the window closes,
+        # so a burst never leaves the device showing a stale reading.
+        wait = sent_at.get(key, float("-inf")) + rates.get(key, 0) - hass.loop.time()
+        if wait > 0:
+            held[key] = (attr, state)
+            if key not in timers:
+                timers[key] = async_call_later(hass, wait, partial(_flush, key))
+            return
+        held.pop(key, None)
+        hass.async_create_task(_send(key, attr, state))
+
+    @callback
+    def _cancel_timers() -> None:
+        for cancel in timers.values():
+            cancel()
+        timers.clear()
+
+    if rates:
+        store[unsub_key].append(_cancel_timers)
 
     for ent, ent_binds in by_entity.items():
         state = hass.states.get(ent)
@@ -716,7 +766,7 @@ async def _rewire_channel(
         if new_state is None:
             return
         for key, attr in by_entity.get(event.data["entity_id"], []):
-            hass.async_create_task(_send(key, attr, new_state))
+            _deliver(key, attr, new_state)
 
     store[unsub_key].append(async_track_state_change_event(hass, list(by_entity), _on_state))
 

@@ -1,14 +1,18 @@
 """Coverage for __init__ sensor-feed helpers + the live rewiring/state-change path."""
 from __future__ import annotations
 
+from datetime import timedelta
+import pathlib
+import re
 import types
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 
 import custom_components.pimoroni_unicorn as pu
 from custom_components.pimoroni_unicorn.const import CONF_DEVICE_ID, CONF_MODEL, DOMAIN
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 
 @pytest.fixture
@@ -52,6 +56,24 @@ def test_layout_value_precision() -> None:
     assert pu._layout_value_precision(lay, specs) == {
         "sensor.power": 0, "sensor.temp": 1, "sensor.raw": None, "sensor.soc": None,
     }
+
+
+def test_layout_bind_rates() -> None:
+    lay = {"widgets": [
+        {"id": "value", "cfg": {"entity": "sensor.power", "update_rate": "30s"}},
+        {"id": "value", "cfg": {"entity": "sensor.power", "update_rate": "5s"}},
+        {"id": "sensor", "cfg": {"entity": "binary_sensor.door"}},
+        {"id": "value", "cfg": {"entity": "sensor.temp", "update_rate": "5m"}},
+        {"id": "value", "cfg": {"entity": "sensor.temp"}},
+    ]}
+    assert pu._layout_bind_rates(lay) == {"sensor.power": 5}
+
+
+def test_update_rates_match_the_panel() -> None:
+    src = (pathlib.Path(__file__).parents[2] / "frontend" / "src" / "bind-utils.ts").read_text()
+    panel = re.search(r"UPDATE_RATES = \[(.*?)\]", src)
+    assert panel is not None
+    assert re.findall(r'"([^"]+)"', panel.group(1)) == list(pu.UPDATE_RATES)
 
 
 def test_split_bind() -> None:
@@ -178,6 +200,25 @@ async def test_rewire_rounds_to_displayed_precision(hass: HomeAssistant, mqtt_mo
         hass.states.async_set("sensor.power", v)
         await hass.async_block_till_done()
     assert _published(mqtt_mock, topic) == ["1234.0", "1236.0"]
+
+
+async def test_rewire_update_rate_holds_then_sends_latest(hass: HomeAssistant, mqtt_mock) -> None:
+    """Within the window changes are held; the latest one is sent when it closes."""
+    hass.states.async_set("sensor.power", "1")
+    entry = await _entry(hass)
+    await pu._async_rewire_sensor_feed(hass, entry, {"widgets": [
+        {"id": "value", "cfg": {"entity": "sensor.power", "update_rate": "30s"}}]})
+    topic = "dev1/display/sensor.power/num"
+    for v in ("2", "3", "4"):
+        hass.states.async_set("sensor.power", v)
+        await hass.async_block_till_done()
+    assert _published(mqtt_mock, topic) == ["1.0"]
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=31))
+    await hass.async_block_till_done()
+    assert _published(mqtt_mock, topic) == ["1.0", "4.0"]
+
+    await pu._async_rewire_sensor_feed(hass, entry, {"widgets": []})
+    assert entry.runtime_data["value_unsub"] == []
 
 
 async def test_setup_publishers_fire_on_state_change(hass: HomeAssistant, mqtt_mock) -> None:
