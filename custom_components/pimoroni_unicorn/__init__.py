@@ -463,11 +463,11 @@ _SENSOR_OFF_STATES = {
 }
 
 
-def _sensor_on_rule(rule: tuple[str, str] | None, state: Any) -> bool:
+def _sensor_on_rule(rule: tuple[str, str] | None, value: Any) -> bool:
     """On/off for a dot honouring a per-widget (on_state, off_state) match, else default truthiness."""
-    if state is None:
+    if value is None:
         return False
-    raw = str(state.state).strip().lower()
+    raw = str(value).strip().lower()
     if raw in ("unavailable", "unknown", ""):
         return False
     on_s, off_s = rule or ("", "")
@@ -509,17 +509,32 @@ def _layout_sensor_rules(
     return rules
 
 
-def _num_payload(state: Any) -> str:
-    """Numeric /display/<id>/num payload; '' clears it when the entity has no usable number."""
-    if state is None or str(state.state).strip().lower() in ("unknown", "unavailable", ""):
+def _num_payload(value: Any) -> str:
+    """Numeric /display/<id>/num payload; '' clears it when the bind has no usable number."""
+    if value is None or str(value).strip().lower() in ("unknown", "unavailable", ""):
         return ""
     try:
-        return str(float(state.state))
+        return str(float(value))
     except (ValueError, TypeError):
         return ""
 
 
-_ENTITY_ID = re.compile(r"^[a-z_][a-z0-9_]*\.[a-z0-9_]+$")
+# An entity bind: `sensor.x` (its state) or `sensor.x.attributes.<name>`, HA's own object path.
+# The key is also an MQTT topic level and the device's lookup key, so `/`, `+` and `#` are out.
+_BIND = re.compile(r"^([a-z_][a-z0-9_]*\.[a-z0-9_]+)(?:\.attributes\.([^/+#]+))?$")
+
+
+def _split_bind(key: Any) -> tuple[str, str | None] | None:
+    """Split a bind into (entity_id, attribute or None for the state); None if malformed."""
+    m = _BIND.match(key) if isinstance(key, str) else None
+    return (m.group(1), m.group(2)) if m else None
+
+
+def _bind_value(state: Any, attr: str | None) -> Any:
+    """The bound value of a state object: its state, or the named attribute."""
+    if state is None:
+        return None
+    return state.state if attr is None else state.attributes.get(attr)
 
 
 def _resolve_bind(op: dict[str, Any], cfg: dict[str, Any]) -> str | None:
@@ -527,7 +542,7 @@ def _resolve_bind(op: dict[str, Any], cfg: dict[str, Any]) -> str | None:
     bind = op.get("bind")
     if isinstance(bind, str) and bind[:1] == "$":
         bind = cfg.get(bind[1:])
-    return bind if isinstance(bind, str) and _ENTITY_ID.match(bind) else None
+    return bind if _split_bind(bind) else None
 
 
 def _spec_binds(spec: dict[str, Any], cfg: dict[str, Any]) -> tuple[set[str], set[str]]:
@@ -594,7 +609,7 @@ def _layout_value_entities(lay: dict[str, Any] | None, specs: dict | None = None
 
 
 def _add_entity(out: set[str], ent: Any) -> None:
-    if isinstance(ent, str) and ent:
+    if _split_bind(ent):
         out.add(ent)
 
 
@@ -609,42 +624,60 @@ async def _async_rewire_sensor_feed(
     rules = _layout_sensor_rules(lay, specs)
     await _rewire_channel(hass, store, device_id, _layout_sensor_entities(lay, specs),
                           "sensor_entities", "sensor_unsub", "state",
-                          lambda ent, s: "ON" if _sensor_on_rule(rules.get(ent), s) else "OFF",
+                          lambda key, v: "ON" if _sensor_on_rule(rules.get(key), v) else "OFF",
                           meta=rules)
     await _rewire_channel(hass, store, device_id, _layout_value_entities(lay, specs),
-                          "value_entities", "value_unsub", "num", lambda _ent, s: _num_payload(s))
+                          "value_entities", "value_unsub", "num", lambda _key, v: _num_payload(v))
 
 
 async def _rewire_channel(
-    hass: HomeAssistant, store: dict[str, Any], device_id: str, entities: set[str],
+    hass: HomeAssistant, store: dict[str, Any], device_id: str, binds: set[str],
     ent_key: str, unsub_key: str, suffix: str, payload: Any, meta: Any = None,
 ) -> None:
-    """Track a set of entities and mirror their state to /display/<id>/<suffix>."""
+    """Track entity binds and mirror each bound value to /display/<bind>/<suffix>."""
     meta_key = f"{ent_key}_meta"
-    if entities == store.get(ent_key) and store.get(unsub_key) and store.get(meta_key) == meta:
+    if binds == store.get(ent_key) and store.get(unsub_key) and store.get(meta_key) == meta:
         return
 
     for unsub in store.get(unsub_key, []):
         unsub()
     store[unsub_key] = []
-    for removed in store.get(ent_key, set()) - entities:
+    for removed in store.get(ent_key, set()) - binds:
         await async_publish(hass, f"{device_id}/display/{removed}/{suffix}", "", retain=True)
-    store[ent_key] = entities
+    store[ent_key] = binds
     store[meta_key] = meta
 
-    for ent in entities:
-        await async_publish(hass, f"{device_id}/display/{ent}/{suffix}",
-                            payload(ent, hass.states.get(ent)), retain=True)
+    by_entity: dict[str, list[tuple[str, str | None]]] = {}
+    for key in binds:
+        if parts := _split_bind(key):
+            by_entity.setdefault(parts[0], []).append((key, parts[1]))
+    # Attribute churn (e.g. a "53m ago" attribute) fires state events for every bind on that
+    # entity, so only a changed payload is republished.
+    sent: dict[str, str] = {}
 
-        @callback
-        def _on_state(event: Any, _ent: str = ent) -> None:
-            new_state = event.data.get("new_state")
-            if new_state is not None:
-                hass.async_create_task(async_publish(
-                    hass, f"{device_id}/display/{_ent}/{suffix}",
-                    payload(_ent, new_state), retain=True))
+    async def _send(key: str, attr: str | None, state: Any) -> None:
+        value = payload(key, _bind_value(state, attr))
+        if sent.get(key) == value:
+            return
+        sent[key] = value
+        await async_publish(hass, f"{device_id}/display/{key}/{suffix}", value, retain=True)
 
-        store[unsub_key].append(async_track_state_change_event(hass, [ent], _on_state))
+    for ent, ent_binds in by_entity.items():
+        state = hass.states.get(ent)
+        for key, attr in ent_binds:
+            await _send(key, attr, state)
+    if not by_entity:
+        return
+
+    @callback
+    def _on_state(event: Any) -> None:
+        new_state = event.data.get("new_state")
+        if new_state is None:
+            return
+        for key, attr in by_entity.get(event.data["entity_id"], []):
+            hass.async_create_task(_send(key, attr, new_state))
+
+    store[unsub_key].append(async_track_state_change_event(hass, list(by_entity), _on_state))
 
 
 def _merged_opts(entry: ConfigEntry) -> dict[str, Any]:
@@ -707,9 +740,11 @@ def live_state(hass: HomeAssistant, entry: PUConfigEntry) -> dict[str, Any]:
                 if isinstance(t, (int, float)):
                     temp = round(float(t), 1)
 
+    store = entry.runtime_data or {}
+    rules = store.get("sensor_entities_meta") or {}
     sensors = {
-        ent: {"state": bool((s := hass.states.get(ent)) and s.state == "on")}
-        for ent in (entry.runtime_data or {}).get("sensor_entities", set())
+        key: {"state": _sensor_on_rule(rules.get(key), _bind_state(hass, key))}
+        for key in store.get("sensor_entities", set())
     }
     values = {
         ent: _float_state(hass, ent)
@@ -974,16 +1009,15 @@ def _parse_extra_sensors(raw: str) -> list[tuple[str, str]]:
     return result
 
 
+def _bind_state(hass: HomeAssistant, key: str) -> Any:
+    """Current bound value for a bind key, or None when it does not resolve."""
+    parts = _split_bind(key)
+    return _bind_value(hass.states.get(parts[0]), parts[1]) if parts else None
+
+
 def _float_state(hass: HomeAssistant, entity_id: str) -> float:
-    if not entity_id:
-        return 0.0
-    state = hass.states.get(entity_id)
-    if state is None or state.state in ("unknown", "unavailable", ""):
-        return 0.0
-    try:
-        return float(state.state)
-    except (ValueError, TypeError):
-        return 0.0
+    num = _num_payload(_bind_state(hass, entity_id))
+    return float(num) if num else 0.0
 
 
 def _bool_state(hass: HomeAssistant, entity_id: str) -> bool:

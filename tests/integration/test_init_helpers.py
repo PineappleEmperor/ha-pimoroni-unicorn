@@ -16,28 +16,46 @@ def expected_lingering_timers() -> bool:
     return True
 
 
-def _st(value: str):
-    return types.SimpleNamespace(state=value)
-
-
 def test_sensor_on_rule() -> None:
-    assert pu._sensor_on_rule(None, _st("on")) is True
-    assert pu._sensor_on_rule(None, _st("off")) is False
+    assert pu._sensor_on_rule(None, "on") is True
+    assert pu._sensor_on_rule(None, "off") is False
     assert pu._sensor_on_rule(None, None) is False
-    assert pu._sensor_on_rule(("home", ""), _st("home")) is True
-    assert pu._sensor_on_rule(("home", ""), _st("away")) is False
-    assert pu._sensor_on_rule(("", "closed"), _st("open")) is True
+    assert pu._sensor_on_rule(("home", ""), "home") is True
+    assert pu._sensor_on_rule(("home", ""), "away") is False
+    assert pu._sensor_on_rule(("", "closed"), "open") is True
+    assert pu._sensor_on_rule(None, True) is True
+    assert pu._sensor_on_rule(None, False) is False
 
 
 def test_num_payload() -> None:
-    assert pu._num_payload(_st("2.5")) == "2.5"
-    assert pu._num_payload(_st("unknown")) == ""
-    assert pu._num_payload(_st("notanumber")) == ""
+    assert pu._num_payload("2.5") == "2.5"
+    assert pu._num_payload(3) == "3.0"
+    assert pu._num_payload("unknown") == ""
+    assert pu._num_payload("notanumber") == ""
     assert pu._num_payload(None) == ""
+
+
+def test_split_bind() -> None:
+    assert pu._split_bind("sensor.lola") == ("sensor.lola", None)
+    assert pu._split_bind("sensor.lola.attributes.state") == ("sensor.lola", "state")
+    assert pu._split_bind("sensor.lola.attributes.time since") == ("sensor.lola", "time since")
+    assert pu._split_bind("sensor.lola.attributes.a/b") is None
+    assert pu._split_bind("sensor.lola.state") is None
+    assert pu._split_bind("notanentity") is None
+    assert pu._split_bind(None) is None
+
+
+def test_bind_value() -> None:
+    st = types.SimpleNamespace(state="Spicy", attributes={"state": "Home", "snacks": 1})
+    assert pu._bind_value(st, None) == "Spicy"
+    assert pu._bind_value(st, "state") == "Home"
+    assert pu._bind_value(st, "missing") is None
+    assert pu._bind_value(None, "state") is None
 
 
 def test_resolve_bind_and_op_field() -> None:
     assert pu._resolve_bind({"bind": "$e"}, {"e": "sensor.x"}) == "sensor.x"
+    assert pu._resolve_bind({"bind": "$e"}, {"e": "sensor.x.attributes.y"}) == "sensor.x.attributes.y"
     assert pu._resolve_bind({"bind": "notanentity"}, {}) is None
     assert pu._op_field({"name": "$n"}, {"n": "hi"}, "name") == "hi"
     assert pu._op_field({"name": 5}, {}, "name") == ""
@@ -80,6 +98,45 @@ async def test_rewire_feed_publishes_and_tracks(hass: HomeAssistant, mqtt_mock) 
     await pu._async_rewire_sensor_feed(hass, entry, {"widgets": []})
     await hass.async_block_till_done()
     assert entry.runtime_data["sensor_entities"] == set()
+
+
+def _published(mqtt_mock, topic: str) -> list[str]:
+    return [c.args[1] for c in mqtt_mock.async_publish.call_args_list if c.args[0] == topic]
+
+
+async def test_rewire_feed_binds_attributes(hass: HomeAssistant, mqtt_mock) -> None:
+    """Attribute binds publish under their own key, share one listener and skip repeats."""
+    hass.states.async_set("sensor.lola", "Spicy", {"state": "Home", "snacks": 1, "since": "1m"})
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="dev1",
+                            data={CONF_DEVICE_ID: "dev1", CONF_MODEL: "Galactic Unicorn"})
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    lay = {"widgets": [
+        {"id": "sensor", "cfg": {"entity": "sensor.lola.attributes.state", "on_state": "home"}},
+        {"id": "value", "cfg": {"entity": "sensor.lola.attributes.snacks"}},
+    ]}
+    await pu._async_rewire_sensor_feed(hass, entry, lay)
+    dot = "dev1/display/sensor.lola.attributes.state/state"
+    num = "dev1/display/sensor.lola.attributes.snacks/num"
+    assert _published(mqtt_mock, dot) == ["ON"]
+    assert _published(mqtt_mock, num) == ["1.0"]
+    assert len(entry.runtime_data["sensor_unsub"]) == 1
+
+    hass.states.async_set("sensor.lola", "Spicy", {"state": "Home", "snacks": 1, "since": "2m"})
+    await hass.async_block_till_done()
+    assert _published(mqtt_mock, dot) == ["ON"]
+    assert _published(mqtt_mock, num) == ["1.0"]
+
+    hass.states.async_set("sensor.lola", "Spicy", {"state": "Away", "snacks": 2, "since": "0m"})
+    await hass.async_block_till_done()
+    assert _published(mqtt_mock, dot) == ["ON", "OFF"]
+    assert _published(mqtt_mock, num) == ["1.0", "2.0"]
+
+    live = pu.live_state(hass, entry)
+    assert live["display_sensors"]["sensor.lola.attributes.state"] == {"state": False}
+    assert live["sensor.lola.attributes.snacks"] == 2.0
 
 
 async def test_setup_publishers_fire_on_state_change(hass: HomeAssistant, mqtt_mock) -> None:

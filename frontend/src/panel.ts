@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { property, state } from "lit/decorators.js";
 import "./pixel-editor";
+import { bindOptions, fieldIsNumeric, joinBind, splitBind } from "./bind-utils";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
@@ -284,6 +285,9 @@ export class PimoroniUnicornPanel extends LitElement {
     .wlist li .wlx:hover { background: color-mix(in srgb, var(--error-color, #ba1a1a) 16%, transparent); color: var(--error-color, #ba1a1a); }
     .panelrow { display: flex; gap: 10px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
     .panelrow > label:first-child { min-width: 64px; }
+    .bindrow { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; min-width: 0; }
+    .bindentity { flex: 1 1 180px; min-width: 0; }
+    .bindsource { flex: 1 1 160px; min-width: 0; max-width: 100%; }
     h3 { margin: 4px 0 14px; font-size: 16px; font-weight: 500; letter-spacing: .1px; }
     .status { margin-top: 16px; font: 13px ui-monospace, monospace; color: var(--secondary-text-color, #49454f); min-height: 18px; }
     .status.err { color: var(--error-color, #ba1a1a); }
@@ -730,6 +734,26 @@ export class PimoroniUnicornPanel extends LitElement {
 
   private capFor(id: string): WidgetCap | undefined { return this.caps.find((c) => c.id === id); }
   private typeOf(entry: WidgetEntry): string { return entry.type ?? entry.id; }
+
+  private _entityField(entry: WidgetEntry, f: CfgField) {
+    const [ent, attr] = splitBind(String(this.cfgVal(entry, f.key) ?? ""));
+    const opts = bindOptions(this.hass?.states?.[ent], fieldIsNumeric(this.typeOf(entry), f.key));
+    const missing = attr && !opts.some((o) => o.attr === attr);
+    return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
+      <span class="bindrow">
+        <input type="text" class="bindentity" list="pu-entity-list" placeholder="entity id…" .value=${ent}
+          @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLInputElement).value.trim())} />
+        <select class="bindsource" aria-label="Value source" title="Show the entity's state or one of its attributes"
+          ?disabled=${!opts.length && !missing}
+          @change=${(e: Event) => this.setCfg(entry, f.key, joinBind(ent, (e.target as HTMLSelectElement).value))}>
+          ${opts.map((o) => html`<option value=${o.attr} ?selected=${o.attr === attr}>${o.label}</option>`)}
+          ${missing ? html`<option value=${attr} selected>${attr} (not found)</option>` : ""}
+        </select>
+      </span>
+      <datalist id="pu-entity-list">
+        ${Object.keys(this.hass?.states ?? {}).map((eid) => html`<option value=${eid}></option>`)}
+      </datalist></div>`;
+  }
   private capForEntry(entry: WidgetEntry): WidgetCap | undefined { return this.capFor(this.typeOf(entry)); }
   @state() private fitPx = PREVIEW_TARGET_PX;  // measured preview-container width (auto-fit)
   private _ro?: ResizeObserver;
@@ -1053,15 +1077,7 @@ export class PimoroniUnicornPanel extends LitElement {
               ${this.iconNames.map((o) => html`<option ?selected=${this.cfgVal(entry, f.key) === o}>${o}</option>`)}
             </select></div>`;
         }
-        if (f.type === "entity") {
-          return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
-            <input type="text" style="width:200px" list="pu-entity-list" placeholder="entity id…"
-              .value=${String(this.cfgVal(entry, f.key) ?? "")}
-              @change=${(e: Event) => this.setCfg(entry, f.key, (e.target as HTMLInputElement).value)} />
-            <datalist id="pu-entity-list">
-              ${Object.keys(this.hass?.states ?? {}).map((eid) => html`<option value=${eid}></option>`)}
-            </datalist></div>`;
-        }
+        if (f.type === "entity") return this._entityField(entry, f);
         if (f.type === "text") {
           return html`<div class="panelrow"><label>${f.label ?? f.key}</label>
             <input type="text" style="width:120px" .value=${String(this.cfgVal(entry, f.key) ?? "")}
