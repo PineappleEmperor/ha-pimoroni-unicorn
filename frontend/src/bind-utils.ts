@@ -52,3 +52,22 @@ const NUMERIC_FIELDS: Record<string, string[]> = {
 export function fieldIsNumeric(widgetType: string, key: string): boolean {
   return NUMERIC_FIELDS[widgetType]?.includes(key) ?? false;
 }
+
+export function rateSeconds(rate: string): number {
+  const m = /^(\d+)([sm])$/.exec(rate);
+  return m ? Number(m[1]) * (m[2] === "m" ? 60 : 1) : 0;
+}
+
+export interface RateUse { label: string; rate: string; binds: string[]; }
+
+// The device holds one value per bind, so a bind shared on a page goes at its fastest rate.
+export function rateOverride(uses: RateUse[], idx: number): { rate: string; by: string } | null {
+  const own = uses[idx];
+  if (!own) return null;
+  let best: RateUse | null = null;
+  for (const [i, u] of uses.entries()) {
+    if (i === idx || !u.binds.some((b) => own.binds.includes(b))) continue;
+    if (rateSeconds(u.rate) < rateSeconds((best ?? own).rate)) best = u;
+  }
+  return best ? { rate: best.rate, by: best.label } : null;
+}

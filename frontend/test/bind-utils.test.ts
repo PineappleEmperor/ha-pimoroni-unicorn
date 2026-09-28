@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitBind, joinBind, bindOptions, fieldIsNumeric, preview } from "../src/bind-utils";
+import { splitBind, joinBind, bindOptions, fieldIsNumeric, preview, rateSeconds, rateOverride } from "../src/bind-utils";
 
 const lola = {
   state: "Spicy",
@@ -45,5 +45,24 @@ describe("helpers", () => {
   });
   it("truncates long previews", () => {
     expect(preview("x".repeat(30), 10)).toBe("xxxxxxxxx…");
+  });
+});
+
+describe("rate override", () => {
+  const uses = [
+    { label: "Power big", rate: "30s", binds: ["sensor.power"] },
+    { label: "Power small", rate: "live", binds: ["sensor.power"] },
+    { label: "Temp", rate: "5s", binds: ["sensor.temp"] },
+    { label: "Energy", rate: "5s", binds: ["sensor.power", "sensor.soc"] },
+  ];
+  it("parses rate names", () => {
+    expect([rateSeconds("live"), rateSeconds("5s"), rateSeconds("1m"), rateSeconds("5m")]).toEqual([0, 5, 60, 300]);
+  });
+  it("names the fastest widget sharing a bind", () => {
+    expect(rateOverride(uses, 0)).toEqual({ rate: "live", by: "Power small" });
+  });
+  it("is null when this widget is already the fastest or shares nothing", () => {
+    expect(rateOverride(uses, 1)).toBeNull();
+    expect(rateOverride(uses, 2)).toBeNull();
   });
 });

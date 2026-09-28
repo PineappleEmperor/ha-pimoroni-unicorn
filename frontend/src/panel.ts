@@ -1,7 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { property, state } from "lit/decorators.js";
 import "./pixel-editor";
-import { UPDATE_RATES, bindOptions, fieldIsNumeric, joinBind, splitBind } from "./bind-utils";
+import { UPDATE_RATES, bindOptions, fieldIsNumeric, joinBind, rateOverride, splitBind } from "./bind-utils";
 
 type Rgb = [number, number, number];
 type Size = [number, number];
@@ -742,6 +742,20 @@ export class PimoroniUnicornPanel extends LitElement {
   private capFor(id: string): WidgetCap | undefined { return this.caps.find((c) => c.id === id); }
   private typeOf(entry: WidgetEntry): string { return entry.type ?? entry.id; }
 
+  private _rateHint() {
+    const uses = this.layout.widgets.map((w) => {
+      const cap = this.capForEntry(w);
+      return {
+        label: w.name ?? cap?.label ?? this.typeOf(w),
+        rate: String(this.cfgVal(w, "update_rate") ?? "live"),
+        binds: (cap?.cfg_fields ?? []).filter((f) => f.type === "entity")
+          .map((f) => String(this.cfgVal(w, f.key) ?? "")).filter(Boolean),
+      };
+    });
+    const ov = rateOverride(uses, this.selected);
+    return ov ? html`<span class="hint">Sent ${ov.rate}: “${ov.by}” on this page uses the same sensor faster.</span>` : "";
+  }
+
   private _entityField(entry: WidgetEntry, f: CfgField) {
     const [ent, attr] = splitBind(String(this.cfgVal(entry, f.key) ?? ""));
     const opts = bindOptions(this.hass?.states?.[ent], fieldIsNumeric(this.typeOf(entry), f.key));
@@ -1097,7 +1111,7 @@ export class PimoroniUnicornPanel extends LitElement {
         <select title="Most often a changed value is sent to the device; the latest value always arrives"
           @change=${(e: Event) => this.setCfg(entry, "update_rate", (e.target as HTMLSelectElement).value)}>
           ${UPDATE_RATES.map((r) => html`<option ?selected=${(this.cfgVal(entry, "update_rate") ?? "live") === r}>${r}</option>`)}
-        </select></div>` : ""}
+        </select>${this._rateHint()}</div>` : ""}
       <div class="panelrow"><button class="danger" @click=${() => this.removeWidget(this.selected)}>Remove widget</button></div>
     `;
   }
